@@ -180,7 +180,8 @@ def test_cross_function_branch_label_after_body():
     flat = ' '.join(body.split())
     i_push = flat.find('RecompStackPush("ChocIsld2_Layer1Handler")')
     i_body = flat.find('g_ram[0x1422]')
-    i_fall = flat.find('ChocIsld2_Shared_LoadPtrs()')
+    m_fall = re.search(r'ChocIsld2_Shared_LoadPtrs\s*\(', flat)
+    i_fall = m_fall.start() if m_fall else -1
     assert i_push != -1 and i_body != -1 and i_fall != -1, (
         'markers missing in ChocIsld2_Layer1Handler body'
     )

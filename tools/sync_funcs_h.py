@@ -17,10 +17,12 @@ REPO = Path(__file__).resolve().parent.parent
 RECOMP_PY = REPO / 'snesrecomp' / 'recompiler' / 'recomp.py'
 RECOMP_DIR = REPO / 'recomp'
 FUNCS_H = RECOMP_DIR / 'funcs.h'
+ROM_PATH = REPO / 'smw.sfc'
 BANKS = ['00', '01', '02', '03', '04', '05', '07', '0c', '0d']
 
 sys.path.insert(0, str(RECOMP_PY.parent))
 import recomp  # noqa: E402
+from snes65816 import load_rom  # noqa: E402
 
 
 def collect_cfg_sigs() -> dict:
@@ -38,12 +40,24 @@ def collect_cfg_sigs() -> dict:
     # informative" sig the recompiler would prefer at reconciliation time.
     specificity = recomp._sig_specificity
 
+    rom = load_rom(str(ROM_PATH))
     sigs = {}
     for bank in BANKS:
         cfg_path = RECOMP_DIR / f'bank{bank}.cfg'
         cfg = recomp.parse_config(str(cfg_path))
+        # Mirror the preprocessing pipeline that run_config performs, so
+        # inferred parameters reach funcs.h and cross-bank callers pass the
+        # right register values. (Rule 0: ROM is authoritative.)
+        #   1. Promote `name ... sig:...` sub-entries to real funcs so their
+        #      bodies get liveness inference applied.
+        #   2. Run live-in inference to derive A/X/Y register parameters.
+        recomp.promote_sub_entries(rom, cfg)
+        recomp.augment_cfg_sigs_from_livein(rom, cfg)
         for fname, addr, sig, _end, _mo, _h in cfg.funcs:
             full_addr = (cfg.bank << 16) | addr
+            # cfg.sigs was augmented by the live-in pass, so it's the
+            # single source of truth. Tuple sig is the raw cfg declaration.
+            sig = cfg.sigs.get(full_addr, sig)
             existing = sigs.get(full_addr)
             if existing is None or specificity(sig) > specificity(existing[1]):
                 sigs[full_addr] = (fname, sig)
@@ -74,6 +88,58 @@ def cfg_sig_to_c_decl(fname: str, sig: str) -> str:
     return f'{ret_type} {fname}({param_str});'
 
 
+def _rom_authoritative_sig(cfg_sig: str, fh_sig: str) -> str:
+    """Merge a cfg-derived sig with funcs.h's existing declaration so funcs.h
+    reflects exactly what the recompiler emits without losing hand-analyzed
+    conventions.
+
+    Two information sources, two different strengths:
+      * cfg + live-in inference (ROM-derived): authoritative for which
+        register parameters (A/X/Y) a function consumes, and for any sigs
+        the cfg declares explicitly.
+      * funcs.h (hand-decompiled): authoritative for complex return types
+        (struct returns, pointer returns, bool-via-carry) and for direct-
+        page / pointer parameter conventions that don't show up as live-in
+        registers.
+
+    Strategy: union the parameter lists (funcs.h first, appending any cfg
+    params by name that aren't in funcs.h), and pick the more informative
+    return type (non-void and complex beats void).
+    """
+    if cfg_sig is None:
+        return fh_sig
+    if fh_sig is None:
+        return cfg_sig
+    cfg_ret, cfg_params = recomp.parse_sig(cfg_sig)
+    fh_ret, fh_params = recomp.parse_sig(fh_sig)
+
+    # Return type: prefer funcs.h when it declares a real return and cfg
+    # flattened to void (common when cfg had no explicit return info and the
+    # live-in pass left the void default). Cfg's explicit non-void return
+    # still wins over funcs.h's void.
+    if cfg_ret != 'void':
+        chosen_ret = cfg_ret
+    elif fh_ret != 'void':
+        chosen_ret = fh_ret
+    else:
+        chosen_ret = 'void'
+
+    # Params: funcs.h first (preserves DP / pointer param conventions), then
+    # append cfg params whose bare names don't already appear in funcs.h.
+    def _bare(name):
+        return name.lstrip('*')
+    fh_bare_names = {_bare(n) for _t, n in fh_params}
+    merged_params = list(fh_params)
+    for t, n in cfg_params:
+        if _bare(n) not in fh_bare_names:
+            merged_params.append((t, n))
+            fh_bare_names.add(_bare(n))
+
+    if not merged_params:
+        return f'{chosen_ret}()'
+    return f'{chosen_ret}(' + ','.join(f'{t}_{n}' for t, n in merged_params) + ')'
+
+
 def main() -> int:
     funcs_h_sigs = recomp.parse_funcs_h(str(FUNCS_H))
 
@@ -90,7 +156,7 @@ def main() -> int:
     rewrites: dict = {}
     for fname, cfg_sig in cfg_sigs_by_name.items():
         fh_sig = funcs_h_sigs.get(fname)
-        reconciled = recomp._reconcile_sig(cfg_sig, fh_sig)
+        reconciled = _rom_authoritative_sig(cfg_sig, fh_sig)
         if reconciled is None or reconciled == fh_sig:
             continue
         rewrites[fname] = reconciled
