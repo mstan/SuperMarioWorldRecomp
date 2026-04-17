@@ -24,17 +24,34 @@ import recomp  # noqa: E402
 
 
 def collect_cfg_sigs() -> dict:
-    """Return {full_addr: (name, cfg_sig)} across every bank cfg."""
+    """Return {full_addr: (name, cfg_sig)}. When multiple banks specify
+    different sigs for the same address (typically the defining bank as a
+    `func ... sig:void()` and a caller bank as `name ... sig:uint8()`),
+    the more-specific sig wins: uint8/uint16/complex > void.
+
+    This resolves cross-bank disagreement so funcs.h ends up with the sig
+    callers actually expect. The disagreement itself usually indicates that
+    the defining bank's AUTO sig was wrong — the function returns a value
+    (Y register, typically) that cross-bank callers DO consume."""
+
+    # Use recomp._sig_specificity so this tool picks the same "more
+    # informative" sig the recompiler would prefer at reconciliation time.
+    specificity = recomp._sig_specificity
+
     sigs = {}
     for bank in BANKS:
         cfg_path = RECOMP_DIR / f'bank{bank}.cfg'
         cfg = recomp.parse_config(str(cfg_path))
         for fname, addr, sig, _end, _mo, _h in cfg.funcs:
             full_addr = (cfg.bank << 16) | addr
-            sigs[full_addr] = (fname, sig)
+            existing = sigs.get(full_addr)
+            if existing is None or specificity(sig) > specificity(existing[1]):
+                sigs[full_addr] = (fname, sig)
         for full_addr, name in cfg.names.items():
-            if full_addr not in sigs:
-                sigs[full_addr] = (name, cfg.sigs.get(full_addr))
+            name_sig = cfg.sigs.get(full_addr)
+            existing = sigs.get(full_addr)
+            if existing is None or specificity(name_sig) > specificity(existing[1]):
+                sigs[full_addr] = (name, name_sig)
     return sigs
 
 

@@ -158,42 +158,49 @@ def test_fallthrough_emits_recomp_stack_pop():
 
 
 def test_cross_function_branch_label_after_body():
-    """Pre-fix, every non-terminal function in banks $01-$0D had its entire
-    body deferred to `_past_start_buf` because the past-start guard compared
-    a 16-bit `pc16` against a 24-bit bank-encoded `start`, which is always
-    true for banks > 0. Deferring the body emitted the fall-through
-    tail-call stanza BEFORE the real body — canonical repro
-    ChocIsld2_Layer1Handler at $05:DB3E, where the BEQ-target label was
-    placed at the top of the function, the tail-call to
-    ChocIsld2_Shared_LoadPtrs fired on entry, and the LDX/LDA/CMP body was
-    dead code after an unconditional `return;`.
+    """Regression for a family of bugs that all manifest as the body of
+    ChocIsld2_Layer1Handler being dead code after the tail call to
+    ChocIsld2_Shared_LoadPtrs. Two distinct issues have reached this
+    function:
 
-    Check structural ordering: the body assignments must come BEFORE the
-    cross-function label stanza, and `return;` must be the last real
-    statement — not one that sits above the body."""
+    1. Past-start guard comparing a 16-bit pc16 against a 24-bit
+       bank-encoded start — deferred the entire body to _past_start_buf
+       and emitted the fall-through before RecompStackPush.
+    2. decode_func using inclusive end semantics (pc > end instead of
+       pc >= end) — over-decoded the first instruction of
+       ChocIsld2_Shared_LoadPtrs into this function, producing a spurious
+       label_db49 and turning the fall-through into a past-end emit.
+
+    Current correct shape: BEQ $DB49 targets the next function, so the
+    conditional becomes a conditional tail call; the fall-through after
+    the false branch becomes an unconditional tail call. There should be
+    NO label_db49 inside Layer1Handler's body, and the body must load
+    $1422 before either call to Shared_LoadPtrs."""
     body = _extract_function(_read('05'), 'ChocIsld2_Layer1Handler')
     flat = ' '.join(body.split())
-    # The BEQ-target label inside the function should sit AFTER the body's
-    # first assignment, not before RecompStackPush.
     i_push = flat.find('RecompStackPush("ChocIsld2_Layer1Handler")')
     i_body = flat.find('g_ram[0x1422]')
-    i_label = flat.find('label_db49:;')
     i_fall = flat.find('ChocIsld2_Shared_LoadPtrs()')
-    assert i_push != -1 and i_body != -1 and i_label != -1 and i_fall != -1, (
+    assert i_push != -1 and i_body != -1 and i_fall != -1, (
         'markers missing in ChocIsld2_Layer1Handler body'
     )
-    assert i_push < i_body < i_label < i_fall, (
+    assert i_push < i_body < i_fall, (
         f'ChocIsld2_Layer1Handler body order broken: push={i_push} '
-        f'body={i_body} label={i_label} fall={i_fall}. Expected '
-        f'push < body < label < fall-through (cross-function label '
-        f'must come AFTER the main body, not above it).'
+        f'body={i_body} fall={i_fall}. Expected push < body < '
+        f'tail-call-to-Shared_LoadPtrs.'
     )
-    # And there must not be a `return;` between push and body.
+    assert 'label_db49' not in flat, (
+        'ChocIsld2_Layer1Handler should not contain label_db49: $DB49 '
+        'is the start of the NEXT function (ChocIsld2_Shared_LoadPtrs), '
+        'so the BEQ should become a conditional tail call, not an '
+        'intra-function branch to a spurious label.'
+    )
+    # No `return;` between push and the first body load.
     prelude = flat[i_push:i_body]
     assert 'return;' not in prelude, (
         'ChocIsld2_Layer1Handler has a return; between RecompStackPush '
         'and the body — the fall-through stanza is being emitted before '
-        'the deferred body (past-start guard using 24-bit start again).'
+        'the real body.'
     )
 
 
