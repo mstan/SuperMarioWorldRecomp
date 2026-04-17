@@ -23,6 +23,7 @@ REPO_ROOT = TESTS_DIR.parent
 TEST_MODULES = [
     'test_decompress',
     'test_function_boundaries',
+    'test_livein_inference',
 ]
 
 
