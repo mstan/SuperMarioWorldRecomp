@@ -260,11 +260,24 @@ def main() -> int:
 
     # Reconcile per function. Only rewrite if the reconciled sig differs from
     # the current funcs.h sig; leave the original line otherwise.
+    #
+    # Gen body is authoritative only when the emitted sig fits the
+    # dispatch-capped shape (`()` or `(uint8 k)` with any return). That
+    # is the original purpose of gen-body-wins: `_augment_cfg_sigs_one_
+    # pass` narrows dispatch targets to a FuncU8-compatible shape, and
+    # funcs.h must follow. For every other gen body, we can't safely
+    # treat gen as ground truth — hand-written src/smw_*.c callers are
+    # the real oracle for ABI, and live-in analysis has known blind
+    # spots (mid-body scribble-restore patterns, DP-indirect reads,
+    # etc.) that can make gen drop a param the ROM actually consumes.
+    # So fall back to a union against funcs.h, which preserves any
+    # hand-caller-proven params.
     rewrites: dict = {}
     for fname, cfg_sig in cfg_sigs_by_name.items():
         fh_sig = funcs_h_sigs.get(fname)
-        if fname in gen_body_fnames:
-            # Gen body is authoritative; funcs.h must match verbatim.
+        if fname in gen_body_fnames and recomp._sig_matches_dispatch_shape(cfg_sig):
+            # Dispatch-capped narrowing — gen body wins verbatim so the
+            # cast type matches the FuncU8 shape.
             reconciled = cfg_sig
         else:
             reconciled = _rom_authoritative_sig(cfg_sig, fh_sig)

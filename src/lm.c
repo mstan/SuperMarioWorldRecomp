@@ -1347,14 +1347,14 @@ static FuncV *const kLmFunc_UpdateTilemapD[32] = {
 
 void LmHook_BufferTilemap_L1(void) {
   if (misc_game_mode >= 0x20)
-    BufferScrollingTiles_Layer1_Init();
+    BufferScrollingTiles_Layer1_Init(0);
   else
     kLmHook_BufferTilemap_L1[misc_level_mode_setting]();
 }
 
 void LmHook_BufferTilemap_L2(void) {
   if (misc_game_mode >= 0x20)
-    BufferScrollingTiles_Layer2_Init();
+    BufferScrollingTiles_Layer2_Init(0);
   else
     kLmHook_BufferTilemap_L2[misc_level_mode_setting]();
 }
