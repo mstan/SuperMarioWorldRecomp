@@ -244,19 +244,30 @@ def main() -> int:
         existing = cfg_sigs_by_name.get(fname)
         if existing is None or specificity(sig) > specificity(existing):
             cfg_sigs_by_name[fname] = sig
+    # Track which fnames have an actual emitted body in a gen file. For those,
+    # the body sig is the single source of truth — funcs.h must match exactly,
+    # no param union with the existing funcs.h line. Without this override
+    # the union path keeps stale params from a prior buggy regen (real case:
+    # a dispatch target widened to (uint8 k, uint8 a) by an earlier augment
+    # bug stayed widened in funcs.h even after recomp.py narrowed the body
+    # back to (uint8 k), because the union appended the stale `a`).
+    gen_body_fnames: set = set()
     for _addr, (fname, sig) in collect_gen_sigs().items():
         if sig is None:
             continue
-        # Gen sigs beat cfg-sim sigs: the body's declared signature is the
-        # single source of truth for what the C compiler will see.
         cfg_sigs_by_name[fname] = sig
+        gen_body_fnames.add(fname)
 
     # Reconcile per function. Only rewrite if the reconciled sig differs from
     # the current funcs.h sig; leave the original line otherwise.
     rewrites: dict = {}
     for fname, cfg_sig in cfg_sigs_by_name.items():
         fh_sig = funcs_h_sigs.get(fname)
-        reconciled = _rom_authoritative_sig(cfg_sig, fh_sig)
+        if fname in gen_body_fnames:
+            # Gen body is authoritative; funcs.h must match verbatim.
+            reconciled = cfg_sig
+        else:
+            reconciled = _rom_authoritative_sig(cfg_sig, fh_sig)
         if reconciled is None or reconciled == fh_sig:
             continue
         rewrites[fname] = reconciled
