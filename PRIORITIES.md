@@ -90,10 +90,13 @@ Current warning count: ~58. Two work items:
   doesn't detect it because it intentionally skips PH/PL as register
   reads. Only pursue if harness v0.2 surfaces false narrowings.
 
-## Harness-flagged FAIL triage — status
+## Harness-flagged FAIL triage — DONE
 
-47 FAILs → 3 FAILs / 99.9% pass rate (2054/2057) after harness
-corrections (NO cfg changes):
+47 FAILs → 0 FAILs / 100.0% pass rate (2051/2051). Three framework
+fixes + one stale-cfg deletion. NO cfg `end:`/`name`/`exclude_range`
+additions.
+
+Harness pipeline fixes (commit d6d4a5a):
 
  1. Harness now calls `discover_bank` + `promote_sub_entries` before
     decoding, matching the real regen pipeline. Without that step the
@@ -109,24 +112,44 @@ corrections (NO cfg changes):
  3. `dispatch_known_addrs` now threaded into decode_func so the Issue
     A terminal-dispatch fix applies to harness decodes too.
 
-Remaining 3 FAILs are all genuine discover.py over-promotion —
-addresses that landed in data regions because of byte-pattern matches
-or dispatch-entry mis-sizing:
- - `ProcessClusterSprites_02F821` at $02F821 (cfg `name` pointing at data)
- - `GameMode12_PrepareLevel_03DAE2` at $03DAE2 (cfg `func` pointing at data)
- - `auto_04_859F` at $04859F (auto-promoted into a dispatch table interior)
+Framework fixes (snesrecomp 5a92fec):
+ 1. **Dispatch-table byte range filter** in `discover.py` — rejects
+    seeds that land inside inline dispatch table bytes. When an
+    earlier walker mis-sizes an instruction (typically 8-bit vs
+    16-bit A-mode immediate width), the resulting byte shift can
+    produce a phantom JSR/JSL target whose operand lands inside
+    some other function's pointer table. These false-positive
+    seeds used to be added to the worklist unfiltered. Now rejected
+    at add-time (via lookup against accumulated dispatch ranges)
+    and in a post-filter sweep for seeds added before the
+    containing table's walk.
+ 2. **Known-handler cluster break** in `decode_func`'s dispatch
+    reader — once at least one known-function entry has been
+    accepted, any subsequent unknown entry treats as end-of-table.
+    Real SNES dispatches are contiguous runs of pointers to real
+    code; transition from known→unknown after a known cluster
+    almost always means the reader has fallen off the real table
+    into data that happens to parse as a valid $8000+ address.
 
-Each is a cfg or discover.py issue that needs investigation — NOT a
-decoder bug. Low priority (99.9% pass rate).
+One cfg cleanup (commit 208cc06):
+ - Deleted `func GameMode12_PrepareLevel_03DAE2` — orphan entry
+   pointing at DATA_03D9DE bytes, zero callers. Legitimate rule 0c
+   deletion (cfg entry predating recompiler fix that made it dead
+   weight). NOT a new cfg addition.
 
-### Rule-0 lesson learned
-During this triage I added cfg `end:`, `name`, and `exclude_range`
-entries as "simple fixes" for each FAIL. Every one of them would
-have been a rule-0 violation: they encoded facts the recompiler
-derives from ROM (dispatch table length, end of function, data
-boundary). The correct fix was a framework change to the harness's
-pipeline, which collapsed 44 of the 47 FAILs without touching cfg.
-Captured in auto-memory: `feedback_cfg_is_last_resort.md`.
+### Rule-0 lesson that drove these fixes
+During initial triage I reflexively added cfg `end:`/`name:`/
+`exclude_range` entries to close FAILs. User pushed back: every one
+of those edits would have encoded framework-derivable facts as
+per-game data, and would recur in Contra III / Mega Man X / any
+future SNES game. The correct fix was architectural — teach
+discover/decode_func to detect dispatch-table boundaries properly.
+That fix amortizes across every game.
+
+Captured in `CLAUDE.md` rule 0a (the north star is the framework,
+not green numbers) and rule 0b (bias toward holistic completeness,
+never toward speed). Memory: `feedback_north_star_framework_not_tests.md`,
+`feedback_cfg_is_last_resort.md`.
 
 ## Hard rules in force
 
