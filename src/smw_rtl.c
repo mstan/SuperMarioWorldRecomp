@@ -13,8 +13,6 @@ const uint8 *ptr_layer1_data;
 const uint8 *ptr_layer2_data;
 uint8 ptr_layer2_is_bg;
 
-uint8 *ptr_lo_map16_data;
-uint8 *ptr_lo_map16_data_bak;
 
 
 void AddSprXPos(uint8 k, uint16 x) {

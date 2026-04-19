@@ -99,8 +99,6 @@
 
 extern const uint8 *ptr_layer1_data;
 extern const uint8 *ptr_layer2_data;
-extern uint8 *ptr_lo_map16_data;
-extern uint8 *ptr_lo_map16_data_bak;
 extern uint8 ptr_layer2_is_bg;
 
 #define xptr_layer1_data (*(LongPtr*)(g_ram+0x65))
