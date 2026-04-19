@@ -94,9 +94,6 @@
     <ClCompile Include="..\snesrecomp\runner\src\common_rtl.c">
       <Filter>Common</Filter>
     </ClCompile>
-    <ClCompile Include="lm.c">
-      <Filter>Smw</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\recomp\funcs.h">

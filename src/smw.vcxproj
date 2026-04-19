@@ -159,7 +159,6 @@
     <ClCompile Include="..\snesrecomp\runner\src\framedump.c" />
     <ClCompile Include="config.c" />
     <ClCompile Include="glsl_shader.c" />
-    <ClCompile Include="lm.c" />
     <ClCompile Include="main.c" />
 
     <ClCompile Include="opengl.c" />

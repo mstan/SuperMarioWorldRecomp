@@ -4,7 +4,6 @@
 #include "common_cpu_infra.h"
 #include "snes/snes_regs.h"
 
-extern bool g_lunar_magic;
 extern int g_dbg_ctr_mine;
 
 PointU16 *get_PointU16(PointU16 *pt, uint8 off);

@@ -16,8 +16,6 @@ uint8 ptr_layer2_is_bg;
 uint8 *ptr_lo_map16_data;
 uint8 *ptr_lo_map16_data_bak;
 
-bool g_lunar_magic;
-
 
 void AddSprXPos(uint8 k, uint16 x) {
   AddHiLo(&spr_xpos_hi[k], &spr_xpos_lo[k], x);
@@ -110,8 +108,6 @@ void LoadStripeImage_UploadToVRAM(const uint8 *pp) {  // 00871e
     if ((*pp & 0x80) != 0)
       break;
     uint16 vram_addr = pp[0] << 8 | pp[1];
-    if (g_lunar_magic)
-      vram_addr = LmHook_LoadStripeImage(vram_addr);
 
     uint8 vmain = __CFSHL__(pp[2], 1);
     uint8 fixed_addr = (uint8)(pp[2] & 0x40) >> 3;

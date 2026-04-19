@@ -153,51 +153,11 @@ uint32 PatchBugs_SMW1(void) {
   } else if (FixBugHook(0x817e)) {
     g_cpu->y = g_ram[kSmwRam_APUI02];
     return 0x8181;
-  } else if (g_lunar_magic) {
-
-    static uint32 LmFunc_UpdateTilemapC_0, buffer_tilemap_L1_0, buffer_tilemap_L1_1, LmFunc_UpdateTilemapD_1, LmHook_BufferScrollingTiles_L2_1;
-    static uint32 LmHook_HandleStandardLevelCameraScrollD;
-
-    if (!LmFunc_UpdateTilemapC_0) {
-      uint32 LmHook_BufferTilemap_L1 = get_24(0x580BF+1);
-      buffer_tilemap_L1_0 = get_24(LmHook_BufferTilemap_L1 + 0xAB29 - 0xAB15);
-      buffer_tilemap_L1_1 = get_24(LmHook_BufferTilemap_L1 + 0xAB29 - 0xAB15 + 3 * 7);
-
-      uint32 LmHook_CheckIfLevelTilemapsNeedScrollUpdate = get_24(0x586F7 + 1);
-      uint32 LmFunc_UpdateTilemapD = get_24(LmHook_CheckIfLevelTilemapsNeedScrollUpdate + 0xB5D0 - 0xB538);
-      LmFunc_UpdateTilemapD_1 = get_24(LmFunc_UpdateTilemapD + 0xAD41 - 0xAD38 + 3 * 1);
-
-      uint32 LmHook_BufferTilemap_L2 = get_24(0x580C3+1);
-      LmHook_BufferScrollingTiles_L2_1 = get_24(LmHook_BufferTilemap_L2 + 0xAB9D - 0xAB89 + 3 * 1);
-
-      uint32 LmFunc_UpdateTilemapC = get_24(LmHook_CheckIfLevelTilemapsNeedScrollUpdate + 0xB5A9 + 1 - 0xB538);
-      LmFunc_UpdateTilemapC_0 = get_24(LmFunc_UpdateTilemapC + 0xACD8 - 0xACCF + 3 * 1);
-
-      LmHook_HandleStandardLevelCameraScrollD = get_24(0xF70D + 1);
-    }
-
-    if (FixBugHook(LmFunc_UpdateTilemapC_0 + 0xAE7B - 0xAE28)) {
-      g_cpu->a &= 0xf;
-    } else if (FixBugHook(LmHook_HandleStandardLevelCameraScrollD + 0xBB7C - 0xBB6B)) {
-      if (sign16(g_cpu->a))
-        g_cpu->a = 0;
-    } else if (FixBugHook(buffer_tilemap_L1_0 + 0xAFEE - 0xAFCF) || 
-               FixBugHook(buffer_tilemap_L1_1 + 0xB099 - 0xB07A) ||
-               FixBugHook(LmHook_BufferScrollingTiles_L2_1 + 0xB11E - 0xB0EE)) {
-      if (sign16(g_cpu->a))
-        return buffer_tilemap_L1_1 + 0xB0EB - 0xB07A;
-    } else if (FixBugHook(LmFunc_UpdateTilemapD_1 + 0xB2B4 - 0xB28B)) {
-      static const uint16 kLm10B483[2] = {0, 14};
-      g_cpu->a = kLm10B483[lm_arr1831b[3] >> 1] + ((int16)mirror_current_layer2_ypos >> 4);
-      if (sign16(g_cpu->a))
-        return LmFunc_UpdateTilemapD_1 + 0xB33E - 0xB28B;
-    }
   }
   return 0;
 }
 
 void SmwCpuInitialize(void) {
-  g_lunar_magic = HAS_LM_FEATURE(kLmFeature_LmEnabled);
   if (g_rom) {
     *SnesRomPtr(0x843B) = 0x60; // remove WaitForHBlank_Entry2
     *SnesRomPtr(0x2DDA2) = 5;

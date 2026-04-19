@@ -137,10 +137,7 @@ LABEL_24:
           UpdateCreditsBackground();
         goto LABEL_17;
       }
-      if (g_lunar_magic)
-        LmHook_UploadLevelLayer1And2Tilemaps();
-      else
-        UploadLevelLayer1And2Tilemaps();
+      UploadLevelLayer1And2Tilemaps();
       if (!flag_upload_load_screen_letters_tovram) {
         UploadLevelExAnimationData();
 LABEL_17:
