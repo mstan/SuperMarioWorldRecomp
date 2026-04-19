@@ -65,5 +65,4 @@ typedef struct GenTileArgs {
   uint8 *ptr_lo_map16_data;
 } GenTileArgs;
 
-const uint8 *GetSpriteListPtr();
 #endif  // SMW_SMW_RTL_H_

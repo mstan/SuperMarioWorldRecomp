@@ -64,12 +64,6 @@
     <ClCompile Include="smw_00.c">
       <Filter>Smw</Filter>
     </ClCompile>
-    <ClCompile Include="smw_02.c">
-      <Filter>Smw</Filter>
-    </ClCompile>
-    <ClCompile Include="smw_05.c">
-      <Filter>Smw</Filter>
-    </ClCompile>
     <ClCompile Include="smw_0c.c">
       <Filter>Smw</Filter>
     </ClCompile>

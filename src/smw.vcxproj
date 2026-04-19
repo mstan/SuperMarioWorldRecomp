@@ -165,9 +165,6 @@
     <ClCompile Include="opengl.c" />
     <ClCompile Include="platform\win32\volume_control.c" />
     <ClCompile Include="smw_00.c" />
-    <ClCompile Include="smw_02.c" />
-    <ClCompile Include="smw_02_stubs.c" />
-    <ClCompile Include="smw_05.c" />
     <ClCompile Include="gen_stubs.c" />
     <ClCompile Include="gen\smw_00_gen.c" />
     <ClCompile Include="gen\smw_04_gen.c" />
