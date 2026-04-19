@@ -117,7 +117,43 @@ we can demonstrate any further divergence is genuinely downstream.
 - The harness is 2052/2052 so static checks aren't the pain point
   right now. Dynamic (runtime) behaviour is where bugs hide.
 
-## Queued: SMWDisX harness v0.2 — mnemonic + operand parity
+## Queued (post-$03, pre-hardening)
+
+These all have to happen eventually. Order is "active" by information
+density, not absolute priority — the $03 chase surfaces unknowns,
+these are known work items we already understand the shape of.
+
+- **Retire `g_spc_player`** (HLE SPC player, `snesrecomp/third_party/
+  spc_player/*`). Off the critical path since ec2d971. Pure deletion
+  commit; no framework work. Blockers: grep for all `g_spc_player`
+  references (RtlPopApuState_Locked, RtlApuReset, RtlApuUpload,
+  RtlRestoreMusicAfterLoad_Locked, RtlSaveMusicStateToRam_Locked,
+  RtlRenderAudio) and simplify each to the real-SPC path only. Risk:
+  low. Reversibility: trivial.
+
+- **Carry-flag inference — retire `kPatchedCarrys_SMW[]`**. ~50 entries
+  in `src/smw_cpu_infra.c` that force the CPU emulator to patch carry
+  at specific ROM addresses the recompiler can't infer statically.
+  Framework amortization: any recompiled game hits carry-inference
+  gaps; improving the analysis removes this table + generalises.
+  Specific patterns to understand: carry-in at function entry when
+  callers set C via SEC/CLC before JSR; carry propagation through
+  branches where C is live across the join. Needs a pinning test per
+  pattern. Estimated multi-session.
+
+- **SMWDisX harness v0.2 — mnemonic + operand parity**. v0.1 catches
+  "decoder walked into data." v0.2 catches "decoder read a different
+  instruction than SMWDisX did at the same address." Tooling, not a
+  game-behaviour change; low risk, separable. (Design details in the
+  detailed queue section below.)
+
+- **Warning elimination — Issue B (FuncU8J/A/JA union-sig dispatch)**.
+  Dispatch-target guard at `recomp.py:1627` caps handlers to
+  `void()` or `void(uint8 k)`. Wider union typing collapses the
+  remaining `RECOMP_WARN: X/A/j unknown at call site` warnings.
+  (Details in queue section below.)
+
+## Queued details: SMWDisX harness v0.2 — mnemonic + operand parity
 
 v0.1 catches "decoder walked into data." v0.2 catches "decoder read a
 different instruction than SMWDisX did at the same address." Needed
