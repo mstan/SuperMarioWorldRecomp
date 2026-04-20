@@ -536,6 +536,14 @@ def main() -> int:
             if lines_out[i].lstrip().startswith('#endif'):
                 endif_idx = i
                 break
+        # Collapse any run of blank lines immediately before the insertion
+        # point. Without this, every rewrite accumulates one trailing blank
+        # line (the `\n` we prepend below plus whatever the strip pass left
+        # behind when the previous auto-block was removed) and the file
+        # grows by one whitespace line per run indefinitely.
+        insert_at = endif_idx if endif_idx is not None else len(lines_out)
+        while insert_at > 0 and lines_out[insert_at - 1].strip() == '':
+            insert_at -= 1
         block = [
             '\n',
             insert_block_begin + '\n',
@@ -546,9 +554,9 @@ def main() -> int:
             print(f'  [insert] {decl}')
         block.append(insert_block_end + '\n')
         if endif_idx is not None:
-            lines_out = lines_out[:endif_idx] + block + lines_out[endif_idx:]
+            lines_out = lines_out[:insert_at] + block + ['\n'] + lines_out[endif_idx:]
         else:
-            lines_out.extend(block)
+            lines_out = lines_out[:insert_at] + block
         changes += len(inserts)
 
     FUNCS_H.write_text(''.join(lines_out))
