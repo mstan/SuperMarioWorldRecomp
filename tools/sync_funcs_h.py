@@ -18,6 +18,12 @@ RECOMP_PY = REPO / 'snesrecomp' / 'recompiler' / 'recomp.py'
 RECOMP_DIR = REPO / 'recomp'
 GEN_DIR = REPO / 'src' / 'gen'
 SRC_DIR = REPO / 'src'
+# Framework runtime lives under snesrecomp/runner/src/. Hand bodies there
+# are legitimate (RtlApuWrite, WatchdogCheck, debug-server helpers).
+# Hand bodies in src/*.c are smw-rev scaffolding smells the rip plan is
+# actively deleting — we still scan them so funcs.h stays link-consistent
+# WHILE they exist, but their presence is not a green light to keep them.
+RUNNER_SRC_DIR = REPO / 'snesrecomp' / 'runner' / 'src'
 FUNCS_H = RECOMP_DIR / 'funcs.h'
 ROM_PATH = REPO / 'smw.sfc'
 BANKS = ['00', '01', '02', '03', '04', '05', '07', '0c', '0d']
@@ -63,8 +69,18 @@ def collect_hand_body_fnames() -> set:
     wrappers).
     """
     fnames: set = set()
-    # src/*.c excluding src/gen/
-    for p in sorted(SRC_DIR.glob('*.c')):
+    # Scan both src/*.c (per-game scaffolding + any tiny legit WRAM helpers)
+    # and snesrecomp/runner/src (framework runtime). We count bodies from
+    # both so funcs.h declares everything that currently has a definition
+    # — otherwise cross-bank callers fail to link. Once the rip deletes a
+    # src/*.c body, its decl becomes an orphan and this tool's orphan-
+    # deletion pass removes it.
+    scan_paths: list = []
+    scan_paths.extend(sorted(SRC_DIR.glob('*.c')))
+    if RUNNER_SRC_DIR.exists():
+        scan_paths.extend(sorted(RUNNER_SRC_DIR.glob('*.c')))
+        scan_paths.extend(sorted(RUNNER_SRC_DIR.glob('snes/*.c')))
+    for p in scan_paths:
         try:
             text = p.read_text(encoding='utf-8', errors='replace')
         except OSError:
@@ -461,10 +477,30 @@ def main() -> int:
             continue
         cleaned.append(raw)
 
+    # Orphan-deletion criterion: a declaration is an orphan iff
+    #   (a) no cfg/gen emits it (not in cfg_sigs_by_name), AND
+    #   (b) no hand body anywhere in src/ or snesrecomp/runner/src/ defines
+    #       it (not in hand_body_fnames).
+    # Orphans accumulate when hand-written HLE functions get deleted (e.g.
+    # Tier-1 scaffolding rip): their bodies go away but nothing in this
+    # tool removed the declaration — callers would now fail to link.
+    hand_body_fnames = collect_hand_body_fnames()
+    # Dedup: keep only the first declaration per fname.
     for raw in cleaned:
         m = decl_re.match(raw)
         if m:
             leading, _ret_raw, fname, _params_raw, trailing = m.groups()
+            is_orphan = (fname not in cfg_sigs_by_name
+                         and fname not in hand_body_fnames)
+            is_dup = fname in seen_fnames
+            if is_orphan:
+                print(f'  [delete] orphan decl (no cfg, no hand body): {fname}')
+                changes += 1
+                continue
+            if is_dup:
+                print(f'  [delete] duplicate decl: {fname}')
+                changes += 1
+                continue
             seen_fnames.add(fname)
             if fname in rewrites:
                 new_decl = cfg_sig_to_c_decl(fname, rewrites[fname])
@@ -517,6 +553,21 @@ def main() -> int:
 
     FUNCS_H.write_text(''.join(lines_out))
     print(f'\nRewrote {changes} declarations in {FUNCS_H}')
+    # Scaffolding-smell metric: count hand bodies remaining in src/*.c
+    # (excluding src/gen/ and the runner). Per the rip plan these should
+    # trend toward a very small WRAM-helper-only residual.
+    src_smells = 0
+    for p in sorted(SRC_DIR.glob('*.c')):
+        try:
+            text = p.read_text(encoding='utf-8', errors='replace')
+        except OSError:
+            continue
+        for m in _HAND_BODY_RE.finditer(text):
+            ret = m.group('ret').strip()
+            if ret in ('if', 'for', 'while', 'switch', 'do', 'return'):
+                continue
+            src_smells += 1
+    print(f'src/*.c hand-body count: {src_smells} (scaffolding smell, should shrink)')
     return 0
 
 
