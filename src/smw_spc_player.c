@@ -62,7 +62,6 @@ typedef struct Channel {
 
 typedef struct SmwSpcPlayer {
   SpcPlayer base;
-  DspRegWriteHistory *reg_write_history;
   uint8 new_value_from_snes[4];
   
   uint8 last_value_from_snes[4];
@@ -230,14 +229,6 @@ static const MemMapSized kSpcPlayer_Maps[] = {
 };
 
 static void Dsp_Write(SmwSpcPlayer *p, uint8_t reg, uint8 value) {
-  DspRegWriteHistory *hist = p->reg_write_history;
-  if (hist) {
-    if (hist->count < 256) {
-      hist->addr[hist->count] = reg;
-      hist->val[hist->count] = value;
-      hist->count++;
-    }
-  }
   if (p->base.dsp)
     dsp_write(p->base.dsp, reg, value);
 }
@@ -317,7 +308,6 @@ SpcPlayer *SmwSpcPlayer_Create(void) {
   p->base.ram = p->ram;
   p->base.initialize = &SmwSpcPlayer_Initialize;
   p->base.upload = &SmwSpcPlayer_Upload;
-  p->reg_write_history = 0;
   return &p->base;
 }
 
