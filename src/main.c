@@ -675,7 +675,7 @@ error_reading:;
     g_audiobuffer = (uint8 *)calloc(g_frames_per_block * have.channels * sizeof(int16), 1);
   }
 
-  PpuBeginDrawing(g_my_ppu, g_my_pixels, 256 * 4, 0);
+  PpuBeginDrawing(g_ppu, g_my_pixels, 256 * 4, 0);
 
   if (g_config.save_playthrough)
     MkDir("playthrough");
