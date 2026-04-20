@@ -624,8 +624,7 @@ error_reading:;
 
   g_spc_player->initialize(g_spc_player);
 
-  bool enable_audio = true;
-  if (enable_audio) {
+  if (g_config.enable_audio) {
     SDL_AudioSpec want = { 0 }, have;
     want.freq = g_config.audio_freq;
     want.format = AUDIO_S16;
