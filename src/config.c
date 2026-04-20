@@ -356,8 +356,6 @@ static bool HandleIniConfig(int section, const char *key, char *value) {
           return true;
         }
       }
-    } else if (StringEqualsNoCase(key, "EnhancedMode7")) {
-      return ParseBool(value, &g_config.enhanced_mode7);
     } else if (StringEqualsNoCase(key, "NewRenderer")) {
       return ParseBool(value, &g_config.new_renderer);
     } else if (StringEqualsNoCase(key, "IgnoreAspectRatio")) {

@@ -534,7 +534,6 @@ int main(int argc, char** argv) {
   g_snes_width = (g_config.extended_aspect_ratio * 2 + 256);
   g_snes_height = 224;// (g_config.extend_y ? 240 : 224);
   g_ppu_render_flags = g_config.new_renderer * kPpuRenderFlags_NewRenderer |
-    //    g_config.enhanced_mode7 * kPpuRenderFlags_4x4Mode7 |
     g_config.extend_y * kPpuRenderFlags_Height240 |
     g_config.no_sprite_limits * kPpuRenderFlags_NoSpriteLimits;
 

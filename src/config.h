@@ -46,7 +46,6 @@ enum {
 typedef struct Config {
   int window_width;
   int window_height;
-  bool enhanced_mode7;
   bool new_renderer;
   bool ignore_aspect_ratio;
   uint8 fullscreen;
