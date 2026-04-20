@@ -30,3 +30,57 @@ build would break. The stubs remain as no-ops; runtime cost is zero.
 
 Committed as part of the dp_sync cfg removal. Smell count: 146 unchanged
 (stubs still in src/dp_sync_bridge.c).
+
+## Tier 3b kPatchedCarrys_SMW — requires framework carry inference
+
+The 45-entry `kPatchedCarrys_SMW` array patches specific ROM ADC/SBC
+instruction bytes to 0x00 (BRK); the CPU interpreter's BRK handler in
+`snesrecomp/runner/src/snes/cpu.c:768-794` reads the hook, then SETS
+or CLEARS carry before re-executing the original opcode. So the list
+fixes ROM-native buggy carry state when the INTERPRETER runs those
+instructions.
+
+Per the plan (Tier 3b), the right fix is carry-flag inference in
+`recomp.py` so recompiled code emits the intended carry state
+explicitly and the list can go to zero. That's a bigger framework
+task than overnight scope allows.
+
+**What I didn't do:** rip the list outright. The list is currently
+still dead for recompiled paths (recomp C doesn't use this mechanism
+— it's interpreter-only), but interpreter can still be reached via
+excluded regions or unrecompiled banks; pulling the list without the
+inference pass could mask the gap where carry inference fails.
+
+**Next session:** land a carry-flag inference pass in `recomp.py`,
+validate against SMW (list shrinks to zero), then delete the array
+and the `patch_carrys`/`patch_carrys_count` fields on `RtlGameInfo`.
+
+## Tier 3g residual — HLE SPC executor body (~900 lines)
+
+After this session's partial Tier 3g work (rip debug harness + rip
+unused vtable slots), the HLE SPC engine body in `src/smw_spc_player.c`
+is now entirely unreachable: its only public entry point was the
+`gen_samples` vtable slot, which was never called and has been deleted.
+
+Unreachable pieces:
+- Spc_Loop_Part2, Sfx0_Process, Sfx3_Process, PlayNote, ComputePeriod,
+  WritePitch, Dsp_Write, Sfx0_TurnOffChannel, Sfx3_TurnOffChannel,
+  SetEchoVolume, SetEchoOff, Port1_WriteInstrument, Chan_DoAnyFade,
+  CalcFinalVolume, and many statics. ~900 LOC.
+
+**Why deferred:** individual hand-body removals work in batches of
+5-10 functions max if there's a risk of link-time or compile-time
+fallout (e.g. one function calls another, removing wrong one first
+breaks link). A full HLE-executor rip needs a dependency audit first
+so functions are removed in leaf-first order. Overnight-autonomous
+is a poor fit.
+
+**Next session approach:**
+1. Build a call graph of just smw_spc_player.c statics.
+2. Topologically remove from leaves up, rebuilding after each batch.
+3. Keep Spc_Reset + SmwSpcPlayer_CopyVariablesFromRam (live).
+4. Keep SmwSpcPlayer_Upload + everything it transitively calls (live).
+5. Delete everything else.
+
+Estimated residual after that rip: smw_spc_player.c shrinks from
+~1300 lines to ~150 lines.
