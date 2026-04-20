@@ -5,7 +5,6 @@
 #include "funcs.h"
 #include "assets/smw_assets.h"
 
-extern bool g_custom_music;
 
 static const uint32 kPatchedCarrys_SMW[] = {
   0xFE1F,
@@ -73,8 +72,8 @@ void SmwCpuInitialize(void) {
     *SnesRomPtr(0xCA5AC) = 7;
 
     uint8 *music = SnesRomPtr(0x8052);
-    g_custom_music = music[1] != 0xE8;
-    if (g_custom_music) {
+    bool custom_music = music[1] != 0xE8;
+    if (custom_music) {
       music[0] = 0xea;
       music[1] = 0xea;
       music[2] = 0xea;
