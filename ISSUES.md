@@ -58,6 +58,74 @@ Branch: `chore/tier3c-irq-vector` (both repos).
 
 ## Open issues after session
 
+## Framework gap: `uint8 k` signature sticks even when callee doesn't read X
+
+Discovered 2026-04-20 while investigating ground-bug's 5× VRAM-write
+undercount (frame 95, BG1 tilemap $V2800-$V2FFF: 179 recomp / 909 oracle).
+
+**Symptom.** `src/gen/smw_05_gen.c:212-213` emits:
+```c
+BufferScrollingTiles_Layer1_Init(0 /* RECOMP_WARN: X unknown at call site */);
+BufferScrollingTiles_Layer2_Init(0 /* RECOMP_WARN: X unknown at call site */);
+```
+inside the 32-iter loop in `InitializeLevelLayer1And2Tilemaps`
+($05:809E). The call sits after a loop back-edge; `_build_call_args`'s
+in-BB X tracker (`self.X`) is None, so it emits `0` with WARN.
+
+**Why the sig says `uint8 k` at all.** All 6 dispatched Buffer*
+functions (Layer1, Layer1_NoScroll, Layer1_VerticalLevel, Layer2,
+Layer2_Background, Layer2_VerticalLevel) carry `(uint8 k)` in
+`recomp/funcs.h`, yet grep shows **exactly 1 `\bk\b` match per
+function body** — the declaration line. `k` is never read. The sig
+is wrong.
+
+**Root.** `_augment_sig_with_livein` in `recomp.py:989-1039` is
+deliberately one-way: "This pass only WIDENS: it never drops a param
+that's already in the sig, even when live-in says the register isn't
+consumed." Rationale in the docstring: live-in analysis is
+conservative, has known gaps (PHX…PLX scribble-restore, DP-indirect
+reads), and hand-written callers codify the true ABI. Dropping a sig
+param could break them.
+
+Consequence: once `(uint8 k)` got introduced at any point in history
+(probably via a tail-call propagating `reads X` upward in
+`infer_live_in_regs` at lines 709-715), the sig is pinned forever,
+and every caller that can't resolve X at the call site emits a
+WARN + wrong-looking `0` argument.
+
+**Why this case is harmless.** In these 6 callees, `k` is dead, so
+passing 0 is semantically equivalent to passing the real X. The WARN
+is cosmetic clutter. But the framework invariant is fragile: the next
+time a dispatch target DOES read X, the same caller-side pattern
+would silently miscompile.
+
+**What a fix looks like (scoped, not done in this session):**
+
+1. **Sig narrowing** (most direct): teach the widening pass to also
+   narrow when liveness *definitively* says the register isn't live-in
+   AND the body contains no PHX…PLX scribble-restore pattern AND no
+   DP-indirect read of `$7E:XX` where X is used as index. Guarded
+   behind a cfg opt-in for rollout safety. Requires regen of every
+   bank + regression eyeball.
+2. **Unused-param elimination at emit time**: during function emit,
+   scan generated body for `\bk\b`; if absent, rewrite sig to drop
+   `uint8 k` post-emit and propagate to the sync_funcs_h writer.
+   Then any caller re-resolves against the narrower sig. Smaller
+   blast radius than Option 1.
+3. **Cross-BB X tracking in the caller tracker**: carry `self.X`
+   through loop back-edges via join/fixpoint. Even with this, a
+   TAX-from-runtime-value pattern (as here) would still give "X
+   unknown at call site" → falls back to Option 2 anyway.
+
+All three are non-trivial. Design review recommended before
+implementation.
+
+**Until then:** `RECOMP_WARN: X unknown at call site` in generated
+output is acceptable only when an independent check confirms the
+callee doesn't read `k`. Do not claim the WARN is the root cause of
+a runtime divergence without that check (ground-bug 2026-04-20:
+confirmed dead, NOT the cause).
+
 
 
 ## Tier 1d dp_sync residual — dispatch file still calls no-op stubs
