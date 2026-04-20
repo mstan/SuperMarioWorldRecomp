@@ -71,7 +71,6 @@ typedef struct Config {
   uint8 msuvolume;
   uint32 features0;
 
-  const char *link_graphics;
   char *memory_buffer;
   const char *shader;
   const char *msu_path;
