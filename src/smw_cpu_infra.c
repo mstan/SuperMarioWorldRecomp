@@ -62,38 +62,8 @@ static const uint32 kPatchedCarrys_SMW[] = {
   0x3C073,
 };
 
-static uint8 preserved_db;
-
 static uint32 get_24(uint32 a) {
   return *(uint32*)SnesRomPtr(a) & 0xffffff;
-}
-
-uint32 PatchBugs_SMW1(void) {
-  // Surviving entries are HLE/runtime bridges, NOT bug fixes:
-  //   - DB-preservation around an HLE call boundary (0x1C641/0x1C644)
-  //   - HLE replacement for CheckWhichControllersArePluggedIn (0x9A74)
-  //   - $817e: NMI APUIO2 readback bridge.
-  //
-  // Editorial fixes for original-SMW bugs (uninited regs, OOB reads,
-  // etc.) were removed: a faithful recompilation should reproduce the
-  // ROM's behavior, not silently mask its bugs. If removal exposes
-  // visible regressions, the right fix is in the recompiler/runtime,
-  // not in resurrecting smw-rev's editorial patches.
-  if (FixBugHook(0x1C641)) {
-    // PowerUpAndItemGFXRt_DrawCoinSprite — preserve DB across HLE boundary
-    preserved_db = g_cpu->db;
-    g_cpu->db = 1;
-  } else if (FixBugHook(0x1C644)) {
-    g_cpu->db = preserved_db;
-  } else if (FixBugHook(0x9A74)) {
-    // HLE replacement for CheckWhichControllersArePluggedIn
-    CheckWhichControllersArePluggedIn();
-    return 0x9A8A;
-  } else if (FixBugHook(0x817e)) {
-    g_cpu->y = g_ram[kSmwRam_APUI02];
-    return 0x8181;
-  }
-  return 0;
 }
 
 void SmwCpuInitialize(void) {
@@ -167,7 +137,7 @@ const RtlGameInfo kSmwGameInfo = {
   .game_id = kGameID_SMW,
   .patch_carrys = kPatchedCarrys_SMW,
   .patch_carrys_count = arraysize(kPatchedCarrys_SMW),
-  .patch_bugs = &PatchBugs_SMW1,
+  .patch_bugs = NULL,
   .initialize = &SmwCpuInitialize,
   .run_frame = &SmwRunOneFrameOfGame,
   .draw_ppu_frame = &SmwDrawPpuFrame,
