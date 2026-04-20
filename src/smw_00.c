@@ -26,34 +26,6 @@ const uint8 kSlopeDataTables_ShapeOfSlope[512] = { 0xf, 0xf, 0xf, 0xf, 0xe, 0xe,
 
 
 
-void SmwVectorReset() {
-//  xWriteReg(NMITIMEN, 0);
-//  xWriteReg(HDMAEN, 0);
-  RtlApuWrite(APUI00, 0);
-  RtlApuWrite(APUI01, 0);
-  RtlApuWrite(APUI02, 0);
-  RtlApuWrite(APUI03, 0);
-  RtlPpuWrite(INIDISP, 0x80);
-  *(uint16 *)reset_sprites_y_function_in_ram = 0xf0a9;
-  uint16 v0 = 381;
-  int16 v1 = 0x3fd;
-  do {
-    *(uint16 *)&reset_sprites_y_function_in_ram[v0 + 2] = 141;
-    *(uint16 *)&reset_sprites_y_function_in_ram[v0 + 3] = v1;
-    v1 -= 4;
-    v0 -= 3;
-  } while ((v0 & 0x8000) == 0);
-  reset_sprites_y_function_in_ram[386] = 107;
-  HandleSPCUploads_UploadSPCEngine();
-  misc_game_mode = 0;
-  misc_intro_level_flag = 0;
-  InitializeFirst8KBOfRAM();
-  HandleSPCUploads_UploadSamples();
-  SetupHDMAWindowingEffects();
-  RtlPpuWrite(OBSEL, 3);
-  ++waiting_for_vblank;
-}
-
 void SmwRunOneFrameOfGame_Internal() {
   assert(waiting_for_vblank != 0);
   ++counter_global_frames;

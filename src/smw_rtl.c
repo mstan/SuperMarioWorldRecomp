@@ -164,68 +164,11 @@ void SmwDrawPpuFrame(void) {
 
 void SmwRunOneFrameOfGame(void) {
   if (*(uint16 *)reset_sprites_y_function_in_ram == 0)
-    SmwVectorReset();
+    I_RESET();
   SmwRunOneFrameOfGame_Internal();
   auto_00_816A();
 #ifdef SMW_ORACLE
   oracle_dump_frame((uint32_t)snes_frame_counter, g_ram);
 #endif
-}
-
-
-void LoadStripeImage_UploadToVRAM(const uint8 *pp) {  // 00871e
-  while (1) {
-    if ((*pp & 0x80) != 0)
-      break;
-    uint16 vram_addr = pp[0] << 8 | pp[1];
-
-    uint8 vmain = __CFSHL__(pp[2], 1);
-    uint8 fixed_addr = (uint8)(pp[2] & 0x40) >> 3;
-    uint16 num = (swap16(WORD(pp[2])) & 0x3FFF) + 1;
-    pp += 4;
-
-    if (fixed_addr) {
-      if (vram_addr != 0xffff) {
-        uint16 *dst = g_ppu->vram + vram_addr;
-        uint16 src_data = WORD(*pp);
-        int ctr = (num + 1) >> 1;
-        if (vmain) {
-          for (int i = 0; i < ctr; i++) {
-            dst[i * 32] = src_data;
-            debug_server_on_vram_write((vram_addr + i * 32) & 0x7fff, src_data);
-          }
-        } else {
-          // uhm...?
-          uint8 *dst_b = (uint8 *)dst;
-          for (int i = 0; i < num; i++)
-            dst_b[i + ((i & 1) << 1)] = src_data;
-          for (int i = 0; i < num; i += 2)
-            dst_b[i + 1] = src_data >> 8;
-          // Emit one hook per word touched (may span more than the direct
-          // indexing suggests — be conservative and cover both halves).
-          for (int i = 0; i < (num + 1) >> 1; i++)
-            debug_server_on_vram_write((vram_addr + i) & 0x7fff, dst[i]);
-        }
-      }
-      pp += 2;
-    } else {
-      if (vram_addr != 0xffff) {
-        uint16 *dst = g_ppu->vram + vram_addr;
-        uint16 *src = (uint16 *)pp;
-        if (vmain) {
-          for (int i = 0; i < (num >> 1); i++) {
-            dst[i * 32] = src[i];
-            debug_server_on_vram_write((vram_addr + i * 32) & 0x7fff, src[i]);
-          }
-        } else {
-          for (int i = 0; i < (num >> 1); i++) {
-            dst[i] = src[i];
-            debug_server_on_vram_write((vram_addr + i) & 0x7fff, src[i]);
-          }
-        }
-      }
-      pp += num;
-    }
-  }
 }
 

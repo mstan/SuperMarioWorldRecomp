@@ -21,7 +21,6 @@ bool SmwSpecialSaveLoad(int cmd, int slot);
 PointU16 *get_PointU16(PointU16 *pt, uint8 off);
 static inline OamEnt *get_OamEnt(OamEnt *base, uint16 off) { return (OamEnt *)((uint8 *)base + off); }
 
-void SmwVectorReset();
 void SmwRunOneFrameOfGame_Internal();
 void SmwSavePlaythroughSnapshot();
 
