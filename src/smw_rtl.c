@@ -3,9 +3,6 @@
 #include "variables.h"
 #include "config.h"
 #include <time.h>
-#ifdef SMW_ORACLE
-#include "../../../tools/oracle/oracle.h"
-#endif
 #include "common_cpu_infra.h"
 #include "snes/snes.h"
 #include "funcs.h"
@@ -118,8 +115,5 @@ void SmwRunOneFrameOfGame(void) {
     I_RESET();
   SmwRunOneFrameOfGame_Internal();
   auto_00_816A();
-#ifdef SMW_ORACLE
-  oracle_dump_frame((uint32_t)snes_frame_counter, g_ram);
-#endif
 }
 

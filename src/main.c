@@ -4,9 +4,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "debug_server.h"
-#ifdef SMW_ORACLE
-#include "../../../tools/oracle/oracle.h"
-#endif
 #include <SDL.h>
 #ifdef _WIN32
 #include <windows.h>
@@ -515,12 +512,6 @@ int main(int argc, char** argv) {
     g_debug_flag = true;
     argc -= 1, argv += 1;
   }
-#ifdef SMW_ORACLE
-  if (argc >= 2 && strcmp(argv[0], "--oracle") == 0) {
-    oracle_open(argv[1]);
-    argc -= 2, argv += 2;
-  }
-#endif
   int start_paused = 0;
   if (argc >= 1 && strcmp(argv[0], "--paused") == 0) {
     start_paused = 1;
@@ -841,9 +832,6 @@ error_reading:;
 
   SDL_DestroyWindow(window);
   SDL_Quit();
-#ifdef SMW_ORACLE
-  oracle_close();
-#endif
   return 0;
 }
 
