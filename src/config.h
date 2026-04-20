@@ -66,7 +66,6 @@ typedef struct Config {
   bool display_perf_title;
   bool disable_frame_delay;
   bool save_playthrough;
-  uint32 features0;
 
   char *memory_buffer;
   const char *shader;
