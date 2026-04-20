@@ -278,16 +278,6 @@ static uint16 SpcDivHelper(int a, uint8 b) {
   return (org_a & 0x100) ? -t : t;
 }
 
-static void SmwSpcPlayer_CopyVariablesToRam(SmwSpcPlayer *p) {
-  Channel *c = p->channel;
-  for (int i = 0; i < 8; i++, c++) {
-    for (const MemMap *m = &kChannel_Maps[0]; m != &kChannel_Maps[countof(kChannel_Maps)]; m++)
-      memcpy(&p->ram[(m->org_off & 0x7fff) + i * 2], (uint8 *)c + m->off, m->org_off & 0x8000 ? 2 : 1);
-  }
-  for (const MemMapSized *m = &kSpcPlayer_Maps[0]; m != &kSpcPlayer_Maps[countof(kSpcPlayer_Maps)]; m++)
-    memcpy(&p->ram[m->org_off], (uint8 *)p + m->off, m->size);
-}
-
 static void SmwSpcPlayer_CopyVariablesFromRam(SmwSpcPlayer *p) {
   Channel *c = p->channel;
   for (int i = 0; i < 8; i++, c++) {
@@ -299,14 +289,6 @@ static void SmwSpcPlayer_CopyVariablesFromRam(SmwSpcPlayer *p) {
 
   for (int i = 0; i < 8; i++)
     p->channel[i].index = i;
-}
-
-static void SmwSpcPlayer_CopyVariables(SpcPlayer *p_in, bool copy_to_ram) {
-  SmwSpcPlayer *p = (SmwSpcPlayer *)p_in;
-  if (copy_to_ram)
-    SmwSpcPlayer_CopyVariablesToRam(p);
-  else
-    SmwSpcPlayer_CopyVariablesFromRam(p);
 }
 
 static const uint8 kDefDspRegs[12] = { MVOLL,MVOLR,EVOLL,EVOLR,FLG,EFB,PMON,NON,EON,DIR,ESA,EDL };
@@ -1281,32 +1263,6 @@ static void SmwSpcPlayer_Initialize(SpcPlayer *p_in) {
   Spc_Reset(p);
 }
 
-static void SmwSpcPlayer_GenerateSamples(SpcPlayer *p_in) {
-  SmwSpcPlayer *p = (SmwSpcPlayer *)p_in;
-  assert(p->timer_cycles <= 64);
-  assert(p->base.dsp->sampleOffset <= 534);
-
-  for (;;) {
-    if (p->timer_cycles >= 64) {
-      Spc_Loop_Part2(p, p->timer_cycles >> 6);
-      p->timer_cycles &= 63;
-    }
-
-    // sample rate 32000
-    int n = 534 - p->base.dsp->sampleOffset;
-    if (n > (64 - p->timer_cycles))
-      n = (64 - p->timer_cycles);
-
-    p->timer_cycles += n;
-
-    for (int i = 0; i < n; i++)
-      dsp_cycle(p->base.dsp);
-
-    if (p->base.dsp->sampleOffset == 534)
-      break;
-  }
-}
-
 static void SmwSpcPlayer_Upload(SpcPlayer *p_in, const uint8_t *data) {
   const uint8 *data_org = data;
   SmwSpcPlayer *p = (SmwSpcPlayer *)p_in;
@@ -1346,9 +1302,7 @@ SpcPlayer *SmwSpcPlayer_Create(void) {
   p->base.dsp = dsp_init(p->ram);
   p->base.ram = p->ram;
   p->base.initialize = &SmwSpcPlayer_Initialize;
-  p->base.gen_samples = &SmwSpcPlayer_GenerateSamples;
   p->base.upload = &SmwSpcPlayer_Upload;
-  p->base.copy_vars = &SmwSpcPlayer_CopyVariables;
   p->reg_write_history = 0;
   return &p->base;
 }
