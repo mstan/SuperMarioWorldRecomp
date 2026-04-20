@@ -179,7 +179,6 @@
     <ClCompile Include="..\snesrecomp\runner\src\debug_server.c" />
     <ClCompile Include="smw_0c.c" />
     <ClCompile Include="smw_cpu_infra.c" />
-    <ClCompile Include="dp_sync_bridge.c" />
     <ClCompile Include="smw_rtl.c" />
     <ClCompile Include="..\snesrecomp\runner\src\snes\apu.c">
       <Optimization Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Disabled</Optimization>
