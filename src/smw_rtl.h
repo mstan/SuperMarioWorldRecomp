@@ -23,7 +23,6 @@ static inline OamEnt *get_OamEnt(OamEnt *base, uint16 off) { return (OamEnt *)((
 
 void SmwVectorReset();
 void SmwRunOneFrameOfGame_Internal();
-void SmwVectorIRQ();
 void SmwSavePlaythroughSnapshot();
 
 void SmwDrawPpuFrame(void);

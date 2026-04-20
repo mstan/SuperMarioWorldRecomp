@@ -73,32 +73,7 @@ void ResetSpritesFunc(int wh) {
 
 
 
-void SmwVectorIRQ() {
-  int trigger_line = -1;
-  if ((misc_nmito_use_flag & 0x80) != 0) {
-    if ((misc_nmito_use_flag & 0x40) != 0) {
-      if (flag_irqto_use) {
-        SetMode7PPUPointersAndLayer1Scroll();
-        goto LABEL_4;
-      }
-      flag_irqto_use = 1;
-      trigger_line = (-82 - shaking_layer1_disp_y) & 0xff;
-    }
-    if (!timer_end_level || timer_level_end_fade < 0x40) {
-      RtlPpuWrite(BGMODE, 7);
-      RtlPpuWriteTwice(BG1HOFS, mirror_m7_xpos);
-      RtlPpuWriteTwice(BG1VOFS, mirror_m7_ypos);
-      goto out;
-    }
-  }
-  RtlPpuWriteTwice(BG3HOFS, mirror_layer3_xpos);
-  RtlPpuWriteTwice(BG3VOFS, mirror_layer3_ypos);
-LABEL_4:
-  RtlPpuWrite(BGMODE, mirror_bgmode_and_tile_size_setting);
-  RtlPpuWrite(CGADSUB, mirror_color_math_select_and_enable);
-out:
-  RtlEnableVirq(trigger_line);
-}
+
 
 
 

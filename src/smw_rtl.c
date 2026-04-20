@@ -150,7 +150,13 @@ void SmwDrawPpuFrame(void) {
     SimpleHdma_DoLine(&hdma_chans[2]);
     //    dma_doHdma(snes->dma);
     if (i == trigger) {
-      SmwVectorIRQ();
+      // Simulate hardware IRQ latch: I_IRQ's first instruction reads HW_TIMEUP
+      // ($4211) and branches on the N flag to distinguish timer-IRQ from
+      // other sources. recomp_hw.c's ReadReg(0x4211) returns g_snes->inIrq<<7
+      // and clears the flag; assert it here so the handler takes the
+      // timer-IRQ path instead of exiting immediately.
+      g_snes->inIrq = true;
+      I_IRQ();
       trigger = g_recomp.vIrqEnabled ? g_recomp.vTimer + 1 : -1;
     }
   }
