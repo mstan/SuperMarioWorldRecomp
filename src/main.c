@@ -64,7 +64,6 @@ struct SpcPlayer *g_spc_player;
 
 static uint8_t g_my_pixels[256 * 4 * 240];
 
-int g_got_mismatch_count;
 
 enum {
   kDefaultFullscreen = 0,
@@ -324,9 +323,6 @@ static void DrawPpuFrameWithPerf(void) {
   }
   if (g_display_perf)
     RenderNumber(pixel_buffer + pitch * render_scale, pitch, g_curr_fps, render_scale == 4);
-
-  if (g_got_mismatch_count)
-    RenderNumber(pixel_buffer + pitch * render_scale, pitch, g_got_mismatch_count, render_scale == 4);
 
   g_renderer_funcs.EndDraw();
 }
@@ -671,7 +667,6 @@ error_reading:;
   uint32 curTick = 0;
   uint32 frameCtr = 0;
   uint8 audiopaused = true;
-  bool has_bug_in_title = false;
   GamepadInfo *gi;
 
   while (running) {
@@ -761,18 +756,6 @@ error_reading:;
 
     if (!g_snes->disableRender)
       DrawPpuFrameWithPerf();
-
-    bool want_bug_in_title = (g_got_mismatch_count != 0);
-    if (want_bug_in_title != has_bug_in_title) {
-      has_bug_in_title = want_bug_in_title;
-      char title[60];
-      if (want_bug_in_title) {
-        snprintf(title, sizeof(title), "%s | BUG FOUND!", kWindowTitle);
-        SDL_SetWindowTitle(g_window, title);
-      } else {
-        SDL_SetWindowTitle(g_window, kWindowTitle);
-      }
-    }
 
     // if vsync isn't working, delay manually
     curTick = SDL_GetTicks();
