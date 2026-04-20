@@ -42,8 +42,19 @@ Branch: `chore/tier3c-irq-vector` (both repos).
   "equally broken" at session start (ground-rendering bug is
   unchanged because it's a separate codegen issue tracked in
   memory/project_ground_not_rendering_*).
-- 14 commits on `chore/tier3c-irq-vector` in the parent repo,
-  3 on the same branch in the snesrecomp subrepo.
+- Parent repo: 16 commits on `chore/tier3c-irq-vector` since main.
+  Includes one revert: the globals `ptr_layer1_data / ptr_layer2_data
+  / ptr_layer2_is_bg` looked orphan by grep but are live via an
+  `extern` decl embedded inside `debug_server.c` — heuristic audit
+  tools missed that. No net change for those three; everything else
+  stuck.
+- snesrecomp subrepo: 4 commits on the same branch — recomp.py
+  emitter fixes, PatchBugs null-guard, dead-fn rips in common_rtl
+  + common_cpu_infra + debug_server, + SyncDmaChannelToPpuFromSnapshot
+  (Tier 1b orphan that had survived the compare-harness rip).
+- Release|x64 file: smw_spc_player.c 1539 -> 71 LOC; various other
+  src/*.c files shrunk; common_rtl.c lost ~50 lines; debug_server.c
+  and common_cpu_infra.c each lost one dead function.
 
 ## Open issues after session
 
