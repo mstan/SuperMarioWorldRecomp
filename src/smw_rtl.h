@@ -27,8 +27,6 @@ void SmwSavePlaythroughSnapshot();
 void SmwDrawPpuFrame(void);
 void SmwRunOneFrameOfGame(void);
 
-extern bool g_did_finish_level_hook;
-
 void AddSprXPos(uint8 k, uint16 x);
 void AddSprYPos(uint8 k, uint16 y);
 void AddSprXYPos(uint8 k, uint16 x, uint16 y);
