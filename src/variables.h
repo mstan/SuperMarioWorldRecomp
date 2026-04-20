@@ -97,6 +97,10 @@
 #define credits_var65 (*(uint16*)(g_ram+0x65))
 #define credits_index (*(uint8*)(g_ram+0x67))
 
+extern const uint8 *ptr_layer1_data;
+extern const uint8 *ptr_layer2_data;
+extern uint8 ptr_layer2_is_bg;
+
 #define xptr_layer1_data (*(LongPtr*)(g_ram+0x65))
 #define xptr_layer2_data (*(LongPtr*)(g_ram+0x68))
 #define xptr_lo_map16_data (*(LongPtr*)(g_ram+0x6B))
