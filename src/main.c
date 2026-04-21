@@ -77,7 +77,7 @@ static const char kWindowTitle[] = "SMW";
 static uint32 g_win_flags = SDL_WINDOW_RESIZABLE;
 static SDL_Window *g_window;
 
-static uint8 g_paused, g_turbo, g_replay_turbo = true, g_cursor = true;
+static uint8 g_paused, g_turbo, g_cursor = true;
 static uint8 g_current_window_scale;
 static uint32 g_input_state;
 static bool g_display_perf;
@@ -743,12 +743,12 @@ error_reading:;
     debug_server_wait_if_paused();
     uint32 inputs = g_input_state | g_gamepad[0].axis_buttons | g_gamepad[1].axis_buttons << 12;
     inputs |= TickScript();
-    uint8 is_replay = RtlRunFrame(inputs | GetActiveControllers());
+    RtlRunFrame(inputs | GetActiveControllers());
 
     // Bank validation removed — 100% oracle mode, no banks enabled.
 
     frameCtr++;
-    g_snes->disableRender = (g_turbo ^ (is_replay & g_replay_turbo)) && (frameCtr & (g_turbo ? 0xf : 0x7f)) != 0;
+    g_snes->disableRender = g_turbo && (frameCtr & 0xf) != 0;
 
     if (!g_snes->disableRender)
       DrawPpuFrameWithPerf();
@@ -868,16 +868,8 @@ static void HandleCommand(uint32 j, bool pressed) {
     RtlSaveLoad(kSaveLoad_Load, j - kKeys_Load);
   } else if (j <= kKeys_Save_Last) {
     RtlSaveLoad(kSaveLoad_Save, j - kKeys_Save);
-  } else if (j <= kKeys_Replay_Last) {
-    RtlSaveLoad(kSaveLoad_Replay, j - kKeys_Replay);
-  } else if (j <= kKeys_LoadRef_Last) {
-    RtlSaveLoad(kSaveLoad_Load, 256 + j - kKeys_LoadRef);
-  } else if (j <= kKeys_ReplayRef_Last) {
-    RtlSaveLoad(kSaveLoad_Replay, 256 + j - kKeys_ReplayRef);
   } else {
     switch (j) {
-    case kKeys_ClearKeyLog: RtlClearKeyLog(); break;
-    case kKeys_StopReplay: RtlStopReplay(); break;
     case kKeys_Fullscreen:
       g_win_flags ^= SDL_WINDOW_FULLSCREEN_DESKTOP;
       SDL_SetWindowFullscreen(g_window, g_win_flags & SDL_WINDOW_FULLSCREEN_DESKTOP);
@@ -901,7 +893,6 @@ static void HandleCommand(uint32 j, bool pressed) {
       }
 #endif
       break;
-    case kKeys_ReplayTurbo: g_replay_turbo = !g_replay_turbo; break;
     case kKeys_WindowBigger: ChangeWindowScale(1); break;
     case kKeys_WindowSmaller: ChangeWindowScale(-1); break;
     case kKeys_DisplayPerf: g_display_perf ^= 1; break;
