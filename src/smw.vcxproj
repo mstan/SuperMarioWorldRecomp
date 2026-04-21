@@ -175,7 +175,6 @@
     <ClCompile Include="gen\smw_0d_gen.c" />
     <ClCompile Include="gen\recomp_func_registry.c" />
     <ClCompile Include="..\snesrecomp\runner\src\debug_server.c" />
-    <ClCompile Include="smw_0c.c" />
     <ClCompile Include="smw_cpu_infra.c" />
     <ClCompile Include="smw_rtl.c" />
     <ClCompile Include="..\snesrecomp\runner\src\snes\apu.c">
