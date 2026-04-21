@@ -642,8 +642,6 @@ error_reading:;
 
   PpuBeginDrawing(g_ppu, g_my_pixels, 256 * 4, 0);
 
-  if (g_config.save_playthrough)
-    MkDir("playthrough");
   MkDir("saves");
     
   RtlReadSram();

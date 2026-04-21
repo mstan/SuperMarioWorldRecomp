@@ -83,6 +83,4 @@ const RtlGameInfo kSmwGameInfo = {
   .run_frame = &SmwRunOneFrameOfGame,
   .draw_ppu_frame = &SmwDrawPpuFrame,
   .save_name_prefix = "save",
-  .on_finish_level = &SmwOnFinishLevel,
-  .special_save_load = &SmwSpecialSaveLoad,
 };

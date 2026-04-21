@@ -1,65 +1,9 @@
 #include "smw_rtl.h"
 #include "variables.h"
-#include "config.h"
-#include <time.h>
 #include "common_cpu_infra.h"
 #include "snes/snes.h"
 #include "funcs.h"
 #include "debug_server.h"
-
-bool g_smw_playback_mode;
-static int g_smw_playback_ctr = (1) * 2 - 1; // 36
-
-static const char *const kSmwBugSaves[] = {
-  "playthrough/1_1",
-};
-
-static void SmwLoadNextPlaybackSnapshot(void) {
-  char name[128];
-  for (int i = 0; i < 100; i++) {
-    g_smw_playback_ctr++;
-    sprintf(name, "saves/playthrough/%d_%d.sav", g_smw_playback_ctr >> 1, (g_smw_playback_ctr & 1) + 1);
-    if (RtlLoadSnapshot(name, true)) {
-      printf("Playthrough %s\n", name);
-      return;
-    }
-  }
-}
-
-void SmwOnFinishLevel(void) {
-  if (!RtlIsReplayMode() && g_config.save_playthrough) {
-    SmwSavePlaythroughSnapshot();
-    RtlClearKeyLog();
-  }
-  if (g_smw_playback_mode)
-    SmwLoadNextPlaybackSnapshot();
-}
-
-bool SmwSpecialSaveLoad(int cmd, int slot) {
-  if (cmd == kSaveLoad_Replay && slot == 256) {
-    g_smw_playback_mode = true;
-    SmwLoadNextPlaybackSnapshot();
-    return true;
-  }
-  if (slot >= 256) {
-    int i = slot - 256;
-    if (cmd == kSaveLoad_Save || i >= (int)(sizeof(kSmwBugSaves) / sizeof(kSmwBugSaves[0])))
-      return true;
-    char name[128];
-    sprintf(name, "saves/%s.sav", kSmwBugSaves[i]);
-    printf("*** %s slot %d: %s\n",
-      cmd == kSaveLoad_Save ? "Saving" : cmd == kSaveLoad_Load ? "Loading" : "Replaying", slot, name);
-    RtlLoadSnapshot(name, cmd == kSaveLoad_Replay);
-    return true;
-  }
-  return false;
-}
-
-void SmwSavePlaythroughSnapshot() {
-  char buf[128];
-  snprintf(buf, sizeof(buf), "playthrough/%d_%d_%d.sav", ow_level_number_lo, misc_exit_level_action, (int)time(NULL));
-  RtlSaveSnapshot(buf, false);
-}
 
 void SmwDrawPpuFrame(void) {
   SimpleHdma hdma_chans[3];
