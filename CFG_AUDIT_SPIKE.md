@@ -266,6 +266,78 @@ should close. Populated after Phase B cross-check.
 - [ ] Phase F: wrap-up + bug #8 regression check + pivot to
       recompiler-smartening work
 
+## Next-session handoff pointer
+
+Spike audit complete 2026-04-22. Current work has pivoted to
+**making the recompiler smarter** to reduce the load-bearing
+override count without regressions. Two tiers in that pivot:
+
+### Tier 2 (NEXT) — Small framework gaps
+
+Low-risk individual improvements that each eliminate a class of
+load-bearing overrides. Tackle one at a time; verify no gen-C
+regressions via full 9-bank regen + live-boot screenshot after each.
+
+Candidate targets (ordered by likely impact × simplicity):
+
+1. **Cross-call M-state propagation** (~35 `rep:`/`repx:`/`sep:` +
+   3 sig `TYPE_DIFF` eliminations). Today the decoder enters each
+   function in M=1,X=1 regardless of how callers set mode before
+   JSR. Walking callers' M/X state across JSR edges and using the
+   dominant caller-state as the callee's entry state would close
+   most of these. Implementation lives in recomp.py around
+   `_scan_parent_mx_at` (already does this for sub-entries —
+   generalize to all JSR'd callees).
+
+2. **Carry-return broadening** (~6 `carry_ret` eliminations).
+   `_looks_like_carry_return` already detects CLC/SEC + RTS
+   patterns. Broaden to detect CMP-before-RTS and EOR #$01-
+   before-RTS as implicit carry returns.
+
+3. **Y-return detection** (~8 `ret_y` eliminations). Similar to
+   carry-return: detect functions whose only post-RTS consumer
+   reads Y → mark as `ret_y`.
+
+4. **DP-slot live-in** (~50-80 sig `CFG_WIDER` eliminations).
+   Extend `infer_live_in_regs` to track DP scratch-slot reads
+   (`LDA $00` etc) before any DP write. Emit as `r0`, `r2w` etc.
+
+5. **Pointer-param inference** (~15-25 sig `CFG_WIDER` eliminations).
+   Detect when a ZP slot is consumed via `LDA [$F6],Y` — caller
+   passes a pointer. Emit as `*p`.
+
+Each target: (a) write a framework test pinning the new behavior;
+(b) implement; (c) regen all 9 banks and diff — expect narrow,
+targeted gen-C changes; (d) strip the overrides that are now
+redundant via `cfg_override_validator.py --type X --all` →
+`cfg_override_strip.py --type X --apply`; (e) full live-boot
+visual check.
+
+### Tier 1 (AFTER Tier 2) — Decouple iterative passes from cfg end:
+
+The larger structural refactor. Current `cfg end:X` directives
+shape FOUR passes simultaneously: decode_func, promote_sub_entries
+(iterative), auto_promote_branch_targets (iterative),
+_auto_detect_dispatch_helpers. A clean decoupling lets cfg end:
+bound only the single func's own decode; the iterative passes use
+their own range logic based on discovered starts + exclude_range.
+Once decoupled, the 450+ load-bearing end: directives that just
+document next-non-skip become safely strippable.
+
+Specific refactor path: extract the `ends` map in
+`auto_promote_branch_targets` and `promote_sub_entries`'s enclosing-
+range check into a shared `_compute_func_ranges(cfg)` helper that
+uses discovered addresses + exclude_range instead of cfg.funcs' own
+end_override. Then validate gen-C unchanged, then pilot-strip.
+
+### Return to bug #8 LAST
+
+After Tier 2 + Tier 1 land, return to Mario-1-block-under (bug #8)
+from a cleaner base. With fewer load-bearing overrides and a
+smarter framework, any remaining gameplay bugs are in the
+runtime / oracle-sync / cross-bank-interaction layer — easier to
+diagnose without the cfg noise.
+
 ## FINAL TALLY
 
 | Override type | Total | Stripped | Wrong |
