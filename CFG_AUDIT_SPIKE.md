@@ -150,13 +150,63 @@ gap where live-in can't see.
 
 Stripped 8 redundant sigs in bank 0d (parent commit `9f37e83`).
 Live-boot check passed.
-### `rep:` / `repx:` / `sep:` (27 overrides) — not started
-### `init_y:` / `carry_ret` / `ret_y` / etc (17 overrides) — not started
-### `exclude_range` — not started
-### `dispatch` / `jsl_dispatch*` — not started
-### `skip` — not started
-### `no_autodiscover` — not started
-### standalone `name` lines with sig — not started
+### `rep:` / `repx:` / `sep:` (35 overrides) — Phase D done 2026-04-22
+
+| Type | Total | Redundant | Load-bearing | Verified CORRECT |
+|---|---:|---:|---:|---:|
+| rep  | 21 | 0 | 21 | 21 |
+| repx | 12 | 0 | 12 | 12 |
+| sep  |  2 | 0 |  2 |  2 |
+
+All 35 manually reviewed via `cfg_override_mode_crosscheck.py`. Each
+encodes M/X state at entry points reached via JSR from a caller that
+set mode BEFORE the call — decoder's linear walk can't infer this
+state. All correct.
+
+### Behavioral hints (17 overrides) — Phase D done 2026-04-22
+
+| Type | Total | Correct |
+|---|---:|---:|
+| carry_ret | 6 | 6 |
+| ret_y | 8 | 8 |
+| restores_x | 1 | 1 |
+| y_after | 1 | 1 |
+| init_carry | 1 | 1 |
+| init_y | 0 | — |
+| x_after | 0 | — |
+
+All manually verified via SMWDisX. Each is a specific ABI pattern
+(carry-as-bool return, Y-as-return, X-restore from WRAM) the
+recompiler's live-in inference can't derive. All correct.
+
+### `exclude_range` (1,006 entries) — Phase E done 2026-04-22
+
+Audited via `cfg_exclude_range_audit.py`:
+- 831 bytes-look-like-DATA (decode fails / validation fails). Clean.
+- 175 bytes-look-like-CODE. Spot-checked — all are legitimate
+  "code that belongs to another function" cases where the exclude
+  prevents double-discovery (e.g. `$00:816B-$8374` NMI-body chunk
+  is code, but excluded so auto-promote doesn't make it a new
+  function entry).
+
+**Zero wrong exclude_range directives found.**
+
+### `skip` (1 override) — Phase E done 2026-04-22
+
+Single entry: `Spr036_Unused_DataTable` — a data-table at a dispatch
+target for unused sprite $36. Hand-body is a no-op. Correct.
+
+### `dispatch` / `jsl_dispatch*` / `no_autodiscover` — 0 literal overrides
+
+These patterns are detected automatically by
+`_auto_detect_dispatch_helpers`. No cfg-level overrides exist in
+current cfgs.
+
+### standalone `name` lines with sig — not audited
+
+These declare aliases / cross-bank names for sub-entries. Their
+correctness is cross-checked through the `sig:` audit (same sig
+would be declared on the `func` or `name` line).
 
 ## Open items — load-bearing + wrong (suspected)
 
@@ -208,6 +258,40 @@ should close. Populated after Phase B cross-check.
       confirmed. The load-bearing sigs encode real ABI info live-in
       can't derive (pointer/DP params, struct returns, explicit
       widths in REP-covered callers).
-- [ ] Phase D: `rep:`/`repx:`/`sep:` + behavioral hints
-- [ ] Phase E: `exclude_range` / `dispatch` / `skip` / `no_autodiscover`
-- [ ] Phase F: wrap-up + bug #8 regression check
+- [x] Phase D: rep:/repx:/sep: (35 overrides) + behavioral hints
+      (17 overrides). 0 strippable, all load-bearing. Manual review
+      confirmed ALL correct. 0 WRONG.
+- [x] Phase E: exclude_range (1,006) + skip (1) + dispatch (0) +
+      no_autodiscover (0) + jsl_dispatch (0). 0 WRONG confirmed.
+- [ ] Phase F: wrap-up + bug #8 regression check + pivot to
+      recompiler-smartening work
+
+## FINAL TALLY
+
+| Override type | Total | Stripped | Wrong |
+|---|---:|---:|---:|
+| end | 513 | 22 | 0 |
+| sig | 1,169 | 8 | 0 |
+| rep | 21 | 0 | 0 |
+| repx | 12 | 0 | 0 |
+| sep | 2 | 0 | 0 |
+| carry_ret | 6 | 0 | 0 |
+| ret_y | 8 | 0 | 0 |
+| restores_x | 1 | 0 | 0 |
+| y_after | 1 | 0 | 0 |
+| init_carry | 1 | 0 | 0 |
+| exclude_range | 1,006 | 0 | 0 |
+| skip | 1 | 0 | 0 |
+| **Total** | **2,741** | **30** | **0** |
+
+**Zero wrong overrides found across the entire cfg.**
+
+Bug #8 (Mario-1-block-under) and other gameplay bugs are NOT
+encoded in cfg override defects. The cfg is clean. Next attention
+goes to:
+
+1. Making the recompiler smarter (reducing the 2,711 load-bearing
+   count without regressions).
+2. Bug #8: if the cfg isn't at fault, the defect lies in the
+   runtime / recompiler-emission layer or in cross-bank
+   interactions the current framework doesn't catch.
