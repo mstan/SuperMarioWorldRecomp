@@ -273,6 +273,49 @@ than a few hundred lines of code.
   generated C down to a one-line diff: "X is 2 here on oracle, 0 on
   recomp."
 
+## Worked example 2: SMW frozen koopa
+
+### Symptom
+Attract-demo koopa spawns but doesn't move. Mario walks past a statue
+instead of a walking enemy.
+
+### Investigation (1 hour — same recipe as Bug #8, 6x faster)
+
+| Step | Tool | Question | Answer |
+|------|------|----------|--------|
+| 1 | Sprite-table dwell diff | Which sprite byte first diverges? | Recomp puts koopa in slot 0 XSpeed=0, oracle in slot 9 XSpeed=0xf8 |
+| 2 | SpriteStatus write trace | Which function decided the slot? | Both sides use `ParseLevelSpriteList_Entry2` — different X at `STA SpriteStatus,X` |
+| 3 | SpriteMemorySetting check | Slot-loop entry state matches? | Yes, both sides should start X=9 |
+| 4 | Tier-4 insn trace | Where does X first diverge? | At `$02A91B` X=9, at `$02A93C` X=0 — X lost across BEQ |
+| 5 | Gen'd C read | Why? | `label_a93c` has two predecessor branches; the second (X=v34) overwrote the first's X_var (X=v23). The first BEQ's X value was silently lost at runtime when that path fired |
+| 6 | Framework fix | Add phi-merge for X/Y at multi-predecessor labels (mirror of existing A-register logic) | `recomp.py` |
+| 7 | Regen + rebuild + visual | Confirm? | User: "koopa responds now" (spawned, walks — separate fall-through-map bug remains) |
+
+### What made it 6x faster than Bug #8
+
+The tool stack was already in place (all Tiers 1-4, oracle embed,
+state-sync golden, parked stack). No new tooling needed. Each step was
+one probe (~10 minutes), not a tool-buildout.
+
+### What it reinforced
+
+**Asymmetry in the framework is a code smell.** When Bug #8 pinpointed
+`RetAY` as missing X-return, the methodology's answer was "add `RetAXY`
+to fill the gap." When frozen-koopa pinpointed "second branch overwrites
+first's X_var at label", the fix was "the A-register phi-merge already
+existed at line 4948-4952; mirror it for X and Y." Both fixes pattern-
+matched against EXISTING asymmetries where A was handled but X/Y
+weren't. Before writing new machinery, check: does the framework
+already handle this for a different register/flag/slot? If yes,
+mirror it.
+
+**Different register tracking bugs can produce the same symptom class.**
+Bug #8 was X-loss across CALLS (sig didn't propagate). Frozen-koopa was
+X-loss across BRANCH JOINS (second predecessor overwrote first's phi
+var). Both produced "wrong X at the next instruction, downstream writes
+go to the wrong slot." The methodology pins which specific mechanism
+via the insn-level diff; generic "reason about codegen" wouldn't have.
+
 ## Anti-patterns
 
 ### Don't sync by frame number
@@ -330,6 +373,38 @@ Once the floor is in place, any future codegen bug in the project
 follows the same 7-step recipe: state-sync diff → seed byte → write
 trace → call trace / full stack → block trace → insn trace → diff.
 Each step takes minutes, not hours.
+
+## Measured scaling (2026-04-23 session)
+
+Two codegen bugs fixed back-to-back using this recipe:
+
+- **Bug #8** (Mario one tile under): 6 hours. Tool-build work interleaved
+  with investigation — added `parked`-stack snapshot, extended Tier-4
+  insn trace usage, wrote 20 probes. Framework fix: `RetAXY` return
+  type. Codegen gap: X-loss across function returns.
+- **Frozen koopa**: 1 hour. Zero new tooling. 4 probes. Framework fix:
+  phi-merge X/Y at multi-predecessor branch joins. Codegen gap:
+  X-loss across goto-into-shared-label.
+
+Ratio is the expected shape: first bug pays for the tool-stack
+buildout; subsequent bugs exercise the already-built tools. Plan
+accordingly when estimating "how long until this recomp is done."
+The first 3-5 bugs are tool-expensive; bugs N+5 drop to the 1-hour
+range.
+
+## When to reach for this methodology vs. alternatives
+
+| Symptom | This methodology | Alternative |
+|---|---|---|
+| Recomp renders wrong | YES — find the byte, then the write, then the instruction | — |
+| Recomp crashes in a specific function | YES — the byte that got corrupted IS the seed | — |
+| Recomp emits wrong warning at compile time | No — this is a decoder issue, not runtime; read the ROM + gen'd output directly | Decoder unit tests |
+| Framework test fails after a recomp change | No — the test tells you which file/line; check the diff | git bisect + tests |
+| Emulator oracle isn't matching real hardware | No — that's an emulator bug, upstream to the emulator project | — |
+| PPU / rendering subsystem fails | This works, but the SEED byte is in VRAM/OAM/CGRAM, not WRAM. Adjust `find_first_divergence` subsystem arg | Frame capture + visual diff |
+
+The methodology is specifically for **recomp-vs-oracle behavioral
+divergence**. Not every bug is that class — but most visible ones are.
 
 ## References
 
