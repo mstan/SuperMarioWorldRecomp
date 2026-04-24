@@ -36,16 +36,24 @@ OUT OF SCOPE — those belong to their own audits.
 | 2 | ASL/LSR/ROL/ROR memory | FIXED | 16-bit RMW routed through new `_emit_rmw16` under M=0. |
 | 3 | TSB/TRB | FIXED | Same shape as #2. 16-bit TSB/TRB routes through `_emit_rmw16`. |
 | 4 | BIT V-flag | FIXED | V-flag mask now 0x4000 under M=0, 0x40 under M=1. |
-| 5 | SEP #$10 (X/Y → 8-bit) | FIXED | Counterpart to REP #$10 promotion; narrows X/Y to uint8. |
+| 5 | SEP #$10 (X/Y → 8-bit) | REVERTED | Fix shipped but caused visible regression (Mario one tile into the ground, Bug #8 class). Reverted on branch memory-shift-rotate-16bit. Needs cross-function sig coherence — narrowing X inside a callee whose caller passed 16-bit X truncates a live value. Re-land after #5-bis audit. |
 | 6 | REP #$10 high-byte preservation | DEFERRED | Low priority; any ROM relying on stale hi-byte of X/Y is buggy in its own right. Re-check via Phase B differential fuzz. |
 | 7 | PHA/PHX/PHY + width-mismatched pop | DETECTION SHIPPED | Stack entries now carry push width; any PLA/PLX/PLY with mismatched width emits a RECOMP_WARN comment in the gen C. SMW produces zero such warnings — not a SMW-exercised bug class. Full byte-tracked stack deferred until a ROM trips the warning. |
-| 8 | INX/DEX/INY/DEY wrap after SEP #$10 | FIXED | Same fix as #5; INX/DEX/INY/DEY now wrap at 256 after SEP #$10. |
+| 8 | INX/DEX/INY/DEY wrap after SEP #$10 | REVERTED (coupled to #5) | Same fix as #5, same revert. Re-land together. |
 | 9 | Decimal mode (CLD/SED + ADC/SBC) | MOOT for SMW | Grep of all SMWDisX banks: zero `SED` opcodes. D flag is cleared at reset and never set. Not a SMW-reachable bug class. Revisit for game #2 via Phase B. |
 | 10 | TXA/TYA high-byte preservation in M=1 | VERIFIED OK | Re-read the emitter; it doesn't touch `self.B` during TXA/TYA, so B persists correctly for a subsequent XBA. No bug. |
 
 Severity-weighted: **2–3 confirmed, 3–4 probable, 2–3 suspect.** Roughly matches my earlier estimate of "5-20 true bugs."
 
-**Final status (closed 2026-04-24):** 5 of 10 items fixed (#1 in a prior session + #2/#3/#4/#5+#8 here), 1 shipped as detection-only (#7), 3 verified-moot-for-SMW (#6 low-priority/suspect, #9 zero SED in ROM, #10 re-read OK). Ready to advance to Phase B differential fuzzing.
+**Final status (closed 2026-04-24):**
+- 4 fixed and shipped (#1 prior session + #2/#3/#4 here)
+- 1 detection-only shipped (#7; zero matches in SMW gen)
+- 2 reverted pending sig-coherence work (#5/#8 — caused visible regression)
+- 3 verified-moot-for-SMW (#6 low-priority/suspect, #9 zero SED in ROM, #10 re-read OK)
+
+#5/#8 re-land prerequisite: the narrowing fix must also update callee parameter types and live-in analysis so a 16-bit-X-passing caller's value doesn't get truncated when the callee SEPs #$10 mid-body. This is a Phase A.5 item between the current branch and Phase B.
+
+Phase B (differential fuzz) remains next.
 
 ---
 
