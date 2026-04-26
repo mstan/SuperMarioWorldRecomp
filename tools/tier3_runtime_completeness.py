@@ -129,22 +129,42 @@ def collect_visited_pcs(client: DebugClient, frames: int) -> tuple[set[int], set
     return all_visited, call_targets
 
 
-def collect_recomp_function_set() -> set[int]:
-    """Scan src/gen/smw_*_gen.c for `void <name>() { // BBAAAA`-style
-    function-definition headers — these are the addresses recomp
-    knows about and emitted code for. Includes auto_BB_AAAA entries.
+def collect_recomp_function_set() -> tuple[set[int], set[int]]:
+    """Scan src/gen/smw_*_gen.c for two address sets:
 
-    Returns set of full 24-bit addresses.
+      - func_entries: addresses with a `void <name>(...) { // BBAAAA`
+        function-definition header. These are recomp's promoted
+        function entries.
+      - intra_block_pcs: addresses that recomp knows about as
+        mid-function PCs (RDB_INSN_HOOK / RDB_BLOCK_HOOK arguments).
+        Labelled `0xBBAAAA` inside the body. A snes9x call target
+        landing on one of these is NOT a missed function — it's an
+        intra-function jump (RTS-only stub at the tail of another
+        function, dispatch entry pointing at a label_XXXX, etc.).
+
+    Returns (func_entries, intra_block_pcs).
     """
-    pat = re.compile(
-        r'^[A-Za-z][A-Za-z0-9_ ]*\s+\w+\s*\([^)]*\)\s*\{\s*//\s*'
+    # Return type may be a pointer (`uint8*`, `RetY`, etc.).
+    func_pat = re.compile(
+        r'^[A-Za-z][A-Za-z0-9_ \*]*\s+\w+\s*\([^)]*\)\s*\{\s*//\s*'
         r'([0-9a-fA-F]{6})\s*$', re.MULTILINE)
-    out: set[int] = set()
+    # RDB hooks have signature: RDB_*_HOOK(0xBBAAAA, ...). Capture
+    # the first hex literal in the call.
+    rdb_pat = re.compile(
+        r'RDB_(?:INSN|BLOCK)_HOOK\s*\(\s*0x([0-9a-fA-F]{6})\s*,')
+    func_entries: set[int] = set()
+    intra_block_pcs: set[int] = set()
     for gen in sorted(GEN_DIR.glob('smw_*_gen.c')):
         text = gen.read_text(encoding='utf-8', errors='replace')
-        for m in pat.finditer(text):
-            out.add(int(m.group(1), 16))
-    return out
+        for m in func_pat.finditer(text):
+            func_entries.add(int(m.group(1), 16))
+        for m in rdb_pat.finditer(text):
+            intra_block_pcs.add(int(m.group(1), 16))
+    # Function entries themselves also have hooks at their entry PC,
+    # so subtract — `intra_block_pcs` should mean "known PC that is
+    # NOT a function entry."
+    intra_block_pcs -= func_entries
+    return func_entries, intra_block_pcs
 
 
 def main() -> int:
@@ -171,42 +191,55 @@ def main() -> int:
         kill_existing()
 
     print(f'\n  collecting recomp function set from {GEN_DIR}/...')
-    known = collect_recomp_function_set()
-    print(f'  recomp knows {len(known)} function entries')
+    func_entries, intra_block_pcs = collect_recomp_function_set()
+    print(f'  recomp knows {len(func_entries)} function entries')
+    print(f'  recomp knows {len(intra_block_pcs)} intra-function PCs')
 
     # The signal: call targets snes9x visited that recomp doesn't
-    # know about as function entries. These are real "missed function
-    # entries" — typically dispatch-table truncation outcomes (the
-    # koopa-shell-pop class). Each entry here is a candidate framework
-    # bug.
-    #
-    # all_visited - known is noisier (intra-function blocks count) and
-    # is reported as a sanity number, not as a failure list.
-    missed_entries = call_targets - known
+    # know about as function entries AND that aren't recognized intra-
+    # function PCs (label_XXXX, RTS-only stubs at function tails, etc.).
+    # Surviving entries are real "missed function entries" — typically
+    # dispatch-table truncation outcomes (the koopa-shell-pop class).
+    known = func_entries | intra_block_pcs
+    # WRAM-resident routines ($7E:XXXX / $7F:XXXX) can't be recompiled
+    # — their bytes are mutable at runtime, so recomp never has a body
+    # for them. SMW jumps into WRAM for HLE-style helpers. Filter
+    # these from the missed-entries report; if they need any recomp-
+    # side handling it's a separate runtime/HLE concern, not a
+    # discovery-pass bug.
+    missed_entries = {
+        pc for pc in (call_targets - known)
+        if (pc >> 16) not in (0x7E, 0x7F)
+    }
 
     print()
-    print(f'  all visited PCs:          {len(all_visited)}')
-    print(f'  call targets visited:     {len(call_targets)}')
-    print(f'    - known to recomp:      {len(call_targets & known)}')
-    print(f'    - MISSED by recomp:     {len(missed_entries)}')
-    print(f'    (all_visited - known: {len(all_visited - known)} '
-          f'— mostly intra-function blocks, expected)')
+    print(f'  all visited PCs:                 {len(all_visited)}')
+    print(f'  call targets visited:            {len(call_targets)}')
+    print(f'    - is known function entry:     '
+          f'{len(call_targets & func_entries)}')
+    print(f'    - is intra-function block:     '
+          f'{len(call_targets & intra_block_pcs)}')
+    print(f'    - MISSED by recomp entirely:   {len(missed_entries)}')
 
     if missed_entries:
         print()
-        print(f'  Missed function entries (snes9x called these, recomp')
-        print(f'  has no function definition for them):')
+        print(f'  Missed ROM function entries (snes9x called these,')
+        print(f'  recomp has no function definition or known intra-')
+        print(f'  block PC for them):')
         for pc in sorted(missed_entries):
             print(f'    {pc:06X}')
         print()
-        print(f'  These are recomp framework bugs — usually dispatch-')
+        print(f'  These are recomp framework bugs - usually dispatch-')
         print(f'  table truncation. Use Tier-1 (test_dispatch_extents)')
         print(f'  to find the JSL site whose table is short, then fix')
         print(f'  the recompiler so the missing entry is auto-promoted.')
         return 1
     print()
-    print(f'  GREEN: every call target snes9x visited is a known recomp')
-    print(f'  function entry over {args.frames} attract-demo frames.')
+    print(f'  GREEN: every ROM call target snes9x visited is a known')
+    print(f'  recomp function entry or intra-block PC, over '
+          f'{args.frames} attract-demo frames.')
+    print(f'  (WRAM-resident calls excluded — those are HLE-style and')
+    print(f'  cannot be recompiled.)')
     return 0
 
 
