@@ -66,6 +66,10 @@ void SmwRunOneFrameOfGame(void) {
   // diverges from oracle, and demo timing skews because the
   // VariousPromptTimer / TitleInputIndex tick keys off observable
   // input state.
+  // Assert NMI-pending so the recompiled NMI handler's read of $4210
+  // (RDNMI) returns bit 7 = 1, matching real hardware. snes_readReg
+  // clears the latch on read.
+  g_snes->inNmi = true;
   auto_00_816A();
   SmwRunOneFrameOfGame_Internal();
 }
