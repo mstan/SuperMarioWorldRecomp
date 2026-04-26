@@ -49,7 +49,24 @@ void SmwRunOneFrameOfGame(void) {
     I_RESET();
     g_did_reset = true;
   }
-  SmwRunOneFrameOfGame_Internal();
+  // NMI handler runs BEFORE the main-loop game code each frame.
+  //
+  // On real hardware NMI fires at vblank start (between frames).
+  // Its handler polls HW_JOY ($4218/$4219) into the $15-$18 mirror;
+  // the next frame's game logic reads that mirror. Demo inputs are
+  // applied INSIDE the main loop by overwriting $15/$16; if NMI's
+  // poll runs LAST it clobbers the demo bytes with the empty
+  // controller state ($00) and the end-of-frame mirror reads as 0.
+  //
+  // Per snes9x oracle trace at GM=07: emu's per-frame writer order
+  // is poll($86B2/$86C1) → DamagePlayer($F62F/$F631) → GameMode07
+  // demo-override($9C93/$9C9C); demo bytes are LAST and stick. With
+  // recomp's prior `Internal(); auto_00_816A()` order, PollJoypad
+  // ran last instead, leaving $15/$16=$00. End-of-frame snapshot
+  // diverges from oracle, and demo timing skews because the
+  // VariousPromptTimer / TitleInputIndex tick keys off observable
+  // input state.
   auto_00_816A();
+  SmwRunOneFrameOfGame_Internal();
 }
 
