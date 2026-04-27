@@ -42,3 +42,6 @@ memory/
 # Python caches
 __pycache__/
 *.pyc
+
+# Local-only config overrides (per-developer, applied after smw.ini)
+smw.local.ini

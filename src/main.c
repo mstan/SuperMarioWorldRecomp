@@ -527,6 +527,16 @@ int main(int argc, char** argv) {
     argc -= 2, argv += 2;
   }
   ParseConfigFile(config_file);
+  // Apply local overrides if present (gitignored). Lets a developer
+  // mute audio etc. without touching the checked-in smw.ini. Last
+  // parser to set a key wins, so local overrides take precedence.
+  {
+    FILE *f_local = fopen("smw.local.ini", "rb");
+    if (f_local) {
+      fclose(f_local);
+      ParseConfigFile("smw.local.ini");
+    }
+  }
 
   // Initialize debug server
   {
