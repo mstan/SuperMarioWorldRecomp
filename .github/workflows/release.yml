@@ -51,10 +51,19 @@ jobs:
       - name: Set up MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: Restore NuGet packages
+      - name: Extract vendored NuGet packages
         shell: pwsh
+        # The packages/ dir tracks the .nupkg archives but NOT their
+        # extracted contents. Plain `nuget restore` sees the .nupkg and
+        # short-circuits ("already installed"), so the .targets file the
+        # vcxproj imports never lands. Unzip each .nupkg in-place to
+        # produce the build/native/, lib/, etc. layout the vcxproj
+        # expects. Idempotent — local devs won't notice.
         run: |
-          nuget restore smw.sln
+          Get-ChildItem packages -Filter "*.nupkg" -Recurse | ForEach-Object {
+            Write-Host "Extracting $($_.FullName)"
+            Expand-Archive -LiteralPath $_.FullName -DestinationPath $_.Directory -Force
+          }
 
       - name: Build (Release|x64)
         shell: pwsh
