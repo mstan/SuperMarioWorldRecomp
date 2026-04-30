@@ -54,3 +54,7 @@ smw.local.ini
 # v2 pipeline regen output (Phase 6+) — generated locally per-developer
 src/gen_v2/
 recomp/funcs_v2.h
+
+# Triage scratch
+_triage/
+hw_trace.log

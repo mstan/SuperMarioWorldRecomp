@@ -2,6 +2,7 @@
 #include "variables.h"
 #include "common_cpu_infra.h"
 #include "snes/snes.h"
+#include "cpu_state.h"
 #include "funcs.h"
 #include "debug_server.h"
 
@@ -31,7 +32,7 @@ void SmwDrawPpuFrame(void) {
       // and clears the flag; assert it here so the handler takes the
       // timer-IRQ path instead of exiting immediately.
       g_snes->inIrq = true;
-      I_IRQ();
+      I_IRQ(&g_cpu);
       trigger = g_snes->vIrqEnabled ? g_snes->vTimer + 1 : -1;
     }
   }
@@ -46,7 +47,8 @@ void SmwRunOneFrameOfGame(void) {
   // gate is independent of WRAM contents.
   static bool g_did_reset = false;
   if (!g_did_reset) {
-    I_RESET();
+    cpu_state_init(&g_cpu, g_ram);
+    I_RESET(&g_cpu);
     g_did_reset = true;
   }
   // NMI handler runs BEFORE the main-loop game code each frame.
@@ -70,7 +72,7 @@ void SmwRunOneFrameOfGame(void) {
   // (RDNMI) returns bit 7 = 1, matching real hardware. snes_readReg
   // clears the latch on read.
   g_snes->inNmi = true;
-  auto_00_816A();
+  I_NMI(&g_cpu);
   SmwRunOneFrameOfGame_Internal();
 }
 

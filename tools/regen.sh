@@ -20,6 +20,9 @@
 #                           dir and assert byte-identical output. Catches
 #                           generator nondeterminism. Slower (full regen
 #                           runs twice).
+#   --v2                    run the v2 pipeline (gen_v2/ + funcs_v2.h)
+#                           instead of the v1 pipeline. Skips the v1
+#                           recomp_func_registry step (v2 doesn't need it).
 #   -h | --help             this message.
 #
 # Run from the repo root (or anywhere — paths are resolved relative
@@ -32,6 +35,7 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 RUN_FUZZ=0
 RUN_TESTS=1
 STRICT_IDEMPOTENT=0
+USE_V2=0
 
 for arg in "$@"; do
   case "$arg" in
@@ -39,6 +43,7 @@ for arg in "$@"; do
     --full)             RUN_FUZZ=1 ;;
     --no-tests)         RUN_TESTS=0 ;;
     --strict-idempotent) STRICT_IDEMPOTENT=1 ;;
+    --v2)               USE_V2=1 ;;
     -h|--help)
       sed -n '2,/^set -euo/p' "$0" | sed -n '/^# /p' | sed 's/^# //'
       exit 0
@@ -72,15 +77,25 @@ regen_all_banks() {
   done
 }
 
-step "Regenerating 9 banks"
-regen_all_banks src/gen
-echo "  ok"
+if [ "$USE_V2" -eq 1 ]; then
+  step "Regenerating 9 banks (v2 pipeline)"
+  python snesrecomp/tools/v2_regen.py --rom "$ROM" \
+      --cfg-dir recomp --out-dir src/gen_v2
 
-step "Syncing funcs.h"
-python "$SYNC_FUNCS"
+  step "Syncing funcs_v2.h"
+  python snesrecomp/tools/v2_sync_funcs_h.py --cfg-dir recomp \
+      --out recomp/funcs_v2.h
+else
+  step "Regenerating 9 banks"
+  regen_all_banks src/gen
+  echo "  ok"
 
-step "Regenerating recomp_func_registry.c"
-python "$GEN_REGISTRY"
+  step "Syncing funcs.h"
+  python "$SYNC_FUNCS"
+
+  step "Regenerating recomp_func_registry.c"
+  python "$GEN_REGISTRY"
+fi
 
 if [ "$STRICT_IDEMPOTENT" -eq 1 ]; then
   step "Idempotency check: regen into temp dir + byte-diff"

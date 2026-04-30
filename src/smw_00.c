@@ -1,4 +1,5 @@
 #include "consts.h"
+#include "cpu_state.h"
 #include "funcs.h"
 #include "smw_rtl.h"
 #include "variables.h"
@@ -15,7 +16,7 @@ const uint8 kSlopeDataTables_ShapeOfSlope[512] = { 0xf, 0xf, 0xf, 0xf, 0xe, 0xe,
 void SmwRunOneFrameOfGame_Internal() {
   assert(waiting_for_vblank != 0);
   ++counter_global_frames;
-  InitAndMainLoop_ProcessGameMode(0);  /* j: entry point, no Y input */
+  InitAndMainLoop_ProcessGameMode(&g_cpu);
   waiting_for_vblank = 0;
 }
 
