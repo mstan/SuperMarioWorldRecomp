@@ -10,3 +10,9 @@
 // are referenced by recompiled code via funcs.h.
 void ResetSpritesFunc(int wh);
 void SmwRunOneFrameOfGame_Internal(void);
+
+// Watchdog hook called at every block label (per-block heartbeat).
+// Implemented in snesrecomp/runner/src/common_cpu_infra.c; trips a
+// 5s frame-timeout via longjmp(g_watchdog_jmp) so tight infinite
+// loops don't freeze the runtime indefinitely.
+void WatchdogCheck(void);
