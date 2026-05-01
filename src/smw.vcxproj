@@ -170,7 +170,7 @@
     <ClCompile>
       <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)src;$(SolutionDir)snesrecomp\runner\src;$(SolutionDir)snesrecomp\runner\src\snes;$(SolutionDir)recomp;$(SolutionDir)snesrecomp\runner\snes9x-core;$(SolutionDir)snesrecomp\runner\snes9x-core\libretro;$(SolutionDir)snesrecomp\runner\snes9x-core\apu\bapu;$(SolutionDir)snesrecomp\runner\snes9x-core\libretro\libretro-common\include</AdditionalIncludeDirectories>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>SMW_DISABLE_LM=1;_CRT_SECURE_NO_WARNINGS;ENABLE_ORACLE_BACKEND=1;ENABLE_SNES9X_ORACLE=1;__WIN32__;__LIBRETRO__</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SMW_DISABLE_LM=1;SNESRECOMP_TRACE=1;_CRT_SECURE_NO_WARNINGS;ENABLE_ORACLE_BACKEND=1;ENABLE_SNES9X_ORACLE=1;__WIN32__;__LIBRETRO__</PreprocessorDefinitions>
       <DisableSpecificWarnings>4996</DisableSpecificWarnings>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
       <LanguageStandard>stdcpp17</LanguageStandard>
