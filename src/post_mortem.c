@@ -243,12 +243,12 @@ static void dump_trace_recent_json(FILE *f, int n_max) {
     uint64_t widx = g_cpu_trace_idx;
     int n = n_max;
     if ((uint64_t)n > widx) n = (int)widx;
-    if (n > CPU_TRACE_RING_LEN) n = CPU_TRACE_RING_LEN;
+    if ((uint64_t)n > g_cpu_trace_capacity) n = (int)g_cpu_trace_capacity;
     fprintf(f, "  \"trace_recent\": {\"write_idx\": %llu, \"events\": [",
             (unsigned long long)widx);
     for (int i = 0; i < n; i++) {
         uint64_t off = widx - n + i;
-        const CpuTraceEvent *e = &g_cpu_trace_ring[off % CPU_TRACE_RING_LEN];
+        const CpuTraceEvent *e = &g_cpu_trace_ring[off % g_cpu_trace_capacity];
         fprintf(f,
             "%s{\"i\":%llu,\"type\":\"%s\",\"pc24\":%u,"
             "\"A\":%u,\"X\":%u,\"Y\":%u,\"S\":%u,\"D\":%u,"

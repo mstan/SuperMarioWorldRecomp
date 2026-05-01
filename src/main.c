@@ -527,6 +527,11 @@ int main(int argc, char** argv) {
    * - Off-rails dumps (rate-limited) from RomPtr/cart_readLorom soft fails
    * Each tripwire dumps the trace BACKWARDS so we see the chain that
    * birthed the bad state, not just where it died. */
+  /* Heap-allocate the cpu trace ring before any tripwire arms. The
+   * default 64M entries cover ~64K frames at typical block rates,
+   * which means the ring no longer rolls over within any realistic
+   * investigation window. Override via SNESRECOMP_CPU_TRACE_RING_ENTRIES. */
+  cpu_trace_init();
   cpu_trace_arm_default_watches();
   setvbuf(stdout, NULL, _IONBF, 0);
   setvbuf(stderr, NULL, _IONBF, 0);
