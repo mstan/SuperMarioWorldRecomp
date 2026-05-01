@@ -3,12 +3,14 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = 4607b04cff51999585ba0993cb53846bb6a37392
-# Branch: main. SSA Step 4 commit (latest phi-prealloc heuristic config
-# that produces a buildable smw.exe — SSA stays disabled at runtime,
-# ssa_mode default False) with the launcher / keybinds / crc32 infra
-# layered on top. The pre-release-fallback main HEAD is preserved at
-# tag archive/old-main-pre-release-fallback if it ever needs to be
-# reconstructed. _triage/sig_drift_audit.py still tracks the latent
-# cfg/recompiler arity drift; bumping the pin to a future cleaned-up
-# main is gated on closing those out.
+sha = 193c2666321c5e278eced6faa86d43714fe39fb7
+# Branch: main. Bumped 2026-05-01 from 4607b04 to bring in the
+# arch/correctness-pipeline merge: XBA stale-shadow class fix
+# (cpu->B field deleted, typed register helpers cpu_read/write_*),
+# heap-allocated always-on rings (cpu_trace + recomp/oracle insn),
+# v2 multi-instruction stale-state fuzz, lint pass for unexpected
+# cpu->FIELD references, and the v1 recompiler trim. v2 is now the
+# sole codegen path; the v1 modules + tests + fuzz are deleted.
+# Visible bug fixed: SMW attract-demo Layer-3 / HUD scramble.
+# See snesrecomp commits 6c04c94..193c266 and parent
+# docs/TROUBLESHOOTING.md for the investigation walkthrough.
