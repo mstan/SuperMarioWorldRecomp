@@ -285,8 +285,6 @@ static int GetIniSection(const char *s) {
     return 4;
   if (StringEqualsNoCase(s, "[GamepadMap]"))
     return 5;
-  if (StringEqualsNoCase(s, "[Debug]"))
-    return 6;
   return -1;
 }
 
@@ -375,25 +373,6 @@ static bool HandleIniConfig(int section, const char *key, char *value) {
       return ParseBool(value, &g_config.disable_frame_delay);
     }
   } else if (section == 4) {
-  } else if (section == 6) {
-    // [Debug] CanaryMode = off | frame
-    if (StringEqualsNoCase(key, "CanaryMode")) {
-      if (StringEqualsNoCase(value, "off"))        g_config.canary_mode = 0;
-      else if (StringEqualsNoCase(value, "frame")) g_config.canary_mode = 1;
-      else {
-        fprintf(stderr, "Unknown CanaryMode '%s' (expected off|frame)\n", value);
-        return false;
-      }
-      return true;
-    }
-    // [Debug] CanaryConverge = 0|1 — opt-in resync after each diverging
-    // region. Can also be turned on via --converge-on-diff CLI flag.
-    if (StringEqualsNoCase(key, "CanaryConverge")) {
-      bool b = false;
-      if (!ParseBool(value, &b)) return false;
-      g_config.canary_converge_on_diff = b ? 1 : 0;
-      return true;
-    }
   }
   return false;
 }

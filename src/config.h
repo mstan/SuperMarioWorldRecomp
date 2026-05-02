@@ -53,21 +53,6 @@ typedef struct Config {
   bool display_perf_title;
   bool disable_frame_delay;
 
-  // [Debug] CanaryMode in smw.ini. 0 = off, 1 = frame.
-  // Default 1 in Oracle build (canary auto-records every frame),
-  // 0 in Release. See canary.h. Setting only takes effect in Oracle —
-  // non-Oracle builds compile out the canary entirely.
-  uint8 canary_mode;
-
-  // [Debug] CanaryConverge in smw.ini OR --converge-on-diff CLI flag.
-  // When non-zero, on every per-frame WRAM divergence the canary
-  // records the event AND copies oracle bytes into recomp's g_ram[]
-  // for the diverging region. Forces frame-by-frame WRAM resync so
-  // cascading post-divergence noise is suppressed; the event log
-  // surfaces every "fresh" seed site. Caveat: register state isn't
-  // snapped, so recomp may diverge again the same frame.
-  uint8 canary_converge_on_diff;
-
   char *memory_buffer;
   const char *shader;
 
