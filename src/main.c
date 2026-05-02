@@ -576,6 +576,16 @@ int main(int argc, char** argv) {
     cli_converge_on_diff = 1;
     argc -= 1, argv += 1;
   }
+  // --lockstep: full-state lockstep (Option 3 day-1). Implies
+  // --converge-on-diff. Every frame, canary copies oracle's full
+  // state (WRAM + CPU regs + flat PPU surfaces + APU ports) into
+  // recomp so each frame starts from a known-good oracle baseline
+  // and divergence events represent strictly per-frame gen-code bugs.
+  int cli_lockstep = 0;
+  if (argc >= 1 && strcmp(argv[0], "--lockstep") == 0) {
+    cli_lockstep = 1;
+    argc -= 1, argv += 1;
+  }
   ParseConfigFile(config_file);
   // Apply local overrides if present (gitignored). Lets a developer
   // mute audio etc. without touching the checked-in smw.ini. Last
@@ -736,8 +746,25 @@ error_reading:;
     canary_set_mode(mode);
     int converge = cli_converge_on_diff || g_config.canary_converge_on_diff;
     canary_set_converge_on_diff(converge);
-    fprintf(stderr, "[canary] mode=%d converge_on_diff=%d\n",
-            (int)mode, converge);
+    int lockstep = cli_lockstep || g_config.canary_lockstep;
+    canary_set_lockstep(lockstep);
+    fprintf(stderr, "[canary] mode=%d converge_on_diff=%d lockstep=%d\n",
+            (int)mode, canary_get_converge_on_diff(),
+            canary_get_lockstep());
+  }
+  // Disable the snes9x always-on per-instruction trace BEFORE frames
+  // start running. The hook fires on every emulated CPU instruction
+  // (~280 M/sec at 80 retro_runs × 3.5 MHz during NMI-disabled boot
+  // stages), making Oracle's I_RESET too slow to complete inside
+  // any reasonable watchdog window. Lockstep + canary don't need
+  // this trace — they consume WRAM/CPU/PPU snapshots, not insn
+  // streams. Probes that DO need it can re-enable via the TCP
+  // command `emu_insn_trace_on`.
+  {
+    extern void snes9x_bridge_insn_trace_off(void);
+    snes9x_bridge_insn_trace_off();
+    fprintf(stderr, "[main] snes9x insn-trace disabled at boot "
+                    "(re-enable via TCP emu_insn_trace_on if needed)\n");
   }
 #endif
 

@@ -394,6 +394,14 @@ static bool HandleIniConfig(int section, const char *key, char *value) {
       g_config.canary_converge_on_diff = b ? 1 : 0;
       return true;
     }
+    // [Debug] CanaryLockstep = 0|1 — full-state lockstep (Option 3).
+    // Can also be turned on via --lockstep CLI flag.
+    if (StringEqualsNoCase(key, "CanaryLockstep")) {
+      bool b = false;
+      if (!ParseBool(value, &b)) return false;
+      g_config.canary_lockstep = b ? 1 : 0;
+      return true;
+    }
   }
   return false;
 }

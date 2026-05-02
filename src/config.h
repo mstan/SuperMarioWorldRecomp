@@ -68,6 +68,17 @@ typedef struct Config {
   // snapped, so recomp may diverge again the same frame.
   uint8 canary_converge_on_diff;
 
+  // [Debug] CanaryLockstep in smw.ini OR --lockstep CLI flag. Implies
+  // CanaryConverge. After every frame, the canary copies oracle's
+  // FULL state (WRAM + CPU regs + VRAM + CGRAM + OAM + APU ports)
+  // into recomp so each frame starts from a known-good oracle state.
+  // The divergence event log then captures only "what bug did
+  // recomp's gen code introduce in JUST this frame" — eliminates
+  // cascading state drift entirely. PPU control regs, DMA, MMIO
+  // shadow are NOT applied (just-written; recomp's gen code re-emits
+  // them every frame). Oracle build only.
+  uint8 canary_lockstep;
+
   char *memory_buffer;
   const char *shader;
 
