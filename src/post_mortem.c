@@ -253,7 +253,9 @@ static void dump_trace_recent_json(FILE *f, int n_max) {
             "%s{\"i\":%llu,\"type\":\"%s\",\"pc24\":%u,"
             "\"A\":%u,\"X\":%u,\"Y\":%u,\"S\":%u,\"D\":%u,"
             "\"DB\":%u,\"PB\":%u,\"P\":%u,\"M\":%u,\"XF\":%u,"
-            "\"e0\":%u,\"e1\":%u}",
+            "\"e0\":%u,\"e1\":%u,"
+            "\"bank\":%u,\"addr16\":%u,\"width\":%u,"
+            "\"old_value\":%u,\"new_value\":%u}",
             (i ? "," : ""), (unsigned long long)off,
             trace_event_name(e->event_type),
             (unsigned)e->pc24,
@@ -261,7 +263,9 @@ static void dump_trace_recent_json(FILE *f, int n_max) {
             (unsigned)e->S, (unsigned)e->D,
             (unsigned)e->DB, (unsigned)e->PB, (unsigned)e->P,
             (unsigned)e->M, (unsigned)e->XF,
-            (unsigned)e->extra0, (unsigned)e->extra1);
+            (unsigned)e->extra0, (unsigned)e->extra1,
+            (unsigned)e->bank, (unsigned)e->addr16, (unsigned)e->width,
+            (unsigned)e->old_value, (unsigned)e->new_value);
     }
     fprintf(f, "]},\n");
 #else
