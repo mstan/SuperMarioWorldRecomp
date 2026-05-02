@@ -3,14 +3,26 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = 193c2666321c5e278eced6faa86d43714fe39fb7
-# Branch: main. Bumped 2026-05-01 from 4607b04 to bring in the
-# arch/correctness-pipeline merge: XBA stale-shadow class fix
-# (cpu->B field deleted, typed register helpers cpu_read/write_*),
-# heap-allocated always-on rings (cpu_trace + recomp/oracle insn),
-# v2 multi-instruction stale-state fuzz, lint pass for unexpected
-# cpu->FIELD references, and the v1 recompiler trim. v2 is now the
-# sole codegen path; the v1 modules + tests + fuzz are deleted.
-# Visible bug fixed: SMW attract-demo Layer-3 / HUD scramble.
-# See snesrecomp commits 6c04c94..193c266 and parent
-# docs/TROUBLESHOOTING.md for the investigation walkthrough.
+sha = e163931051efd03b18ceb733b4018446c44228ee
+# Branch: fix/v1-trim-regression (CHECKPOINT — DB corruption remains,
+# do not merge to main). Bumped 2026-05-02 from 193c266 to bring in:
+#   010c30f  B2: encode bank/addr16/width/old_value/new_value on
+#            WRAM_WRITE events (B2 explicit fields)
+#   e163931  cross-fn CFG import — inline-cross-fn-blocks model +
+#            HLE-replacement via cfg `exclude_range`. Decoder's
+#            end: now applies only to fall-through edges; jump
+#            targets past end: get imported into the source
+#            function's CFG so PHB/PLB stay paired within one C
+#            scope. Auto-promote machinery retired for goto
+#            targets (was the bug that stranded stack invariants).
+#            cfg `exclude_range` plumbed through emit_bank →
+#            emit_function so cross-fn jumps into HLE-replaced
+#            data regions (e.g. $00:806B-$8078 asm main loop) emit
+#            `return to host` instead of re-entering asm spinlock.
+# Effect: build advances past frame-0 watchdog, GameMode advances
+# 00 -> 01 -> ... -> 07 -> 14, demo briefly plays. Remaining
+# failure: cpu->DB = $C0 at every ProcessGameMode entry corrupts
+# the dispatcher into reading ROM not WRAM. 131 generated functions
+# have unbalanced cpu->S push/pop counts — the next layer.
+# See parent project_inline_cross_fn_blocks_partial_2026_05_02.md
+# for next-session plan (dynamic stack/DB boundary auditor).
