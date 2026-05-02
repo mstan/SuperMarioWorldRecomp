@@ -32,6 +32,7 @@
 
 #include "launcher.h"
 #include "keybinds.h"
+#include "canary.h"
 
 typedef struct GamepadInfo {
   uint32 modifiers;
@@ -564,6 +565,17 @@ int main(int argc, char** argv) {
     framedump_dir = argv[1];
     argc -= 2, argv += 2;
   }
+  // --converge-on-diff: opt-in canary auto-resync. Forces oracle WRAM
+  // bytes into recomp's g_ram[] for every diverging region every frame.
+  // Suppresses cascading downstream noise so the divergence event log
+  // surfaces every "fresh" seed site. Oracle build only — no-op in
+  // Release. Has the same effect as setting [Debug] CanaryConverge=1
+  // in smw.ini; CLI takes precedence.
+  int cli_converge_on_diff = 0;
+  if (argc >= 1 && strcmp(argv[0], "--converge-on-diff") == 0) {
+    cli_converge_on_diff = 1;
+    argc -= 1, argv += 1;
+  }
   ParseConfigFile(config_file);
   // Apply local overrides if present (gitignored). Lets a developer
   // mute audio etc. without touching the checked-in smw.ini. Last
@@ -712,6 +724,20 @@ error_reading:;
       fprintf(stderr, "[oracle] init failed rc=%d (rom=%s)\n", rc, rom_path);
     else
       fprintf(stderr, "[oracle] backend ready (rom=%s)\n", rom_path);
+  }
+  // Initialize the global divergence canary. See canary.h. CanaryMode
+  // defaults to "frame" in smw.ini for the Oracle build; CanaryConverge
+  // and --converge-on-diff are independent toggles for the resync
+  // experiment. CLI flag takes precedence over the ini value.
+  {
+    canary_init();
+    CanaryMode mode = g_config.canary_mode ? (CanaryMode)g_config.canary_mode
+                                            : CANARY_MODE_FRAME;
+    canary_set_mode(mode);
+    int converge = cli_converge_on_diff || g_config.canary_converge_on_diff;
+    canary_set_converge_on_diff(converge);
+    fprintf(stderr, "[canary] mode=%d converge_on_diff=%d\n",
+            (int)mode, converge);
   }
 #endif
 
@@ -886,6 +912,14 @@ error_reading:;
       extern void emu_oracle_run_frame(uint16_t j1, uint16_t j2);
       emu_oracle_run_frame((uint16_t)(inputs & 0xFFF),
                            (uint16_t)((inputs >> 12) & 0xFFF));
+    }
+    // Canary: hash both sides, record divergences, optionally resync.
+    // snes_frame_counter was incremented inside RtlRunFrame, so its
+    // current value is the index of the next frame; (counter - 1) is
+    // the frame that just completed.
+    {
+      extern int snes_frame_counter;
+      canary_record_frame((uint32_t)(snes_frame_counter > 0 ? snes_frame_counter - 1 : 0));
     }
 #endif
 

@@ -217,6 +217,9 @@
     <ClCompile Include="..\snesrecomp\runner\src\emu_oracle_cmds.c">
       <ExcludedFromBuild Condition="'$(Configuration)'!='Oracle'">true</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="..\snesrecomp\runner\src\canary.c">
+      <ExcludedFromBuild Condition="'$(Configuration)'!='Oracle'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="..\snesrecomp\runner\src\snes9x_bridge.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)'!='Oracle'">true</ExcludedFromBuild>
       <CompileAs>CompileAsCpp</CompileAs>
