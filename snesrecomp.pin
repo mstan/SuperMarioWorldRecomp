@@ -3,7 +3,17 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = db9f39923f1ebcbdb02235cd675e70d06941ceb5
+sha = 334a7cc11aa02288c8e77c0cbb2c76012406b268
+# Branch: chore/cf-debt-report (audit detour, NOT main).
+# Bumped 2026-05-03 from db9f399 to add tools/diag/cf_debt_report.py
+# — control-flow debt scanner for v2 generated bank code. Reports
+# 174 comment-only emit sites (22 CALL_INDIRECT, 4 INDIRECT_GOTO,
+# 10 UNRESOLVABLE_GOTO, 8 UNRESOLVED_STUB, 73 BRK, 45 COP, 12 STP).
+# Reachability not yet verified — separate runtime probe. Audit
+# triggered by Codex emitter-gap review 2026-05-03.
+#
+# Previous main pointer (db9f399) below for rollback reference:
+sha_prev_main = db9f39923f1ebcbdb02235cd675e70d06941ceb5
 # Branch: main. Bumped 2026-05-03 from 217e5fe to land in-progress
 # investigation tooling for fix/mario-dies-on-slope:
 #   db9f399  v2 stack-op trace + func-watch snapshot + NLR-detector
