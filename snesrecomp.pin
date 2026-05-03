@@ -3,14 +3,17 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = 334a7cc11aa02288c8e77c0cbb2c76012406b268
+sha = 4cf40c56dcae33b2c1d0145f9da7558ac95f611d
 # Branch: chore/cf-debt-report (audit detour, NOT main).
-# Bumped 2026-05-03 from db9f399 to add tools/diag/cf_debt_report.py
-# — control-flow debt scanner for v2 generated bank code. Reports
-# 174 comment-only emit sites (22 CALL_INDIRECT, 4 INDIRECT_GOTO,
-# 10 UNRESOLVABLE_GOTO, 8 UNRESOLVED_STUB, 73 BRK, 45 COP, 12 STP).
-# Reachability not yet verified — separate runtime probe. Audit
-# triggered by Codex emitter-gap review 2026-05-03.
+# Bumped 2026-05-03 from 334a7cc to land Step 1 of CALL_INDIRECT
+# priority fix: tag every JSR (abs,X) emit with exact source PC +
+# table-base operand. cf_debt_report parses the new shape so the
+# 22 CALL_INDIRECT sites collapse to 11 unique (site_pc, table_base)
+# pairs (most are repeats across (m,x) variants of the same
+# function). NO runtime behaviour change yet — emit is still
+# comment-only. Step 2 (decoder + cfg schema + switch synthesis)
+# starts only after the user picks the first reached, high-confidence
+# site to fix end-to-end.
 #
 # Previous main pointer (db9f399) below for rollback reference:
 sha_prev_main = db9f39923f1ebcbdb02235cd675e70d06941ceb5
