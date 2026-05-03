@@ -3,8 +3,25 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = 45170a61ed80908b54be4ad7814ade991848ccb9
+sha = c3ea87e2a5a79f59b1adf2aa9af6b5d313791514
 # Branch: chore/cf-debt-report (audit detour, NOT main).
+# Bumped 2026-05-03 from 45170a6 to land the narrow constant-Z fold
+# in the v2 decoder. The fold rewrites BEQ/BNE -> single live Goto
+# when the same-block predecessor is LDA/LDX/LDY #imm with statically
+# known Z (m-width for LDA, x-width for LDX/LDY). Reachability prune
+# drops dead-edge insns from the graph along with their unresolvable-
+# goto markers, if any. Build report `=== CONSTANT-Z BRANCH FOLDS ===`
+# lists each rewrite for audit. 7 folds across the codebase.
+# cf_debt_report: UNRESOLVABLE_GOTO 7 -> 5. Sites 7 ($0D:B585
+# ExtObj8E_YellowSwitchBlock) and 8 ($0D:B918 RopeObj33_BlueSwitchBlocks)
+# absorbed cleanly — both used the LDX-imm + always-taken-branch idiom
+# whose dead fall-through ran into data-table bytes (referenced as
+# LDA $0DB589,X / LDA $0DB91D,X table bases). Scope is deliberately
+# narrow (no N/V/C, no ALU, no SEP/REP/PLP, single-pred only).
+# Tests 119/122 v2 (10 new constant-Z tests; 3 pre-existing fails
+# unchanged); Release|x64 clean; attract-demo smoke no regressions.
+#
+# Earlier on this branch:
 # Bumped 2026-05-03 from cd4c463 to land UNRESOLVED_STUB priority-3
 # Steps 1+2-A: stub bodies in src/gen_v2/unresolved_stubs_v2.c no
 # longer silently `return RECOMP_RETURN_NORMAL` — each stub now chains
