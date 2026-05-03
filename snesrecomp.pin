@@ -3,24 +3,26 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = bf2c1479f7b7b07abd3b12574b65f97ab01422e3
-# Branch: main. Bumped 2026-05-02 from deb6879 to land the
-# bucket-E "PLA*N RTS = return-to-grandparent" non-local-return
-# fix that closes the original SMW koopa-shell freeze:
-#   bf2c147  merge feat/nlr-return-abi: NLR return-to-grandparent
-#            fix. Three-commit chain (deb6879 ABI scaffolding +
-#            f86a24a Phase 2 NLR detection + ff0e0d3 non-rotating
-#            diag counters + b9e0289 pending_skip-as-function-local
-#            architecture cleanup). v2 ABI now returns RecompReturn;
-#            JSR/JSL callsites propagate SKIP_(N-1); function-local
-#            `_pending_skip` carries the NLR signal across the
-#            blocks of one generated function.
+sha = 217e5fefe3d42bf91691f2d351490c84eca6209a
+# Branch: main. Bumped 2026-05-02 from bf2c147 to land the Yoshi-block
+# dispatcher fix (PHK+PER+JML / PHK+PEA+JML inline-dispatch trampoline):
+#   217e5fe  merge fix/yoshi-block-freeze: dispatcher fix. Two-commit
+#            chain (bb67ce6 stack-drift tripwire infrastructure +
+#            e6cc093 IR-driven codegen change). When a JML carries
+#            dispatch_entries (set by classify_dispatch_helper for
+#            ExecutePtr / ExecutePtrLong), emit_function.py now skips
+#            the immediately-preceding PHK/PEA/PER trampoline-setup
+#            pushes and routes the JML's Goto through _emit_dispatch.
+#            Covers every classifier-detected dispatcher automatically
+#            — no per-site cfg directives needed.
 # Validation:
-#   - v2 unit tests 102/105 (baseline + 4 NLR idiom tests).
-#   - nlr_diag in attract demo: 54 NLR site executions, all
-#     consumed (1:1 write/consume).
-#   - DB→$C0 tripwire does NOT fire — original bug class closed.
-#   - User visually confirmed Mario plays past frame-380 freeze
-#     and reaches the Yoshi block.
-# Yoshi-block freeze is a SEPARATE downstream bug — see
-# fix/yoshi-block-freeze in this parent repo.
+#   - v2 unit tests 105/108 (baseline + 3 new dispatcher tests; 3
+#     pre-existing fails unchanged).
+#   - stack-drift tripwire at GenerateTile_Dispatch_M0X0: GONE.
+#   - DB→$C0 tripwire still silent.
+#   - nlr_diag still 1:1 (54 writes / 54 consumes).
+#   - User visually confirmed Mario clears koopa-shell scene, hits
+#     the ?-block, gets on Yoshi, runs deep into the attract demo.
+# A new -1 stack-drift trip surfaced at frame 822 in
+# RunPlayerBlockCode_M1X1 — separate bug class, NOT a dispatcher
+# pattern. Investigate next session.
