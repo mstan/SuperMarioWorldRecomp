@@ -3,27 +3,24 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = deb6879f2fccc4ba0a27ad0b3ffc7d1d5be4cedc
-# Branch: fix/v1-trim-regression (CHECKPOINT — DB corruption remains,
-# do not merge to main). Bumped 2026-05-02 from e163931 to bring in:
-#   7baf4a0  observability: dynamic per-fn boundary auditor +
-#            DB→<value> tripwire. New always-on heap-alloc'd ring
-#            of BoundaryEvent (default 1M slots; tunable via
-#            SNESRECOMP_BOUNDARY_RING_ENTRIES) hooked into
-#            RecompStackPush/Pop so every recompiled function gets
-#            entry/exit coverage with full state. DB tripwire
-#            auto-arms target=$C0 at boot, captures last 256
-#            boundary events + last 64 dbpb events on first DB
-#            transition to $C0, FREEZES the boundary ring on fire
-#            so seq=0..trip window stays queryable. New TCP cmds
-#            boundary_get / db_trip_arm / db_trip_get / db_trip_disarm.
-# Result on the still-open attract-demo bug: the auditor pinpointed
-# the FIRST runtime stack imbalance at frame 380 in
-# GetDrawInfo_Bank01_Recomp_M1X1 (+2 stack delta), a "PLA*N RTS =
-# return-to-grandparent" non-local-return idiom that v2 codegen
-# doesn't yet model — bucket E from the user-supplied playbook.
-# Mario runs through the demo and freezes while carrying a koopa
-# shell just before the ?-block-with-Yoshi appears (visual
-# symptom matches the dynamic auditor's call-chain pinpoint).
-# The fix (RecompReturn ABI) is intentionally NOT in this commit;
-# see project_first_db_corruption_root_2026_05_02 in memory.
+sha = bf2c1479f7b7b07abd3b12574b65f97ab01422e3
+# Branch: main. Bumped 2026-05-02 from deb6879 to land the
+# bucket-E "PLA*N RTS = return-to-grandparent" non-local-return
+# fix that closes the original SMW koopa-shell freeze:
+#   bf2c147  merge feat/nlr-return-abi: NLR return-to-grandparent
+#            fix. Three-commit chain (deb6879 ABI scaffolding +
+#            f86a24a Phase 2 NLR detection + ff0e0d3 non-rotating
+#            diag counters + b9e0289 pending_skip-as-function-local
+#            architecture cleanup). v2 ABI now returns RecompReturn;
+#            JSR/JSL callsites propagate SKIP_(N-1); function-local
+#            `_pending_skip` carries the NLR signal across the
+#            blocks of one generated function.
+# Validation:
+#   - v2 unit tests 102/105 (baseline + 4 NLR idiom tests).
+#   - nlr_diag in attract demo: 54 NLR site executions, all
+#     consumed (1:1 write/consume).
+#   - DB→$C0 tripwire does NOT fire — original bug class closed.
+#   - User visually confirmed Mario plays past frame-380 freeze
+#     and reaches the Yoshi block.
+# Yoshi-block freeze is a SEPARATE downstream bug — see
+# fix/yoshi-block-freeze in this parent repo.
