@@ -3,8 +3,25 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = f4c764d22b32c3f9ec1f943f1c4d267808b6d845
+sha = 27c4aeeed036a6117df2f98e9224de14440d18c3
 # Branch: chore/cf-debt-report (audit detour, NOT main).
+# Bumped 2026-05-03 from f4c764d to land dispatch-table validity gate
+# in the v2 decoder. `_dispatch_target_is_padding(rom, bank, pc16)`
+# rejects entries whose target's first 16 bytes are uniform $FF or
+# $00 — the auto-detected dispatch reader truncates the table at
+# that index. Encodes a real ROM fact: padding bytes can't be the
+# start of any real handler.
+# cf_debt_report: UNRESOLVABLE_GOTO 3 -> 2. Site 4 (bank_03_FE00
+# phantom from Spr06F_DinoTorch2 case 4) gone.
+# Tests 124/127 v2 (5 new dispatch-padding-gate tests; 3 pre-existing
+# fails unchanged); Release clean; attract smoke at frame 6086 had 0
+# unresolved-goto fires, 0 unresolved-stub fires; user confirmed no
+# visual regressions.
+# Sites 2 (RunPlayerBlockCode_M0X1, M=0 propagation chain) and 5
+# (auto_059C60 mixed-byte table overread) remain — different fix
+# classes from the padding gate.
+#
+# Earlier on this branch:
 # Bumped 2026-05-03 from c3ea87e to land cfg `tail_call:<addr>`
 # directive in the v2 emit pipeline. Encodes the real ROM idiom of a
 # routine with its own callable entry that deliberately falls through
