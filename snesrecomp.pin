@@ -3,8 +3,23 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = cd4c463c4df1393887f508bfcb14931d4875565f
+sha = 45170a61ed80908b54be4ad7814ade991848ccb9
 # Branch: chore/cf-debt-report (audit detour, NOT main).
+# Bumped 2026-05-03 from cd4c463 to land UNRESOLVED_STUB priority-3
+# Steps 1+2-A: stub bodies in src/gen_v2/unresolved_stubs_v2.c no
+# longer silently `return RECOMP_RETURN_NORMAL` — each stub now chains
+# into cpu_trace_unresolved_stub_trap(cpu, target_pc24, name) so any
+# runtime fire is captured (loud stderr + TCP unresolved_stub_get
+# JSON) instead of vanishing. Mirrors the unresolvable-cross-fn-goto
+# trap from cd4c463.
+# Empirical reachability: all 8 stub call sites live inside
+# bank_04_8AA5_M1X1, which is itself a phantom decoded from the
+# graphic tile data table DATA_0489DE ($04:89DE-$8B5D). Sole caller is
+# DrawOverworldPlayer_DrawHalo_M1X1 (overworld code, unreached on
+# attract). Frame-6018 attract smoke: 0 unresolved-stub fires, 0
+# unresolved-goto fires; no visible regression.
+# Tests 109/112 v2 (3 pre-existing fails unchanged); Release clean.
+# Earlier on this branch:
 # Bumped 2026-05-03 from 14da73e to land Steps 1-B + 2-A of the
 # CALL_INDIRECT priority fix:
 #   407a511  runner phantom-PC trap (Step 1-B): always-armed runtime
