@@ -3,17 +3,25 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = 4cf40c56dcae33b2c1d0145f9da7558ac95f611d
+sha = 14da73ea591629d9c2eeff1128ae64d26650715f
 # Branch: chore/cf-debt-report (audit detour, NOT main).
-# Bumped 2026-05-03 from 334a7cc to land Step 1 of CALL_INDIRECT
-# priority fix: tag every JSR (abs,X) emit with exact source PC +
-# table-base operand. cf_debt_report parses the new shape so the
-# 22 CALL_INDIRECT sites collapse to 11 unique (site_pc, table_base)
-# pairs (most are repeats across (m,x) variants of the same
-# function). NO runtime behaviour change yet — emit is still
-# comment-only. Step 2 (decoder + cfg schema + switch synthesis)
-# starts only after the user picks the first reached, high-confidence
-# site to fix end-to-end.
+# Bumped 2026-05-03 from 4cf40c5 to land --with-asm + --with-bounds +
+# SMC-phantom detection in cf_debt_report. Decoded asm context for
+# every unique CALL_INDIRECT site via v2's decode_function (proper
+# control-flow + REP/SEP propagation), bounds-pattern detection, and
+# table-entry dump.
+#
+# KEY FINDING: 9 of 11 unique CALL_INDIRECT sites are decoder
+# PHANTOMS — bytes that decode as JSR (abs,X) under M=0 but real
+# M=1 execution consumes them as the operand of a `STA $1DFC` (or
+# similar) instruction. The "JSR" never executes. The remaining
+# 2 sites target RAM and likely also phantoms via a different
+# byte alignment.
+#
+# The holistic CALL_INDIRECT fix is NOT "add JSR (abs,X) dispatch
+# emitter". It's "stop the decoder from following spurious M=0 paths
+# into SMC byte sequences." That's a different (decoder-level) fix.
+# Awaiting user decision on next direction before any code change.
 #
 # Previous main pointer (db9f399) below for rollback reference:
 sha_prev_main = db9f39923f1ebcbdb02235cd675e70d06941ceb5
