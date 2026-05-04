@@ -3,8 +3,40 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = 3356e36153455864ed359a593d78f37ab3ffd09e
-# Branch: chore/cf-debt-report (audit detour, NOT main).
+sha = 96924ee40cc0c27337fccf8f1aac784621586cc0
+# Branch: chore/cf-debt-report -> main (slope-fix + audit detour).
+# Bumped 2026-05-03 from 3356e36 to land Mario-dies-on-slope root-cause fix:
+#   1308d8d  v2: callee-exit-(m,x) propagation across JSR/JSL.
+#            Decoder previously assumed callees preserve (m, x).
+#            Wrong for callees that internally SEP/REP without
+#            restoring before RTS (e.g. SMW $00:F465 starts with
+#            SEP #$20, never resets). Caller in m=0 mis-decoded
+#            operand widths after JSR $F461; BCC operand consumed
+#            as opcode; execution branched into phantom L_ED34_M0X1
+#            whose byte $02 decoded as COP and emitted unbalanced
+#            PHP — dropped 1 stack byte at frame 822 of attract
+#            demo, corrupted return chain through
+#            HandlePlayerLevelCollision, Mario "died on slope". Fix:
+#            opt-in cfg `exit_mx_at <addr> <m> <x>` directive
+#            records callee exit (m, x); decoder uses it for JSR/JSL
+#            fall-through key. Companion parent commit annotates
+#            $00:F461 / $00:F465 with exit_mx_at = 1,1.
+#   96924ee  runner: GM14 player-trace ring (recomp + oracle) +
+#            stack-op trace default-on + cpu_trace freeze-on-trip.
+#            Observability tooling used to find the root cause.
+#            Always-on per-tick GM14 player-state ring captures
+#            inputs / player / Yoshi / camera / sprite-9 fields on
+#            both sides; tick_ordinal pairs them for diff. Stack-op
+#            trace was uselessly empty by default; now on. cpu_trace
+#            ring freezes on stack-drift trip alongside the boundary
+#            ring so trip-window events survive subsequent activity.
+# Tests 134/137 v2 (5 new callee-exit-mx tests; 3 pre-existing fails
+# unchanged); Oracle|x64 clean. Attract smoke advanced past frame
+# 2000+ with stack_drift NOT triggered (was firing at frame 822
+# pre-fix). User confirms slope-touch insta-death is gone; some
+# downstream Koopa physics issues remain — separate bugs.
+#
+# Earlier on this branch:
 # Bumped 2026-05-03 from 27c4aee to wire cfg `data_region` through
 # the v2 pipeline (decoder + variant discovery + auto-promote +
 # emit_bank). cfg_loader already parsed it (since v1) but nothing
