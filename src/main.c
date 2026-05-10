@@ -874,7 +874,8 @@ error_reading:;
 
     uint32 inputs = g_input_state | g_gamepad[0].axis_buttons | g_gamepad[1].axis_buttons << 12;
     inputs |= TickScript();
-    RtlRunFrame(inputs | GetActiveControllers());
+    inputs |= debug_server_get_controller_inputs();
+    RtlRunFrame(inputs | GetActiveControllers() | debug_server_get_controller_active_mask());
 
 #ifdef ENABLE_ORACLE_BACKEND
     // Step the oracle emulator with the same input. First-light does
