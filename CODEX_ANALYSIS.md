@@ -45,8 +45,8 @@ Fix:
 
 - Added `func UpdateSpritePos 802A sig:void(uint8_k)` to `recomp/bank01.cfg`.
 - Renamed cross-bank `name 01802a` entries in `recomp/bank02.cfg` and `recomp/bank03.cfg` from `HandleNormalSpriteGravity` to `UpdateSpritePos`.
-- Regenerated ignored V2 output locally with `snesrecomp/tools/v2_regen.py`.
-- Refreshed ignored `recomp/funcs_v2.h` locally with `snesrecomp/tools/v2_sync_funcs_h.py`.
+- Regenerated active output locally with `snesrecomp/tools/v2_regen.py`.
+- Refreshed `recomp/funcs.h` locally with `snesrecomp/tools/v2_sync_funcs_h.py`.
 
 Evidence after the fix:
 

@@ -53,7 +53,7 @@ the suspect surface to this function specifically.
 
 ## Step 2 — DON'T just stare at the generated C
 
-The temptation is to open `src/gen_v2/smw_00_v2.c::UploadLevelTilemapHDMA_M1X1`
+The temptation is to open `src/gen/smw_00_v2.c::UploadLevelTilemapHDMA_M1X1`
 and read it line-by-line against `SMWDisX/bank_00.asm`. The function
 is ~500 lines of v2-emitted C. Reading it doesn't scale, and you won't
 spot a state-tracking bug that depends on a value that flows in from
@@ -133,7 +133,7 @@ TAX             ; X = count
 INX             ; X = count + 1
 ```
 
-Open `src/gen_v2/smw_00_v2.c` at the `UploadLevelTilemapHDMA_M1X1`
+Open `src/gen/smw_00_v2.c` at the `UploadLevelTilemapHDMA_M1X1`
 body and find the XBA expansion:
 
 ```c
@@ -198,7 +198,7 @@ longer depends on its freshness.
 
 ```
 $ python snesrecomp/tools/v2_regen.py --rom smw.sfc \
-    --cfg-dir recomp --out-dir src/gen_v2
+    --cfg-dir recomp --out-dir src/gen
 $ MSBuild smw.sln /p:Configuration=Release /p:Platform=x64 /m /v:minimal
 $ taskkill /F /IM smw.exe; build/bin-x64-Release/smw.exe
 ```

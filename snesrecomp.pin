@@ -113,7 +113,7 @@ sha = 96924ee40cc0c27337fccf8f1aac784621586cc0
 #
 # Earlier on this branch:
 # Bumped 2026-05-03 from cd4c463 to land UNRESOLVED_STUB priority-3
-# Steps 1+2-A: stub bodies in src/gen_v2/unresolved_stubs_v2.c no
+# Steps 1+2-A: stub bodies in src/gen/unresolved_stubs_v2.c no
 # longer silently `return RECOMP_RETURN_NORMAL` — each stub now chains
 # into cpu_trace_unresolved_stub_trap(cpu, target_pc24, name) so any
 # runtime fire is captured (loud stderr + TCP unresolved_stub_get
