@@ -3,8 +3,24 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = c457ea046cc2e8c91ef14c1abf6d0bbdc0797563
-# Branch: main. Bumped 2026-05-11 from 96924ee to land the class fix
+sha = 7203539841300c855d2193fa06181afaea6b31cf
+# Branch: main. Bumped 2026-05-11 from c457ea0 to land second class
+# fix in the post-attract-demo cfg debt cleanup: auto-detect cfg
+# `tail_call:<pc>` directive sites.
+#   7203539  v2: auto-detect tail-call fallthrough cfg sites. Decoder
+#            pre-pass scans every cfg `func` A with `end:<pc>` set;
+#            when <pc> is another cfg `func` B's start AND A's last
+#            decoded instruction's PC+length == <pc> AND that
+#            instruction is non-terminal, synthesises
+#            A.tail_call_pc16 = <pc>. Replaces the opt-in cfg
+#            `tail_call:<pc>` directive at the 2 known sites
+#            (BufferFileSelectText at $00:9D38 -> $00:9D3C and
+#            Spr0BF_MegaMole_038820 at $03:8820 -> $03:883F). No
+#            latents found at this time. Tests 150/153 (+9 new
+#            auto-route tests; 3 pre-existing fails unchanged).
+#
+# Earlier on this branch:
+# Bumped 2026-05-11 from 96924ee to land the class fix
 # for SMW PHB/PHK/PLB/JSR/PLB/RTL wrapper-bypass cfg aliases. Closes
 # the attract-demo's remaining visible bugs (Issue F pokey + Issue G
 # piranha) and 17 additional silent-but-latent miscompiles uncovered
