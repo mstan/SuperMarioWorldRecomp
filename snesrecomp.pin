@@ -3,8 +3,30 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = 96924ee40cc0c27337fccf8f1aac784621586cc0
-# Branch: chore/cf-debt-report -> main (slope-fix + audit detour).
+sha = c457ea046cc2e8c91ef14c1abf6d0bbdc0797563
+# Branch: main. Bumped 2026-05-11 from 96924ee to land the class fix
+# for SMW PHB/PHK/PLB/JSR/PLB/RTL wrapper-bypass cfg aliases. Closes
+# the attract-demo's remaining visible bugs (Issue F pokey + Issue G
+# piranha) and 17 additional silent-but-latent miscompiles uncovered
+# by the same scan.
+#   c457ea0  v2: auto-route SMW PHB/PHK/PLB/JSR/PLB/RTL wrapper-bypass
+#            cfg aliases. Decoder pre-pass scans every bank's ROM for
+#            the 8-byte stub signature `8B 4B AB 20 LO HI AB 6B`; any
+#            cfg `name <wrapper_pc> <fn>` whose declared PC isn't the
+#            wrapper PC is auto-routed to a synthetic
+#            `_AutoWrap_<orig>__<bb>_<pc>` name so cross-bank promotion
+#            emits the wrapper as its own callable. Catches both the
+#            same-name double-alias shape (Issue F-fall pattern,
+#            $01:9138) and the wrong-body alias shape (Issue G pattern,
+#            $01:8042 -> wrong body GenericGFXRtDraw1Tile16x16). 21
+#            wrappers detected and routed across SMW banks $00, $01,
+#            $02, $05, $0C — including the four prior cfg point-fixes
+#            (now reverted) and 17 we hadn't found before. 9/9 banks
+#            regen clean; tests 141/144 (+7 new auto-route tests;
+#            3 pre-existing fails unchanged); Oracle build runs full
+#            attract demo with no regressions per user visual confirm.
+#
+# Earlier on this branch:
 # Bumped 2026-05-03 from 3356e36 to land Mario-dies-on-slope root-cause fix:
 #   1308d8d  v2: callee-exit-(m,x) propagation across JSR/JSL.
 #            Decoder previously assumed callees preserve (m, x).

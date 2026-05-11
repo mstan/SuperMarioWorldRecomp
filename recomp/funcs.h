@@ -15,7 +15,7 @@
 
 #include "cpu_state.h"
 
-/* 1958 functions across all banks (5 decls each). */
+/* 1954 functions across all banks (5 decls each). */
 
 void I_RESET(CpuState *cpu);  /* $00:8000 alias */
 RecompReturn I_RESET_M0X0(CpuState *cpu);
@@ -1762,11 +1762,6 @@ RecompReturn UpdateSpritePos_M0X0(CpuState *cpu);
 RecompReturn UpdateSpritePos_M0X1(CpuState *cpu);
 RecompReturn UpdateSpritePos_M1X0(CpuState *cpu);
 RecompReturn UpdateSpritePos_M1X1(CpuState *cpu);
-void GenericSprGfxRt0(CpuState *cpu);  /* $01:8042 alias */
-RecompReturn GenericSprGfxRt0_M0X0(CpuState *cpu);
-RecompReturn GenericSprGfxRt0_M0X1(CpuState *cpu);
-RecompReturn GenericSprGfxRt0_M1X0(CpuState *cpu);
-RecompReturn GenericSprGfxRt0_M1X1(CpuState *cpu);
 void sub_01804A(CpuState *cpu);  /* $01:804A alias */
 RecompReturn sub_01804A_M0X0(CpuState *cpu);
 RecompReturn sub_01804A_M0X1(CpuState *cpu);
@@ -2317,16 +2312,11 @@ RecompReturn ChangeNormalSpriteDirection_FlipXSpeedAndDirection_M0X0(CpuState *c
 RecompReturn ChangeNormalSpriteDirection_FlipXSpeedAndDirection_M0X1(CpuState *cpu);
 RecompReturn ChangeNormalSpriteDirection_FlipXSpeedAndDirection_M1X0(CpuState *cpu);
 RecompReturn ChangeNormalSpriteDirection_FlipXSpeedAndDirection_M1X1(CpuState *cpu);
-void GenericSprGfxRt2(CpuState *cpu);  /* $01:90B2 alias */
-RecompReturn GenericSprGfxRt2_M0X0(CpuState *cpu);
-RecompReturn GenericSprGfxRt2_M0X1(CpuState *cpu);
-RecompReturn GenericSprGfxRt2_M1X0(CpuState *cpu);
-RecompReturn GenericSprGfxRt2_M1X1(CpuState *cpu);
-void HandleNormalSpriteLevelColl_Wrap(CpuState *cpu);  /* $01:9138 alias */
-RecompReturn HandleNormalSpriteLevelColl_Wrap_M0X0(CpuState *cpu);
-RecompReturn HandleNormalSpriteLevelColl_Wrap_M0X1(CpuState *cpu);
-RecompReturn HandleNormalSpriteLevelColl_Wrap_M1X0(CpuState *cpu);
-RecompReturn HandleNormalSpriteLevelColl_Wrap_M1X1(CpuState *cpu);
+void GenericGFXRtDraw1Tile16x16(CpuState *cpu);  /* $01:90B2 alias */
+RecompReturn GenericGFXRtDraw1Tile16x16_M0X0(CpuState *cpu);
+RecompReturn GenericGFXRtDraw1Tile16x16_M0X1(CpuState *cpu);
+RecompReturn GenericGFXRtDraw1Tile16x16_M1X0(CpuState *cpu);
+RecompReturn GenericGFXRtDraw1Tile16x16_M1X1(CpuState *cpu);
 void HandleNormalSpriteLevelCollision(CpuState *cpu);  /* $01:9140 alias */
 RecompReturn HandleNormalSpriteLevelCollision_M0X0(CpuState *cpu);
 RecompReturn HandleNormalSpriteLevelCollision_M0X1(CpuState *cpu);
@@ -2567,11 +2557,6 @@ RecompReturn GenericGFXRtDraw1Tile16x16_Sub_M0X0(CpuState *cpu);
 RecompReturn GenericGFXRtDraw1Tile16x16_Sub_M0X1(CpuState *cpu);
 RecompReturn GenericGFXRtDraw1Tile16x16_Sub_M1X0(CpuState *cpu);
 RecompReturn GenericGFXRtDraw1Tile16x16_Sub_M1X1(CpuState *cpu);
-void GenericGFXRtDraw1Tile16x16(CpuState *cpu);  /* $01:9F0D alias */
-RecompReturn GenericGFXRtDraw1Tile16x16_M0X0(CpuState *cpu);
-RecompReturn GenericGFXRtDraw1Tile16x16_M0X1(CpuState *cpu);
-RecompReturn GenericGFXRtDraw1Tile16x16_M1X0(CpuState *cpu);
-RecompReturn GenericGFXRtDraw1Tile16x16_M1X1(CpuState *cpu);
 void GenericGFXRtDraw1Tile16x16_019F0F(CpuState *cpu);  /* $01:9F0F alias */
 RecompReturn GenericGFXRtDraw1Tile16x16_019F0F_M0X0(CpuState *cpu);
 RecompReturn GenericGFXRtDraw1Tile16x16_019F0F_M0X1(CpuState *cpu);
@@ -4947,11 +4932,6 @@ RecompReturn Spr070_Pokey_02B7AC_M0X0(CpuState *cpu);
 RecompReturn Spr070_Pokey_02B7AC_M0X1(CpuState *cpu);
 RecompReturn Spr070_Pokey_02B7AC_M1X0(CpuState *cpu);
 RecompReturn Spr070_Pokey_02B7AC_M1X1(CpuState *cpu);
-void Spr070_Pokey_RemovePokeySgmntRt(CpuState *cpu);  /* $02:B7ED alias */
-RecompReturn Spr070_Pokey_RemovePokeySgmntRt_M0X0(CpuState *cpu);
-RecompReturn Spr070_Pokey_RemovePokeySgmntRt_M0X1(CpuState *cpu);
-RecompReturn Spr070_Pokey_RemovePokeySgmntRt_M1X0(CpuState *cpu);
-RecompReturn Spr070_Pokey_RemovePokeySgmntRt_M1X1(CpuState *cpu);
 void Spr070_Pokey_RemovePokeySegment(CpuState *cpu);  /* $02:B81C alias */
 RecompReturn Spr070_Pokey_RemovePokeySegment_M0X0(CpuState *cpu);
 RecompReturn Spr070_Pokey_RemovePokeySegment_M0X1(CpuState *cpu);
