@@ -90,23 +90,33 @@ flow into actual emit code (operand widths, indexed addressing).
 Symptom would manifest as silent data corruption on
 overworld-load codepaths or wherever the async source fires.
 
-### Proposed instrumentation (next investigator)
+### Instrumentation now in place — `mx_async_check` tripwire
 
-Build a runtime tripwire on every write to `cpu->x_flag`:
-- snesrecomp/runner/src/cpu_state.h: replace direct `cpu->x_flag = ...`
-  assignments with a `cpu_set_x_flag(cpu, v)` helper guarded by
-  `cpu->x_flag != v` and a per-write ring entry (PC + caller
-  + previous/new value + frame).
-- Or: add a one-shot tripwire that records the FIRST write to
-  `cpu->x_flag` that occurs outside an emitted SEP/REP/PLP/RTI
-  region (those writes are decoder-modelled by definition; any
-  other writer is the bug).
-- Arm at boot. Free-run. Query the ring at the first verifier
-  trip moment to find the actual async writer's PC.
+Built on 2026-05-16 (session-internal). Auto-arms at boot. See
+`snesrecomp/docs/TRIPWIRES.md` for the framework + commands. Briefly:
+every legitimate cpu->m_flag / cpu->x_flag write calls
+`cpu_trace_px_record` which increments `g_px_mutation_count`. The
+tripwire snapshots `(m_flag, x_flag, g_px_mutation_count)` at every
+`cpu_trace_block` hook; if flags change without the count changing,
+an async writer mutated them between checkpoints. Latches one-shot
+with frame + block PC + recomp call stack.
 
-Suspect: NMI handler's P-restore path, possibly the recomp's
-`I_NMI` emit body or `cpu_p_to_mirrors` interaction with the
-runtime's NMI dispatch glue.
+TCP: `mx_async_check_get` returns the trip snapshot.
+
+**Note (2026-05-16 smoke test):** with the new tripwire armed, the
+DA49 M/X *claim* trip ALSO didn't reproduce at frame 4581 in a free-
+run sweep that reached frame 7209+. Two readings: (a) the bug is
+sensitive to hot-path timing and the extra work in
+`cpu_trace_block` shifted execution enough that the divergent
+codepath isn't reached at the same point; (b) the prior trip was a
+one-shot artifact of that run's specific NMI/oracle synchronization.
+Either way, the tripwire is now armed and will catch the trip — or
+any sibling-class trip — on a future run.
+
+Suspect for the async writer (when it does fire): NMI handler's
+P-restore path, possibly the recomp's `I_NMI` emit body or
+`cpu_p_to_mirrors` interaction with the runtime's NMI dispatch
+glue.
 
 ### Not in scope this session
 
