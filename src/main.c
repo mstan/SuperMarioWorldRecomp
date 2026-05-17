@@ -45,6 +45,7 @@ typedef struct GamepadInfo {
 
 static void SDLCALL AudioCallback(void *userdata, Uint8 *stream, int len);
 static void SwitchDirectory();
+static void EnsureSmwIniNextToExe(const char *exe_path);
 static void RenderNumber(uint8 *dst, size_t pitch, int n, uint8 big);
 static void OpenOneGamepad(int i);
 static uint32 GetActiveControllers(void);
@@ -78,6 +79,11 @@ static SDL_Window *g_window;
 static uint8 g_paused, g_turbo, g_cursor = true;
 static uint8 g_current_window_scale;
 static uint32 g_input_state;
+/* Gamepad-driven SNES controller bits, kept separate from g_input_state
+ * (keyboard) so the per-frame keybinds.ini polling at the top of the
+ * main loop doesn't clear bits the gamepad just set. OR'd into `inputs`
+ * once per frame alongside g_input_state and axis_buttons. */
+static uint32 g_pad_buttons;
 static bool g_display_perf;
 static int g_curr_fps;
 static int g_ppu_render_flags = 0;
@@ -548,6 +554,10 @@ int main(int argc, char** argv) {
     argc -= 2, argv += 2;
   } else {
     SwitchDirectory();
+    /* SwitchDirectory walks up 3 levels for an existing smw.ini. If
+     * none found (typical first-launch from a release directory),
+     * write a default next to the executable and chdir there. */
+    EnsureSmwIniNextToExe(program_path);
   }
   int start_paused = 0;
   if (argc >= 1 && strcmp(argv[0], "--paused") == 0) {
@@ -756,8 +766,24 @@ error_reading:;
     
   RtlReadSram();
 
-  for (int i = 0; i < SDL_NumJoysticks(); i++)
-    OpenOneGamepad(i);
+  {
+    int njs = SDL_NumJoysticks();
+    printf("[Gamepad] SDL reports %d joystick(s) at startup. "
+           "enable_gamepad=[%d,%d]\n",
+           njs, g_config.enable_gamepad[0], g_config.enable_gamepad[1]);
+    for (int i = 0; i < njs; i++) {
+      const char *name = SDL_JoystickNameForIndex(i);
+      int is_gc = SDL_IsGameController(i);
+      printf("[Gamepad]   #%d name=%s is_game_controller=%d\n",
+             i, name ? name : "(null)", is_gc);
+      OpenOneGamepad(i);
+    }
+    if (njs == 0) {
+      printf("[Gamepad] No joysticks detected. "
+             "On Windows, plug controller in BEFORE launching, "
+             "or check that XInput drivers are installed.\n");
+    }
+  }
 
   if (g_config.autosave)
     HandleCommand(kKeys_Load + 0, true);
@@ -872,7 +898,7 @@ error_reading:;
       }
     }
 
-    uint32 inputs = g_input_state | g_gamepad[0].axis_buttons | g_gamepad[1].axis_buttons << 12;
+    uint32 inputs = g_input_state | g_pad_buttons | g_gamepad[0].axis_buttons | g_gamepad[1].axis_buttons << 12;
     inputs |= TickScript();
     inputs |= debug_server_get_controller_inputs();
     RtlRunFrame(inputs | GetActiveControllers() | debug_server_get_controller_active_mask());
@@ -1122,6 +1148,27 @@ static int RemapSdlButton(int button) {
   }
 }
 
+/* Set/clear a SNES controller bit from a gamepad source. Mirrors
+ * HandleCommand's kKeys_Controls / kKeys_ControlsP2 logic but writes
+ * to g_pad_buttons so the per-frame keyboard polling can't clobber
+ * gamepad-set bits. Non-controller commands (system shortcuts bound
+ * via smw.ini [GamepadMap]) fall through to HandleCommand so things
+ * like state save/load on a gamepad button still work. */
+static void SetPadButtonOrFallthrough(uint32 j, bool pressed) {
+  static const uint8 kKbdRemap[] = { 4, 5, 6, 7, 2, 3, 8, 0, 9, 1, 10, 11 };
+  if (j >= kKeys_Controls && j <= kKeys_Controls_Last) {
+    uint32 m = 1u << kKbdRemap[j - kKeys_Controls];
+    g_pad_buttons = pressed ? (g_pad_buttons | m) : (g_pad_buttons & ~m);
+    return;
+  }
+  if (j >= kKeys_ControlsP2 && j <= kKeys_ControlsP2_Last) {
+    uint32 m = 0x1000u << kKbdRemap[j - kKeys_ControlsP2];
+    g_pad_buttons = pressed ? (g_pad_buttons | m) : (g_pad_buttons & ~m);
+    return;
+  }
+  HandleCommand(j, pressed);
+}
+
 static void HandleGamepadInput(GamepadInfo *gi, int button, bool pressed) {
   if (!!(gi->modifiers & (1 << button)) == pressed)
     return;
@@ -1129,7 +1176,7 @@ static void HandleGamepadInput(GamepadInfo *gi, int button, bool pressed) {
   if (pressed)
     gi->last_cmd[button] = FindCmdForGamepadButton(button + gi->index * kGamepadBtn_Count, gi->modifiers);
   if (gi->last_cmd[button] != 0)
-    HandleCommand(gi->last_cmd[button], pressed);
+    SetPadButtonOrFallthrough(gi->last_cmd[button], pressed);
 }
 
 static void HandleVolumeAdjustment(int volume_adjustment) {
@@ -1217,4 +1264,119 @@ static void SwitchDirectory(void) {
     while (pos != 0 && buf[pos] != '/' && buf[pos] != '\\')
       pos--;
   }
+}
+
+/* Default smw.ini content written next to the executable when no
+ * smw.ini was discoverable on launch. Mirrors the repo-root smw.ini
+ * but stripped of dev-only comments; keep them in lock-step when
+ * adding new tunables that should be user-discoverable. The
+ * [GamepadMap] section gives a plugged-in Xbox controller working
+ * defaults out of the box. */
+static const char kDefaultSmwIniContent[] =
+  "[General]\n"
+  "# Automatically save state on quit and reload on start\n"
+  "Autosave = 0\n"
+  "\n"
+  "# Disable the SDL_Delay that happens each frame (slightly better\n"
+  "# perf if your display is set to exactly 60hz)\n"
+  "DisableFrameDelay = 0\n"
+  "\n"
+  "[Graphics]\n"
+  "# Window size (Auto or WidthxHeight)\n"
+  "WindowSize = Auto\n"
+  "\n"
+  "# Fullscreen mode (0=windowed, 1=desktop fullscreen, 2=fullscreen w/mode change)\n"
+  "Fullscreen = 0\n"
+  "\n"
+  "# Window scale (1=100%, 2=200%, 3=300%, etc.)\n"
+  "WindowScale = 3\n"
+  "\n"
+  "# Use the optimized SNES PPU implementation\n"
+  "NewRenderer = 1\n"
+  "\n"
+  "# Don't keep the aspect ratio\n"
+  "IgnoreAspectRatio = 0\n"
+  "\n"
+  "# Remove the sprite limits per scan line\n"
+  "NoSpriteLimits = 1\n"
+  "\n"
+  "[Sound]\n"
+  "EnableAudio = 1\n"
+  "AudioFreq = 32000\n"
+  "AudioChannels = 2\n"
+  "AudioSamples = 512\n"
+  "\n"
+  "[KeyMap]\n"
+  "# This section is for system-level shortcuts (save/load state,\n"
+  "# fullscreen, pause, etc.). The 12 SNES controller buttons live\n"
+  "# in keybinds.ini next to the executable.\n"
+  "Fullscreen = Alt+Return\n"
+  "Reset = Ctrl+r\n"
+  "Pause = Shift+p\n"
+  "PauseDimmed = p\n"
+  "Turbo = Tab\n"
+  "WindowBigger = Ctrl+Up\n"
+  "WindowSmaller = Ctrl+Down\n"
+  "VolumeUp = Shift+=\n"
+  "VolumeDown = Shift+-\n"
+  "Load =      F1,     F2,     F3,     F4,     F5,     F6,     F7,     F8,     F9,     F10\n"
+  "Save = Shift+F1,Shift+F2,Shift+F3,Shift+F4,Shift+F5,Shift+F6,Shift+F7,Shift+F8,Shift+F9,Shift+F10\n"
+  "\n"
+  "[GamepadMap]\n"
+  "# Enable each player's gamepad slot. SDL_GameController-compatible\n"
+  "# controllers (Xbox, PlayStation, Switch Pro, etc.) auto-detect\n"
+  "# when plugged in. Set to false to force keyboard-only.\n"
+  "EnableGamepad1 = true\n"
+  "EnableGamepad2 = true\n"
+  "\n"
+  "# Default Xbox-layout mapping. Order matches kKeys_Controls:\n"
+  "#   Up, Down, Left, Right, Select, Start, A, B, X, Y, L, R\n"
+  "# Edit + restart to rebind. Shoulder = L1/Lb (top), trigger = L2.\n"
+  "Controls =   DpadUp, DpadDown, DpadLeft, DpadRight, Back, Start, B, A, Y, X, Lb, Rb\n"
+  "ControlsP2 = DpadUp, DpadDown, DpadLeft, DpadRight, Back, Start, B, A, Y, X, Lb, Rb\n";
+
+/* Write the default smw.ini next to the executable and chdir there.
+ * Called by EnsureSmwIniNextToExe when no smw.ini was found via the
+ * SwitchDirectory upward walk. Silent no-op if it can't derive the
+ * exe directory from `exe_path`. */
+static void WriteDefaultSmwIni(const char *exe_path) {
+  if (!exe_path || !*exe_path) return;
+  /* Find last path separator in exe_path. */
+  const char *slash = NULL;
+  for (const char *p = exe_path; *p; p++)
+    if (*p == '/' || *p == '\\') slash = p;
+  if (!slash) return;
+  size_t dir_len = (size_t)(slash - exe_path);
+  if (dir_len + 12 >= 1024) return;  /* path too long */
+  char dir[1024];
+  memcpy(dir, exe_path, dir_len);
+  dir[dir_len] = 0;
+  char ini_path[1024];
+  snprintf(ini_path, sizeof(ini_path), "%s/smw.ini", dir);
+  FILE *f = fopen(ini_path, "w");
+  if (!f) {
+    fprintf(stderr, "Warning: could not write default smw.ini to %s\n", ini_path);
+    return;
+  }
+  fputs(kDefaultSmwIniContent, f);
+  fclose(f);
+  printf("[smw.ini] Generated %s\n", ini_path);
+  /* chdir so ParseConfigFile's relative "smw.ini" lookup finds it. */
+  if (chdir(dir) != 0) {
+    fprintf(stderr, "Warning: could not chdir to %s\n", dir);
+  }
+}
+
+/* Ensure smw.ini is reachable from cwd. SwitchDirectory walks up to
+ * 3 levels looking for one and chdir's if it finds it; if it didn't,
+ * cwd has no smw.ini and ParseConfigFile would warn. Write a default
+ * next to the executable so first-launch from a clean release directory
+ * always has a working config. */
+static void EnsureSmwIniNextToExe(const char *exe_path) {
+  FILE *f = fopen("smw.ini", "rb");
+  if (f) {
+    fclose(f);
+    return;
+  }
+  WriteDefaultSmwIni(exe_path);
 }

@@ -415,6 +415,12 @@ static bool ParseOneConfigFile(const char *filename, int depth) {
 
 void ParseConfigFile(const char *filename) {
   g_config.enable_audio = true;
+  /* Default to gamepad-enabled so a freshly-extracted release (no
+   * smw.ini next to the exe) still picks up a plugged-in
+   * SDL_GameController via OpenOneGamepad. Explicit `EnableGamepad1
+   * = false` in smw.ini overrides this. */
+  g_config.enable_gamepad[0] = true;
+  g_config.enable_gamepad[1] = true;
 
   if (filename != NULL || !ParseOneConfigFile("smw.user.ini", 0)) {
     if (filename == NULL)

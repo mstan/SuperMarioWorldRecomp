@@ -70,8 +70,16 @@ The ROM is **never** redistributed — supply your own dump.
 | Select      | Right Shift |
 
 Player 2 is unbound by default — fill in keys in `keybinds.ini` to
-enable a second keyboard player. SDL controllers (XInput / DInput
-gamepads) are auto-detected.
+enable a second keyboard player.
+
+**Xbox / PlayStation / Switch Pro controllers** are auto-detected via
+SDL_GameController (XInput on Windows). Plug it in before launching,
+or hot-plug after. Default Xbox mapping is **position-true**: the
+physical button position matches a SNES pad — so Xbox A (south face)
+sends SNES B, Xbox B (east face) sends SNES A. To rebind, edit the
+`[GamepadMap]` section of `smw.ini` (auto-generated next to the exe
+on first run); the recognized names and the full mapping table are
+in [`CONTROLLER.md`](CONTROLLER.md).
 
 System shortcuts (configured in `smw.ini`'s `[KeyMap]` section):
 
