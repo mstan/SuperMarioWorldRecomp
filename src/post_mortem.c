@@ -62,7 +62,7 @@ extern const char *g_last_recomp_func;
 
 /* Output path — overwritten per dump. */
 static const char *kReportPath =
-    "F:/Projects/SuperMarioWorldRecomp/build/last_run_report.json";
+    "F:/Projects/snesrecomp/SuperMarioWorldRecomp/build/last_run_report.json";
 
 /* Mutex so on-demand TCP dump and SEH/atexit dump can't race. */
 #ifdef _WIN32

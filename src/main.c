@@ -349,7 +349,9 @@ static void SDLCALL AudioCallback(void *userdata, Uint8 *stream, int len) {
   if (SDL_LockMutex(g_audio_mutex)) Die("Mutex lock failed!");
   while (len != 0) {
     if (g_audiobuffer_end - g_audiobuffer_cur == 0) {
+      SDL_UnlockMutex(g_audio_mutex);
       RtlRenderAudio((int16 *)g_audiobuffer, g_frames_per_block, g_audio_channels);
+      if (SDL_LockMutex(g_audio_mutex)) Die("Mutex lock failed!");
       g_audiobuffer_cur = g_audiobuffer;
       g_audiobuffer_end = g_audiobuffer + g_frames_per_block * g_audio_channels * sizeof(int16);
     }
