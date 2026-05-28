@@ -33,6 +33,11 @@ void SmwDrawPpuFrame(void) {
       // and clears the flag; assert it here so the handler takes the
       // timer-IRQ path instead of exiting immediately.
       g_snes->inIrq = true;
+      /* Option-1 cpu->S ABI: model the hardware IRQ-entry push so I_IRQ's
+       * terminal RTI pops a real interrupt frame. Without it RTI over-pops
+       * (3 bytes emulation / 4 native) and cpu->S leaks every IRQ. Matches
+       * mmx_rtl.c; see cpu_push_interrupt_frame in cpu_state.h. */
+      cpu_push_interrupt_frame(&g_cpu);
       I_IRQ(&g_cpu);
       trigger = g_snes->vIrqEnabled ? g_snes->vTimer + 1 : -1;
     }
@@ -89,6 +94,12 @@ void SmwRunOneFrameOfGame(void) {
   // clears the latch on read.
   if (g_first_frame_done) {
     g_snes->inNmi = true;
+    /* Option-1 cpu->S ABI: model the hardware NMI-entry push so I_NMI's
+     * terminal RTI pops a real interrupt frame. Without it RTI over-pops
+     * (4 bytes native) and cpu->S leaks +4 every NMI — the dominant
+     * cause of SMW's per-frame stack drift into DMA-reg space. Matches
+     * mmx_rtl.c; see cpu_push_interrupt_frame in cpu_state.h. */
+    cpu_push_interrupt_frame(&g_cpu);
     I_NMI(&g_cpu);
     cpu_trace_px_breadcrumb(&g_cpu, 0x2001, "after_I_NMI");
   }
