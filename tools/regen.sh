@@ -57,21 +57,28 @@ BANKS=(00 01 02 03 04 05 07 0c 0d)
 TESTS="snesrecomp/tests/run_tests.py"
 ROM="smw.sfc"
 
+# Python interpreter: prefer python3 (macOS / most Linux have no bare `python`).
+PYTHON="${PYTHON:-$(command -v python3 || command -v python || true)}"
+if [ -z "$PYTHON" ]; then
+  echo "regen.sh: no python3/python interpreter found on PATH" >&2
+  exit 1
+fi
+
 step() { echo; echo "=== $* ==="; }
 
 step "Regenerating 9 banks"
-python snesrecomp/tools/v2_regen.py --rom "$ROM" \
+"$PYTHON" snesrecomp/tools/v2_regen.py --rom "$ROM" \
     --cfg-dir recomp --out-dir src/gen
 
 step "Syncing funcs.h"
-python snesrecomp/tools/v2_sync_funcs_h.py --cfg-dir recomp \
+"$PYTHON" snesrecomp/tools/v2_sync_funcs_h.py --cfg-dir recomp \
     --out recomp/funcs.h
 
 if [ "$STRICT_IDEMPOTENT" -eq 1 ]; then
   step "Idempotency check: regen into temp dir + byte-diff"
   TMP_GEN="$(mktemp -d)"
   trap 'rm -rf "$TMP_GEN"' EXIT
-  python snesrecomp/tools/v2_regen.py --rom "$ROM" \
+  "$PYTHON" snesrecomp/tools/v2_regen.py --rom "$ROM" \
       --cfg-dir recomp --out-dir "$TMP_GEN"
   drift_count=0
   for b in "${BANKS[@]}"; do
@@ -95,16 +102,16 @@ fi
 
 if [ "$RUN_TESTS" -eq 1 ]; then
   step "Framework tests"
-  python "$TESTS"
+  "$PYTHON" "$TESTS"
 fi
 
 if [ "$RUN_FUZZ" -eq 1 ]; then
   step "Phase B fuzz"
-  python snesrecomp/fuzz/generate_snippets.py > /dev/null
-  python snesrecomp/fuzz/run_recomp.py
+  "$PYTHON" snesrecomp/fuzz/generate_snippets.py > /dev/null
+  "$PYTHON" snesrecomp/fuzz/run_recomp.py
   taskkill //F //IM smw.exe > /dev/null 2>&1 || true
-  python snesrecomp/fuzz/run_oracle.py
-  python snesrecomp/fuzz/diff.py
+  "$PYTHON" snesrecomp/fuzz/run_oracle.py
+  "$PYTHON" snesrecomp/fuzz/diff.py
 fi
 
 step "Done"

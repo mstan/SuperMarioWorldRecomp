@@ -3,7 +3,7 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = f9f48a519eae559577dc8c0408ee8a017c78da6a
+sha = 926d61e8232862799376da57d0af36f120cbb0d0
 # Branch: main. Bumped 2026-05-14 from e7fd85b to land the NLR
 # detector case (d) — PLA*N at block start + branching tail.
 # Closes the HandleSelectionCursor-shape class: leaf-ish functions
