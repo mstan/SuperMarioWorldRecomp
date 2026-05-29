@@ -202,17 +202,17 @@
     <ClCompile Include="platform\win32\volume_control.c" />
     <ClCompile Include="smw_00.c" />
     <ClCompile Include="gen_stubs.c" />
-    <ClCompile Include="gen\smw_00_v2.c" />
-    <ClCompile Include="gen\smw_04_v2.c" />
-    <ClCompile Include="gen\smw_07_v2.c" />
-    <ClCompile Include="gen\smw_01_v2.c" />
-    <ClCompile Include="gen\smw_02_v2.c" />
-    <ClCompile Include="gen\smw_03_v2.c" />
-    <ClCompile Include="gen\smw_05_v2.c" />
-    <ClCompile Include="gen\smw_0c_v2.c" />
-    <ClCompile Include="gen\smw_0d_v2.c" />
+    <ClCompile Include="gen\bank00_v2.c" />
+    <ClCompile Include="gen\bank04_v2.c" />
+    <ClCompile Include="gen\bank07_v2.c" />
+    <ClCompile Include="gen\bank01_v2.c" />
+    <ClCompile Include="gen\bank02_v2.c" />
+    <ClCompile Include="gen\bank03_v2.c" />
+    <ClCompile Include="gen\bank05_v2.c" />
+    <ClCompile Include="gen\bank0c_v2.c" />
+    <ClCompile Include="gen\bank0d_v2.c" />
     <ClCompile Include="gen\unresolved_stubs_v2.c" />
-    <ClCompile Include="gen\smw_dispatch_v2.c" />
+    <ClCompile Include="gen\dispatch_v2.c" />
     <ClCompile Include="..\snesrecomp\runner\src\debug_server.c" />
     <!-- Oracle-only sources. ExcludedFromBuild in every non-Oracle configuration
          so Release|x64 / Debug|x64 binaries contain zero oracle code. -->
