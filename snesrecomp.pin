@@ -3,7 +3,15 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = f9f48a519eae559577dc8c0408ee8a017c78da6a
+sha = 0ea19c79bf027a28e05a8a62f5f02fefa54032d9
+# Branch: main. Bumped 2026-05-31 from f9f48a5 to land the unified v1.0.2
+# cut: snesrecomp main now carries the MMX-era audio ring-buffer fix
+# (DSP catch-up sample-drop -> 8192 power-of-2 output ring) plus universal
+# oracle diagnostics (pixel-format-correct screenshots; block-watch caller
+# `ret`). SMW regenerated + revalidated against this main (title -> file
+# select -> level -> overworld + attract demo clean; audio clean). MMX
+# shipped v1.0.2 off the same main commit. ALttP (alttp-fixes) untouched.
+#
 # Branch: main. Bumped 2026-05-14 from e7fd85b to land the NLR
 # detector case (d) — PLA*N at block start + branching tail.
 # Closes the HandleSelectionCursor-shape class: leaf-ish functions
