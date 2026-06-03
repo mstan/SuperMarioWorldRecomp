@@ -3,7 +3,13 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = 95c2f207379d02fe56e3ae7db0388398d82d7324
+sha = 7144d73287631c5df00943c5a17aeaa9b266a641
+# Branch: main. Bumped 2026-06-03 from 95c2f20 to land the
+# RunOneFrameOfGame_Internal genericization (funcs.h emitter now emits the
+# un-prefixed `void RunOneFrameOfGame_Internal(void);`; each game's per-frame
+# entry hook drops its `Smw`/game-specific prefix to match) + the diag-tool
+# genericization. SMW source renamed (smw_rtl.c/.h, smw_00.c, smw_cpu_infra.c)
+# and funcs.h regenerated against this commit; Release|x64 builds clean.
 # Branch: main. Bumped 2026-06-03 to land the in-process snes9x oracle removal
 # + the recomp_post_mortem_dump genericization (debug_server.c now calls
 # recomp_post_mortem_dump; each game must define that generic name).

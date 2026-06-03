@@ -4,7 +4,7 @@
 #include "variables.h"
 
 
-void SmwRunOneFrameOfGame_Internal() {
+void RunOneFrameOfGame_Internal() {
   assert(waiting_for_vblank != 0);
   ++counter_global_frames;
   /* Option-1 cpu->S ABI + main-loop stack-neutrality invariant.

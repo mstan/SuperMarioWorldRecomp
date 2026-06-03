@@ -4,9 +4,9 @@
 #include "common_cpu_infra.h"
 #include "snes/snes_regs.h"
 
-void SmwRunOneFrameOfGame_Internal();
+void RunOneFrameOfGame_Internal();
 
 void SmwDrawPpuFrame(void);
-void SmwRunOneFrameOfGame(void);
+void RunOneFrameOfGame(void);
 
 #endif  // SMW_SMW_RTL_H_

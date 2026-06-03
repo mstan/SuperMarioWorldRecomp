@@ -4,7 +4,7 @@
 const RtlGameInfo kSmwGameInfo = {
   .title = "smw",
   .initialize = NULL,
-  .run_frame = &SmwRunOneFrameOfGame,
+  .run_frame = &RunOneFrameOfGame,
   .draw_ppu_frame = &SmwDrawPpuFrame,
   .save_name_prefix = "save",
 };
