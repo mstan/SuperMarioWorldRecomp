@@ -480,7 +480,7 @@ static void crash_handler(int sig) {
   cpu_trace_dump_dbpb("CRASH — DB/PB mutations");
   cpu_trace_dump_recent("CRASH — main trace ring", 256);
   fflush(stderr);
-  smw_post_mortem_dump("signal", NULL);
+  recomp_post_mortem_dump("signal", NULL);
   _exit(128 + sig);
 }
 
@@ -505,13 +505,13 @@ static LONG WINAPI seh_handler(EXCEPTION_POINTERS* info) {
   cpu_trace_dump_dbpb("SEH CRASH — DB/PB mutations");
   cpu_trace_dump_recent("SEH CRASH — main trace ring", 256);
   fflush(stderr);
-  smw_post_mortem_dump("seh", info);
+  recomp_post_mortem_dump("seh", info);
   return EXCEPTION_EXECUTE_HANDLER;
 }
 #endif
 
 static void post_mortem_atexit(void) {
-  smw_post_mortem_dump("atexit", NULL);
+  recomp_post_mortem_dump("atexit", NULL);
 }
 
 #undef main
@@ -581,10 +581,10 @@ int main(int argc, char** argv) {
   // mute audio etc. without touching the checked-in smw.ini. Last
   // parser to set a key wins, so local overrides take precedence.
   {
-    FILE *f_local = fopen("smw.local.ini", "rb");
+    FILE *f_local = fopen("config.local.ini", "rb");
     if (f_local) {
       fclose(f_local);
-      ParseConfigFile("smw.local.ini");
+      ParseConfigFile("config.local.ini");
     }
   }
 
@@ -1250,13 +1250,13 @@ static void SwitchDirectory(void) {
   size_t pos = strlen(buf);
 
   for (int step = 0; pos != 0 && step < 3; step++) {
-    memcpy(buf + pos, "/smw.ini", 9);
+    memcpy(buf + pos, "/config.ini", 12);
     FILE *f = fopen(buf, "rb");
     if (f) {
       fclose(f);
       buf[pos] = 0;
       if (step != 0) {
-        printf("Found smw.ini in %s\n", buf);
+        printf("Found config.ini in %s\n", buf);
         int err = chdir(buf);
         (void)err;
       }
@@ -1354,15 +1354,15 @@ static void WriteDefaultSmwIni(const char *exe_path) {
   memcpy(dir, exe_path, dir_len);
   dir[dir_len] = 0;
   char ini_path[1024];
-  snprintf(ini_path, sizeof(ini_path), "%s/smw.ini", dir);
+  snprintf(ini_path, sizeof(ini_path), "%s/config.ini", dir);
   FILE *f = fopen(ini_path, "w");
   if (!f) {
-    fprintf(stderr, "Warning: could not write default smw.ini to %s\n", ini_path);
+    fprintf(stderr, "Warning: could not write default config.ini to %s\n", ini_path);
     return;
   }
   fputs(kDefaultSmwIniContent, f);
   fclose(f);
-  printf("[smw.ini] Generated %s\n", ini_path);
+  printf("[config.ini] Generated %s\n", ini_path);
   /* chdir so ParseConfigFile's relative "smw.ini" lookup finds it. */
   if (chdir(dir) != 0) {
     fprintf(stderr, "Warning: could not chdir to %s\n", dir);
@@ -1375,7 +1375,7 @@ static void WriteDefaultSmwIni(const char *exe_path) {
  * next to the executable so first-launch from a clean release directory
  * always has a working config. */
 static void EnsureSmwIniNextToExe(const char *exe_path) {
-  FILE *f = fopen("smw.ini", "rb");
+  FILE *f = fopen("config.ini", "rb");
   if (f) {
     fclose(f);
     return;

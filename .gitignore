@@ -47,8 +47,8 @@ memory/
 __pycache__/
 *.pyc
 
-# Local-only config overrides (per-developer, applied after smw.ini)
-smw.local.ini
+# Local-only config overrides (per-developer, applied after config.ini)
+config.local.ini
 
 
 # Active recompiler output — generated locally per-developer

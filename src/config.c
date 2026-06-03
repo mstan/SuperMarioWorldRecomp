@@ -430,9 +430,9 @@ void ParseConfigFile(const char *filename) {
   g_config.enable_gamepad[0] = true;
   g_config.enable_gamepad[1] = true;
 
-  if (filename != NULL || !ParseOneConfigFile("smw.user.ini", 0)) {
+  if (filename != NULL || !ParseOneConfigFile("config.user.ini", 0)) {
     if (filename == NULL)
-      filename = "smw.ini";
+      filename = "config.ini";
     if (!ParseOneConfigFile(filename, 0))
       fprintf(stderr, "Warning: Unable to read config file %s\n", filename);
   }

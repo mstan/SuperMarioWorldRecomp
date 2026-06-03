@@ -3,7 +3,10 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = 00425c6e5824f113528f0e4bc2ac6bf22573cca4
+sha = 95c2f207379d02fe56e3ae7db0388398d82d7324
+# Branch: main. Bumped 2026-06-03 to land the in-process snes9x oracle removal
+# + the recomp_post_mortem_dump genericization (debug_server.c now calls
+# recomp_post_mortem_dump; each game must define that generic name).
 # Branch: main. Bumped 2026-06-03 from 7249c61 to land the reference-taint
 # prune convergence fix. _scan_variant_refs now resets `cur` on the
 # un-suffixed `void <name>(CpuState*)` entry-point aliases emit_bank appends
