@@ -3,7 +3,17 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = 7144d73287631c5df00943c5a17aeaa9b266a641
+sha = 2b135e8f5f6acb7ec345d81ba8d0049043d5ecf4
+# 2026-06-10 bump (7144d73 -> 2b135e8): pulls three runner-only change
+# sets, no regen required (src/gen untouched):
+#  - exe-dir anchoring (2b135e8): snesrecomp_anchor_to_exe_dir()/
+#    snesrecomp_abspath(); pairs with the game-side SwitchDirectory
+#    walk-up removal -- config.ini now lives next to the exe, period.
+#  - audio accuracy (48e7260..00f4adb, MMX issue #4): APU catch-up paced
+#    from APU-port touches only + hardware-latched KON/KOF polling +
+#    always-on audio_trace rings. Game side ports the 32040 Hz host
+#    rate in a companion commit.
+#  - snes-oracle promotion + audit fixes (61a74ab and friends).
 # Branch: main. Bumped 2026-06-03 from 95c2f20 to land the
 # RunOneFrameOfGame_Internal genericization (funcs.h emitter now emits the
 # un-prefixed `void RunOneFrameOfGame_Internal(void);`; each game's per-frame
