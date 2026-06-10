@@ -87,11 +87,11 @@ SDL_GameController (XInput on Windows). Plug it in before launching,
 or hot-plug after. Default Xbox mapping is **position-true**: the
 physical button position matches a SNES pad — so Xbox A (south face)
 sends SNES B, Xbox B (east face) sends SNES A. To rebind, edit the
-`[GamepadMap]` section of `smw.ini` (auto-generated next to the exe
+`[GamepadMap]` section of `config.ini` (auto-generated next to the exe
 on first run); the recognized names and the full mapping table are
 in [`CONTROLLER.md`](CONTROLLER.md).
 
-System shortcuts (configured in `smw.ini`'s `[KeyMap]` section):
+System shortcuts (configured in `config.ini`'s `[KeyMap]` section):
 
 | Action          | Default     |
 |-----------------|-------------|
