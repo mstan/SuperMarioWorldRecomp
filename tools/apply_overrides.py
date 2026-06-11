@@ -53,6 +53,62 @@ MARKER = "/*WS-OVERRIDE*/"
 # 9-bit representability bounds the widening: left tiles live at 512-(64+extra)
 # .. 511 and must stay >= the wrap threshold 256+extra, so extra < 96. The
 # snippet clamps. No-op when widescreen is off.
+#
+# WS-DESPAWN: widen SubOffscreen's horizontal erase bounds by g_ws_extra.
+# Each bank (01/02/03) carries its own copy of SubOffscreen with its own
+# bounds tables (contents differ per bank!). The horizontal decision joins
+# at one block per bank: `LDA $00 : BPL keep / fall into EraseSprite`,
+# where $00 = hibyte(bound[r1] + camera - sprX), sign-flipped for odd r1
+# (left bounds), and Y still holds r1. The snippet re-derives the full
+# 16-bit comparison from the bank's own table (read via DB like the
+# original) and rewrites $00 with the widened verdict (0x80 = erase,
+# 0x00 = keep) just before the vanilla load tests it. Even r1 = right
+# bound (erase if sprX > cam+bound+extra), odd r1 = left bound (erase if
+# sprX < cam+bound-extra). extra=0 reduces exactly to vanilla. The
+# offscreen GATE ($15A0|$186C) stays vanilla — it is also the x-high bit
+# (see WS-FLAG) and only opens the despawn check, never forces it.
+#
+# WS-SPAWN: shift ParseLevelSpriteList's spawn-trigger column outward by
+# g_ws_extra so sprites spawn beyond the visible widescreen margin
+# instead of materializing inside it. Vanilla parses the level sprite
+# list at column camera-0x30 when scrolling left / camera+0x120 when
+# scrolling right ($55 = 0/2; $5B bit0 = vertical level, left untouched
+# — widescreen is horizontal-only). At the join block $02A828 the column
+# low byte (&0xF0) is in $00 and the high byte is in A; the snippet
+# recomputes both with the widened offset. Hysteresis vs WS-DESPAWN is
+# preserved: both sides move by the same extra (vanilla gap: spawn
+# +0x120 < erase +0x130; spawn -0x30 > erase -0x40). If the widened
+# column would precede the level start (<0) the vanilla column is kept.
+
+
+def _ws_despawn_patch(anchor_pc, tbl_lo):
+    """Per-bank WS-DESPAWN entry. anchor_pc = the `LDA $00` join block;
+    tbl_lo = that bank's 8-entry bounds table (hi bytes at tbl_lo+8)."""
+    return {
+        "marker": "/*WS-DESPAWN*/",
+        # Anchor on the unique trace line of the join block; every
+        # emitted copy of that block (entry funcs x (m,x) variants) is
+        # the despawn body, so no func name scoping is needed.
+        "func_match": "",
+        "anchor": "cpu_trace_block(cpu, 0x%06X)" % anchor_pc,
+        "snippet": (
+            " /*WS-DESPAWN*/ { extern bool g_ws_active; extern int g_ws_extra;"
+            " if (g_ws_active) {"
+            " unsigned int _wk = cpu->X & 0xffffu; unsigned int _wy = cpu->Y & 7u;"
+            " int _wb = (int)(short)(unsigned short)("
+            "cpu_read8(cpu,cpu->DB,(unsigned short)(0x%04Xu+_wy))"
+            " | (cpu_read8(cpu,cpu->DB,(unsigned short)(0x%04Xu+_wy))<<8));"
+            " int _wv = (int)(short)(unsigned short)((unsigned int)(_wb"
+            " + (cpu_read8(cpu,0x7E,0x001A) | (cpu_read8(cpu,0x7E,0x001B)<<8))"
+            " - (cpu_read8(cpu,0x7E,(unsigned short)(0x00E4+_wk))"
+            " | (cpu_read8(cpu,0x7E,(unsigned short)(0x14E0+_wk))<<8))) & 0xFFFFu);"
+            " int _werase = (_wy & 1) ? (_wv >= g_ws_extra) : (_wv < -g_ws_extra);"
+            " cpu_write8(cpu,0x7E,(unsigned short)(cpu->D + 0x0000),"
+            " (unsigned char)(_werase ? 0x80 : 0x00)); } }"
+        ) % (tbl_lo, tbl_lo + 8),
+    }
+
+
 BLOCK_PATCHES = [
     {
         "marker": "/*WS-FLAG*/",
@@ -79,6 +135,28 @@ BLOCK_PATCHES = [
             " int _wdraw = (_wsx >= -(64 + _we) && _wsx < 256 + _we);"
             " cpu->_flag_Z = _wdraw ? 1 : 0; cpu->_flag_C = _wdraw ? 0 : 1;"
             " cpu_write8(cpu,0x7E,(unsigned short)(0x15C4+_wk), _wdraw ? 0 : 1); } }"
+        ),
+    },
+    # WS-DESPAWN (see header comment): one entry per bank copy.
+    _ws_despawn_patch(0x01AC7C, 0xAC11),  # SubOffscreen_Bank01_* join + tables
+    _ws_despawn_patch(0x02D076, 0xD007),  # SubOffscreen_Bank02_* join + tables
+    _ws_despawn_patch(0x03B8A8, 0xB83F),  # SubOffscreen_Bank03_* join + tables
+    # WS-SPAWN (see header comment): bank-02 ParseLevelSpriteList only.
+    {
+        "marker": "/*WS-SPAWN*/",
+        "func_match": "ParseLevelSpriteList",
+        "anchor": "cpu_trace_block(cpu, 0x02A828)",
+        "snippet": (
+            " /*WS-SPAWN*/ { extern bool g_ws_active; extern int g_ws_extra;"
+            " if (g_ws_active && !(cpu_read8(cpu,0x7E,0x005B) & 1)) {"
+            " unsigned int _wd = cpu_read8(cpu,0x7E,0x0055);"
+            " if (_wd == 0 || _wd == 2) {"
+            " int _wcol = (cpu_read8(cpu,0x7E,0x001A) | (cpu_read8(cpu,0x7E,0x001B)<<8))"
+            " + ((_wd == 0) ? -(0x30 + g_ws_extra) : (0x120 + g_ws_extra));"
+            " if (_wcol >= 0) {"
+            " cpu_write8(cpu,0x7E,(unsigned short)(cpu->D + 0x0000),"
+            " (unsigned char)(_wcol & 0xF0));"
+            " cpu_write_a_m(cpu, (uint16)((_wcol >> 8) & 0xFF)); } } } }"
         ),
     },
 ]
