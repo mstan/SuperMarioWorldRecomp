@@ -334,12 +334,15 @@ void RtlDrawPpuFrame(uint8 *pixel_buffer, size_t pitch, uint32 render_flags) {
     if (in_level) {
       PpuSetExtraSpace(g_ppu, (uint8_t)g_ws_extra);
       // HUD split: SMW's status bar lives on BG3 rows 1-4 (scanlines < 40).
-      // Left cluster (MARIO/lives/yoshi coins/bonus stars) ends at x=112,
-      // the item box frame occupies x 112..143 (stays centered; the boxed
-      // item is an OAM sprite and stays with it), and the right cluster
-      // (TIME/timer/coins/score) starts at x=144. Message boxes render
-      // lower on BG3 and are unaffected.
-      PpuSetWidescreenHudSplit(g_ppu, g_config.widescreen_hud ? 40 : 0, 112, 144);
+      // Left chunk = MARIO + lives (cols 2-6, x < 56) anchored to the left
+      // edge. Center chunk = the naturally adjacent middle group — yoshi
+      // coins (cols 8-11), bonus stars (9-13), item box frame (14-17; the
+      // boxed item is an OAM sprite and stays with it), TIME label + timer
+      // (19-21) — x 56..183, kept centered. Right chunk = score (23-28) +
+      // coin counter (25-29), x >= 184, anchored to the right edge. Both
+      // outer chunks keep their authentic 16px inset from the screen edge.
+      // Message boxes render lower on BG3 and are unaffected.
+      PpuSetWidescreenHudSplit(g_ppu, g_config.widescreen_hud ? 40 : 0, 56, 184);
     } else {
       // Center the authentic 256 view and black out the side margins.
       PpuSetExtraSpaceCentered(g_ppu, (uint8_t)g_ws_extra);
