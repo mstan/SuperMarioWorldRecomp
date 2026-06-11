@@ -60,4 +60,6 @@ hw_trace.log
 
 # Release artifacts (built locally, uploaded via gh release upload)
 SuperMarioWorldRecomp-windows-*.zip
+SuperMarioWorldRecomp-widescreen-windows-*.zip
 release-stage/
+release/

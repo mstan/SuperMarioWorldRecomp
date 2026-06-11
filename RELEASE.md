@@ -1,38 +1,64 @@
-# v0.3.0 — Playable
+# Release procedure
 
-First milestone where the game is **playable** end-to-end from boot through gameplay. Not exhaustively tested, but every step on the golden path works.
+Per-version release notes live on the GitHub release itself (the old
+v0.3.0 notes that used to fill this file are at
+https://github.com/mstan/SuperMarioWorldRecomp/releases/tag/v0.3.0).
+This file is the canonical *how to cut a release*.
 
-## What works
+## Asset convention: two zips, only zips
 
-- **Attract demo** — frame-perfect, no observable drift through full attract loop (carried over from v0.1.0, still holds).
-- **Menu chain** — title → 1-Player Game → file-select (MARIO A/B/C) → intro cutscene → first level — every Start press lands cleanly.
-- **Save persistence** — in-game save writes to `saves/smw.srm` on graceful window close and reloads on next launch. SRAM survives across runs (3-slot file-select restores the player's progress).
-- **Overworld** — Yoshi's Island map renders correctly with proper terrain, paths, level icons, and the player border. Mario can navigate between nodes.
-- **First-world stages** — at least 4 stages playable end-to-end by manual playthrough. No reproducible regressions in the golden path.
+Every release ships exactly two assets:
 
-## Caveats
+| asset | gen state | config |
+|---|---|---|
+| `SuperMarioWorldRecomp-windows-x64.zip` | pristine (zero injected overrides) | `Widescreen = 0` |
+| `SuperMarioWorldRecomp-widescreen-windows-x64.zip` | `apply_overrides.py` patched (WS-FLAG / WS-DESPAWN / WS-SPAWN) | `Widescreen = 1` |
 
-- Only the first world has been hand-tested. Worlds 2–7, Star World, Special World, and any switch-palace mechanics are not verified.
-- No automated regression suite for in-game gameplay — verification is human visual play.
-- Building requires a local SMW ROM (CRC checked at startup); CI cannot build.
+Never publish a bare `smw.exe` — it is broken without `SDL2.dll` and
+redundant next to the zip.
 
-## Notable fixes since v0.1.0
+The widescreen machinery is runtime-gated and default-off, but the
+standard zip is built from gen that never contained it at all: the
+release script restores pristine gen (`apply_overrides.py --restore`,
+asserts zero `/*WS-*/` markers), builds, stages, then re-applies the
+overrides (asserts the expected injection count, currently 58),
+rebuilds, and stages the widescreen zip.
 
-- **MVN / MVP block-move src/dst swap** — the recompiler was emitting block-moves backwards (RAM→ROM no-op), so the overworld Map16 buffer kept stale `$25` data and the map rendered as repeating fence stripes. Class fix at the lowering level; all 9 MVN/MVP sites now correct. This was the root cause of overworld corruption *and* of Mario being "stuck on an invalid tile" *and* of the wrong-destination on A-press — one bug, three visible symptoms.
-- **TCP screenshot freezing the visible window** — `cmd_screenshot` rebound `g_ppu->renderBuffer` to a local scratch buffer and never restored it. After the first TCP screenshot, every main-loop frame rendered into the scratch and the SDL texture stayed frozen on the last visible image. Save/restore around the rebind.
-- **SRAM read/write routing** — LoROM `$70-$7D` and HiROM `$00-$3F:6000-7FFF` SRAM accesses now route to `g_sram` via the snes9x cart mapping, unblocking the save chain that was previously falling through to invalid `RomPtr` reads.
-- **Leaf exit-(M, X) auto-routing pass 2** — the auto-router now detects multi-variant convergent leaf functions (closes the "cfg-declared entry is non-mutating, other entries mutate" class).
-- **NLR detector case (d)** — handles `PLA*N` at block-start + branching-tail. Caught `HandleMenuCursor_9ACB` and `RunPlayerBlockCode_00EFE8_ReturnsTwice`.
+## Steps
 
-## Install
+1. Make sure the tree is the release commit: game repo `main`, and the
+   `snesrecomp/` junction checked out at the commit named in
+   `snesrecomp.pin`. Note `src/gen/` is untracked — it must be the
+   current regen output for the pinned recompiler (if in doubt, regen).
+2. Build both assets:
+
+   ```powershell
+   powershell -File tools\make_release.ps1          # both zips
+   powershell -File tools\make_release.ps1 -Variant widescreen   # just one
+   ```
+
+   Zips land in `release\` (gitignored). The script forces the
+   `Widescreen` value into each zip's `config.ini` and writes a
+   variant-specific `README.txt`; everything else (`SDL2.dll`,
+   `keybinds.ini`) is staged from `build\bin-x64-Release\`.
+3. Smoke-test both zips from a scratch directory (extract, run, reach a
+   level). The standard zip must look byte-authentic; the widescreen
+   zip must fill 16:9 in-level with the split HUD.
+4. Write the release notes (what changed, what's verified, caveats) and
+   publish — only after the user has signed off on the zips:
+
+   ```powershell
+   gh release create vX.Y.Z `
+       release\SuperMarioWorldRecomp-windows-x64.zip `
+       release\SuperMarioWorldRecomp-widescreen-windows-x64.zip `
+       --title "vX.Y.Z — <headline>" --notes-file <notes.md>
+   ```
+
+## Install (for the notes' boilerplate)
 
 1. Extract the zip.
-2. Place a verified Super Mario World ROM (`smw.sfc`) anywhere on disk.
-3. Run `smw.exe`; first launch prompts for the ROM path and caches it in `rom.cfg`.
-4. Saves land in `saves/smw.srm` (created automatically).
-
-## Components in this release
-
-- `smw.exe` — Oracle x64 build (includes the always-on observability rings for debugging; same gameplay path as Release).
-- `SDL2.dll` — required runtime.
-- `keybinds.ini` — default controller mapping.
+2. Run `smw.exe`; first launch prompts for a legally-obtained Super
+   Mario World (USA) ROM and caches the path in `rom.cfg`.
+3. Saves land in `saves/smw.srm`; controller mapping in
+   `keybinds.ini`; options (including `Widescreen` / `WidescreenHud`)
+   in `config.ini` next to the exe.

@@ -12,9 +12,17 @@ must follow.
 Usage:
     python tools/apply_overrides.py [--gen-dir src/gen]
         [--manifest overrides/widescreen/overrides.manifest] [--check] [-v]
+    python tools/apply_overrides.py --restore [--gen-dir src/gen] [-v]
 
 With no manifest rules active this is a no-op (authentic build). Safe to run
 on every build: injection is marked and skipped if already present.
+
+--restore is the exact inverse: every injected ` /*WS-...*/ { ... }` snippet
+is located by its marker and removed up to its balanced closing brace,
+returning the gen files to the pristine regen output. Used by
+tools/make_release.ps1 to build the standard (authentic) zip from the same
+worktree that builds the widescreen zip. Idempotent; after a restore the gen
+dir contains zero WS markers (verifiable via grep).
 """
 import argparse
 import os
@@ -185,6 +193,41 @@ BLOCK_PATCHES = [
     },
 ]
 
+# Every marker any injection mode can leave behind (prologues + block patches).
+ALL_MARKERS = (MARKER, "/*WS-FLAG*/", "/*WS-DESPAWN*/", "/*WS-SPAWN*/")
+
+
+def strip_injections(text):
+    """Remove every injected ` /*WS-...*/ { ... }` snippet from one file's
+    text. Exact inverse of injection: each snippet is a single ` MARKER {`
+    block appended to a generated line, with no string literals containing
+    braces, so scanning from the marker's opening brace to balance removes
+    precisely what was added (including the leading space the injector
+    prepends). Returns (text, n_removed)."""
+    n = 0
+    for mk in ALL_MARKERS:
+        while True:
+            i = text.find(mk)
+            if i < 0:
+                break
+            start = i - 1 if i > 0 and text[i - 1] == " " else i
+            j = text.index("{", i + len(mk))
+            depth = 0
+            k = j
+            while True:
+                c = text[k]
+                if c == "{":
+                    depth += 1
+                elif c == "}":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                k += 1
+            text = text[:start] + text[k + 1:]
+            n += 1
+    return text, n
+
+
 # Recognize a generated function definition header to scope block patches.
 _FUNC_HDR = re.compile(r"^RecompReturn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*CpuState")
 
@@ -291,8 +334,33 @@ def main():
         action="store_true",
         help="verify every manifest base matched at least one definition",
     )
+    ap.add_argument(
+        "--restore",
+        action="store_true",
+        help="remove every injected snippet, restoring pristine gen output",
+    )
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
+
+    if args.restore:
+        if not os.path.isdir(args.gen_dir):
+            sys.exit(f"apply_overrides: gen dir not found: {args.gen_dir}")
+        total = 0
+        for name in sorted(os.listdir(args.gen_dir)):
+            if not name.endswith(".c"):
+                continue
+            path = os.path.join(args.gen_dir, name)
+            with open(path, "r", encoding="utf-8", newline="") as f:
+                text = f.read()
+            new_text, n = strip_injections(text)
+            if n:
+                with open(path, "w", encoding="utf-8", newline="") as f:
+                    f.write(new_text)
+                total += n
+                if args.verbose:
+                    print(f"apply_overrides: {name}: removed {n} injection(s)")
+        print(f"apply_overrides: restored pristine gen ({total} injection(s) removed)")
+        return 0
 
     rules = parse_manifest(args.manifest)
     if not rules and not BLOCK_PATCHES:
@@ -309,7 +377,10 @@ def main():
         if not name.endswith(".c"):
             continue
         path = os.path.join(args.gen_dir, name)
-        with open(path, "r", encoding="utf-8") as f:
+        # newline="" both ways: never translate the generator's LF line
+        # endings (text-mode writes used to silently CRLF-convert every
+        # patched bank, breaking byte-exact --restore round-trips).
+        with open(path, "r", encoding="utf-8", newline="") as f:
             text = f.read()
         # Track which bases exist in this file before substitution.
         for m in DEF_RE.finditer(text):
@@ -318,7 +389,7 @@ def main():
         new_text, n = apply_to_text(text, rules)
         new_text, nb = apply_block_patches(new_text)
         if n or nb:
-            with open(path, "w", encoding="utf-8") as f:
+            with open(path, "w", encoding="utf-8", newline="") as f:
                 f.write(new_text)
             total += n + nb
             if args.verbose:
