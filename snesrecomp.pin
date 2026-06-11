@@ -3,7 +3,23 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = 2b135e8f5f6acb7ec345d81ba8d0049043d5ecf4
+sha = cbf7fa72f16126c5577f42335d6f849341af7d5e
+# 2026-06-11 bump (2b135e8 -> cbf7fa7): pulls the widescreen runner
+# support, runner-only (src/gen untouched, no regen required). All
+# changes are runtime-gated and inert unless the game opts in:
+#  - debug server: always-on OAM write + render-read ring buffers
+#    (2b6b5fc): oam_state / oam_write_get / oam_render_get commands.
+#  - ppu: sprite-level x gate widened to the left widescreen margin
+#    (239e2cb): x + spriteSize > -ppu->extraLeftCur (authentic
+#    behavior unchanged when extraLeftCur == 0).
+#  - ppu: opt-in widescreen HUD split for BG3 (4a3e1a4 + cbf7fa7):
+#    PpuSetWidescreenHudSplit(); keys off the computed window set
+#    (win.nr==1 && win.bits==0), not TMW bits. Fields zero on reset;
+#    caller re-applies per frame. Ppu struct fields added BEFORE the
+#    snapshot region — savestate layout unchanged.
+# Companion SMW-side widescreen feature (Widescreen/WidescreenHud
+# config, apply_overrides.py game-logic patches) landed on SMW main
+# at the same time (3c0b794 -> ddac4fa).
 # 2026-06-10 bump (7144d73 -> 2b135e8): pulls three runner-only change
 # sets, no regen required (src/gen untouched):
 #  - exe-dir anchoring (2b135e8): snesrecomp_anchor_to_exe_dir()/
