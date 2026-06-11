@@ -68,6 +68,19 @@ MARKER = "/*WS-OVERRIDE*/"
 # offscreen GATE ($15A0|$186C) stays vanilla — it is also the x-high bit
 # (see WS-FLAG) and only opens the despawn check, never forces it.
 #
+# Left bounds get a cushion, not just a shift: vanilla left bounds encode
+# each class's width slack against a screen edge at 0 (Entry1 -0x40,
+# Entry3 only -0x10, bank03 even +0x40). A uniform -extra shift keeps
+# that slack, but the widescreen edge is at -extra and a 16-32px sprite
+# of a shallow-bound class still blinks out visibly inside the margin
+# (user-observed: left-side despawn premature, right side perfect). So
+# every left bound is clamped to at least -(64+extra) — the same
+# widest-sprite cushion as the WS-FLAG draw window — while deeper vanilla
+# bounds (e.g. -0x70) keep their extra slack. Right bounds are origin-
+# based with the body extending away from view; the plain shift is
+# already invisible there. Hysteresis: spawn column -0x30-extra stays
+# inside the shallowest left despawn -(64+extra).
+#
 # WS-SPAWN: shift ParseLevelSpriteList's spawn-trigger column outward by
 # g_ws_extra so sprites spawn beyond the visible widescreen margin
 # instead of materializing inside it. Vanilla parses the level sprite
@@ -102,7 +115,8 @@ def _ws_despawn_patch(anchor_pc, tbl_lo):
             " + (cpu_read8(cpu,0x7E,0x001A) | (cpu_read8(cpu,0x7E,0x001B)<<8))"
             " - (cpu_read8(cpu,0x7E,(unsigned short)(0x00E4+_wk))"
             " | (cpu_read8(cpu,0x7E,(unsigned short)(0x14E0+_wk))<<8))) & 0xFFFFu);"
-            " int _werase = (_wy & 1) ? (_wv >= g_ws_extra) : (_wv < -g_ws_extra);"
+            " int _wthr = (_wb <= -64) ? g_ws_extra : (_wb + 64 + g_ws_extra);"
+            " int _werase = (_wy & 1) ? (_wv >= _wthr) : (_wv < -g_ws_extra);"
             " cpu_write8(cpu,0x7E,(unsigned short)(cpu->D + 0x0000),"
             " (unsigned char)(_werase ? 0x80 : 0x00)); } }"
         ) % (tbl_lo, tbl_lo + 8),
