@@ -3,7 +3,11 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = bf64f0d8983274addaac1f6883a214f6610c157c
+sha = c17bef708054758030682930de03ef65e7a0b0dd
+# 2026-06-11 bump (bf64f0d -> c17bef7): docs-only delta
+# (ISSUES.md turbo music-drop note). No code, no regen, no rebuild.
+# Unifies SMW/MMX/ALttP on the runner main tip ahead of the Zelda
+# widescreen work (all forks descend from this single tip).
 # 2026-06-11 bump (8ffc797 -> bf64f0d): follow-up — port-clock caps now
 # scale with the observed audio-burst quantum (audio_samples is
 # user-tunable; a burst larger than the latency ceiling would have
