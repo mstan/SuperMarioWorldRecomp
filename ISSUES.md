@@ -20,6 +20,282 @@ trace → framework fix.
 
 ---
 
+## Session 2026-06-12 (later, Fable) — Widescreen `$5F` chain platform: FIXED (WS-CHAIN + WS-SPAWN sweep + WS-SLOT)
+
+**Status: FIXED** by three override-layer changes in
+`tools/apply_overrides.py` (71 total injections now; release script
+expectation bumped 58→71). The earlier session's conclusion below
+("legit second platform revealed by widescreen — policy question, not a
+defect") was **wrong**; preserved for the record, superseded here.
+
+The user-visible symptom had TWO independent root causes that masked
+each other: (1) a 9-bit OAM-X alias made the *left* neighbor platform's
+frozen pose appear at the top-right and blink (looked like "the right
+platform pops in at the wrong spot"); (2) once the alias was hidden, it
+emerged that the *right* platform genuinely never spawned — bare grey
+anchor block. Cause 1 is fixed by WS-CHAIN (below). Cause 2 by the
+WS-SPAWN sweep + WS-SLOT (below the WS-CHAIN section).
+
+### Part 2 — right platform never spawns (sweep gap + reserved-slot starvation)
+
+Ground truth (read the level sprite list at `[$CE]` = `$07:C593`,
+header `$01`; NOTE the project `smw.sfc` is UNHEADERED — file offset =
+`bank*0x8000 + (addr & 0x7FFF)`, no +0x200): the row is three `$5F` at
+level X 4064 / 4336 / 4496, load indices 26/27/28. Two stacked causes:
+
+1. **Spawn-sweep gap.** `LoadSprFromLevel` parses ONE column per run
+   (every other frame) at `cam-0x30` / `cam+0x120` by scroll direction.
+   These are moving sweep *edges*. The original WS-SPAWN shifted the
+   single column outward by `extra`, leaving the strip between the
+   vanilla edge and the widened edge permanently unswept — a sprite
+   erased while its column sits in that strip can never respawn.
+   Vanilla's unshifted edge re-crosses such columns on every camera
+   oscillation (riding a chain platform swings camX in a ~136px cycle).
+   **Fix:** WS-SPAWN now alternates runs between the widened leading
+   edge (first spawns stay beyond the visible margin) and a recovery
+   column rotating across `[vanilla edge .. vanilla edge + extra]`
+   (restores vanilla's coverage; `$1938` load-status dedups).
+2. **Reserved-slot starvation.** Sprite-memory header `$01` reserves
+   `$5F` to slots {6,7} (allocation loop `$02A918` scans
+   `SpriteSlotMax1`=7 down to EXCLUSIVE `SpriteSlotStart1`=5). The
+   level is authored to vanilla despawn windows: vanilla's shallow
+   `$5F` left bound (−0x10) erases the previous platform exactly as
+   the next one's column enters the sweep — the three platforms
+   time-multiplex two slots. WS-DESPAWN's left cushion (−(64+extra))
+   keeps the previous platform alive through the whole swing, so the
+   right platform's allocation failed every attempt (fails clean:
+   `$1938` cleared, re-swept, fails again). **Fix:** WS-SLOT — when
+   allocating a `$5F` and the reserved floor is 5, lower it to 4 so
+   slot 5 (top of the normal range, filled last) is also tried; all
+   three platforms coexist. Injected at every copy of join block
+   `$02A916` (12 sites; the `$5F` guard self-scopes).
+
+**Verified live (save 2, never paused):** all three `$5F` slots
+(5/6/7) status 08 across multiple full swings, no blinking; right
+platform solid (`way=0`) and ridden by Mario (its swing speed ramps
+under him); left neighbor erases/recovers entirely out of view with
+WS-CHAIN hiding its alias-zone tiles.
+
+### Actual root cause (verified live on save2, level $27)
+
+The level has a row of `$5F` platforms 272px apart. Riding one makes the
+camera swing in a circle; the neighbors sit in/near the margins. Three
+interacting facts:
+
+1. **The phantom at the top-right is the LEFT neighbor, 9-bit-wrapped.**
+   With the sprite-x wrap threshold widened to `256+extra` (=327), the
+   representable tile window becomes `[-(256-extra), 255+extra)` mod 512
+   — tiles drawn left of −185 alias into the *visible right margin*
+   (e.g. drawn x −212 presents at +300). Vanilla's threshold 256 covers
+   [−256,255] exactly — no hole. The widened WS-DESPAWN keeps the
+   neighbor alive to nominal scrX −135, and its frozen-pose graphic
+   hangs 0x50+0x28 px further left ≈ −215 → through the hole. Confirmed
+   in the OAM render ring (platform/ball tiles, xhigh=1, 9-bit X
+   dropping below 327 at deep camera swing) and by sprite-table watch
+   (`tools/_ws_chain_probe.py`): slot 7 status `08` at nominal −132 with
+   drawn platform −212. The "vertical chain, platform on top" pose is
+   the *authentic* untouched-platform pose (`InitBrwnChainPlat` angle
+   `$0180`, swing speed `$1504`=0 until ridden); the despawn/respawn
+   blink happens while the alias is presenting → "shows up in the wrong
+   area and then vanishes."
+2. **`$5F` is the one sprite in the ROM that draws without GetDrawInfo**
+   (audit: exactly four `$15C4` stores exist; banks 01/02/03 GetDrawInfo
+   = WS-FLAG-covered, plus the platform's private store at `$01C9EC`).
+   So none of the existing widescreen widening applied to its draw/cull.
+3. **Private interaction window:** `$01C9EC` compares the *drawn*
+   platform screen-x against hardcoded `[-0x10, 0x110)` and skips the
+   Mario-contact check outside it → margin platforms were also
+   non-solid and permanently flagged way-offscreen (`way=1` observed at
+   nominal scrX −1).
+
+### Fix — `/*WS-CHAIN*/` (gated `g_ws_active` + mode 0x14, like all WS)
+
+Injected after the vanilla `$15C4` store in `sub_1C9EC` (bank01):
+- widens the interaction window to `[-(0x10+extra), 0x110+extra)` and
+  rewrites `$15C4`/flags accordingly;
+- closes the alias hole: if any of the sprite's tiles could encode into
+  a visible margin from the far side (`min(plat,center)−0x28 < extra−256`
+  or `max(plat,center)+0x18+15 ≥ 512−extra`), parks all 10 of its OAM
+  tiles (y=0xF0) for the frame. The mirror condition also kills the
+  left-margin "phantom flicker" from a far-right swinging platform.
+  The hide can never blank a partially-visible platform (alias zones
+  and visible margins are >120px apart; the sprite spans ≤160px).
+
+**Verified post-fix:** slot-7 `way` correctly flips 0/1 at the widened
+boundary (−87) while visible in the left margin; deep-left phases show
+all ten tiles parked at y=240 in the OAM render ring; no platform tile
+presents in [256,327) from the alias zone. Never paused (frame counter
+advanced monotonically across all observations).
+
+**Framework invariant worth remembering:** generic sprites are alias-safe
+only because GetDrawInfo's widened cull bounds origin ≥ −(64+extra) and
+no generic SMW sprite draws tiles more than `192−2·extra` px (50px at
+extra=71) left of its origin. Any future custom-draw sprite or larger
+`extra` must re-check this bound (WS-FLAG already clamps extra ≤ 95).
+
+**Side observation (separate issue):** stderr shows
+`[PHANTOM-TRAP HIT] PC=$00EE2D label='RunPlayerBlockCode_00EE1D_unres'
+frame=217` during boot/attract — one of the 41 "verified 0-fire" loud
+stub markers DOES fire. Feed into the recompiler stub campaign.
+
+---
+
+## Session 2026-06-12 — Widescreen: brown chain platform (`$5F`) misbehaves in the margin (SUPERSEDED — see entry above; the "root cause confirmed" below was wrong)
+
+**Status:** OPEN. Ran a live ring-buffer trace (debug server 4377; never
+paused — frame counter advanced throughout). The trace **identified the
+sprite and mechanism** and **falsified two earlier hypotheses**. What
+remains is a controlled 4:3-vs-widescreen comparison to isolate the
+exact widescreen interaction. Tooling: `tools/_ws_oam_trace.py`.
+
+### Verified facts (from the trace)
+- **Sprite is `$5F` "Brown platform on a chain"** (`InitBrwnChainPlat` /
+  `BrownChainedPlat`, `bank_01.asm:9700/9721`) — **not** `$A3`/`GetDrawInfo2`
+  as first theorized. `$A3` never appears in the live sprite ring; the
+  gold-ball (`0xa2`) + wood (`0x60/61/62`) tiles are drawn by `$5F`.
+- These platforms **rotate in world space** around a chain anchor (the
+  grey block). Mario rides one, so the **camera swings in a circle**
+  (camY observed sweeping 84↔192). World positions are therefore
+  identical in 4:3 and widescreen; only **visibility** differs.
+- The off-screen `$5F` instances **spawn/despawn-cycle** as the swinging
+  camera moves them through the spawn/cull windows: sprite status walks
+  `01`(init)→`08`(active)→`00`(despawn)→`01`… on a ~230-frame period
+  (≈160 active / ≈70 gone) — the user's "loads then vanishes over and
+  over."
+- `InitBrwnChainPlat` deliberately offsets the spawn point by +$78 X /
+  +$68 Y, so the init (4064,208)→active (4184,312) jump is **normal**,
+  not a bug.
+- In the OAM-render ring, the margin instance's tiles carry the
+  **correct** widescreen X (xhigh=1, 9-bit X 264–312, i.e. inside the
+  visible right margin < wrap threshold 327). They are hidden only by
+  the **vertical** check `CODE_01C9BF` (`bank_01.asm:7655`, hide when
+  `tileY+0x10-camY ≥ 256`) — which fires/clears with the camera's swing
+  phase, identically in 4:3. So the per-tile Y-hide is **not** the
+  widescreen bug.
+
+### Falsified hypotheses
+1. "`GetDrawInfo2` cull is unwidened." False — its cull store is `$15C4`
+   (== the disassembly's `SpriteWayOffscreenX`), already WS-FLAG-patched
+   at `src/gen/bank02_v2.c:114603`.
+2. "Per-tile x-high is stale/wrong." False — `FinishOAMWrite` recomputes
+   x-high from world coords (`CODE_01B844`); margin X comes out correct.
+
+### Remaining question (for next session / Fable)
+Why does widescreen make these rotating `$5F` platforms look wrong
+("too far right, disconnected from the grey block; phantom flicker")
+when their world positions are widescreen-invariant? Leading theory:
+the **widened spawn/cull windows** (WS-SPAWN/WS-DESPAWN) change *when*
+each rotating instance is live relative to the swinging camera, exposing
+it at the extended margin at swing phases 4:3 crops — possibly with a
+spawn/despawn thrash near a window edge. The circular camera makes
+static spawn-column arithmetic unreliable; isolate with a **controlled
+4:3-vs-widescreen ring comparison at the same save state** (load the
+state with `Widescreen=0` vs `=1`, diff `$5F` status/OAM over a full
+camera revolution). Also check the left-margin wrapped tiles seen in
+the OAM ring (slots ~96–125, xhigh=1 presented negative, tiles
+`0x40/0xea–ec`) as the "phantom flicker" candidate — confirm which
+sprite emits them before theorizing.
+
+### 4:3-vs-widescreen comparison (DONE — root cause confirmed)
+Reloaded the *same* save state with `Widescreen=0` and traced `$5F`
+again (level `$27`, Mario riding the rotating platform, same swing):
+
+- **Two `$5F` platforms are live**, both in 4:3 and widescreen:
+  - **slot 6** = the platform Mario rides. Swings **scrX 136–271**,
+    **always status `08`** (never despawns) — "consistently appears,
+    doesn't vanish." Matches the user's 4:3 observation exactly.
+  - **slot 7** = a **second** brown-chain platform whose swing arc is
+    **scrX 296–419** — entirely **off the right edge of the 256-wide
+    4:3 screen**. Cropped → invisible in 4:3. It status-cycles
+    `08→00→01→08` on a ~230-frame period, despawning only when it
+    swings out past **scrX ~420**.
+- The slot-7 spawn/despawn cycle is **the same in 4:3 and widescreen**
+  (same period, same status sequence). It is **vanilla, world-space
+  behavior** — NOT caused by WS-SPAWN/WS-DESPAWN.
+
+**Root cause (confirmed):** widescreen's wider viewport (right edge
+~327 vs 256) **exposes the [256–327] slice of slot 7's swing arc**. The
+user is watching a *legitimate second platform that 4:3 always cropped*
+swing into the right margin and back out (despawn/respawn happens out at
+scrX ~420, beyond even the widescreen edge). Within the visible margin
+[256,327] slot 7 stays active (`08`), so the despawn isn't firing
+*inside* the view — the platform simply **swings out of frame to the
+right**, which reads as "appears too far right, then vanishes." The
+"disconnected from the grey block" is because slot 7's chain anchor is
+further right still, off-view even in widescreen.
+
+**This is therefore not a position/render/cull defect.** It is the
+widescreen view revealing off-screen game objects the authentic 4:3
+crop hid. Open question for the fix owner (Fable): is slot 7 **intended**
+level geometry (two chain platforms by design — plausible; its worldX is
+~160px right of slot 6), making a visible sliver arguably *correct*
+widescreen behavior; OR should widescreen **suppress off-arc rotating
+platforms in the margin** (e.g. don't present a `$5F` whose swing center
+is beyond the widescreen edge)? That is a widescreen *policy* decision,
+not a recompiler correctness bug — hence the handoff.
+
+Supporting tooling: `tools/_ws_oam_trace.py` (scan/live modes),
+`_ws_oam_snapshot.json`. Reproduce either mode by toggling
+`build/bin-x64-Release/config.ini` `Widescreen` 0/1 and reloading the
+save (saves/save3.sav region).
+
+**Symptom (user-reported, widescreen only — clean in 4:3):** On a level
+with the "3 Platforms on Chain" sprite (sprite `$E0`, which spawns
+"Grey Platform on Chain" `$A3`), the swinging wooden platforms
+misbehave **only when they sit in the extended widescreen margin**:
+- One platform is displaced ~256px **too far to the right** — it should
+  hang connected to its grey-block anchor but renders detached, far
+  right.
+- As it scrolls further it **vanishes entirely**.
+- **Phantom flicker** copies of the platform tiles appear where they
+  don't belong.
+The platform Mario stands on (inside the core 256px viewport) looks
+correct; only the copy out in the margin is wrong. Repro screenshots:
+`C:\Users\Matthew\Documents\ShareX\Screenshots\2026-06\smw_HegED5KQI8.png`
+and `...\smw_9nY7ej2mFa.png`.
+
+**Draw path (confirmed):** `$A3` draws via `FlyingPlatformGfx`
+(`SMWDisX/bank_02.asm:12216`), which calls `GetDrawInfo2`
+(`bank_02.asm:11061`) then finalizes OAM via
+`CODE_02DB44 → CODE_02B7A7 → JSL FinishOAMWrite` (`bank_01.asm:7582`),
+passing `Y=#$FF` (size-flag) and `A=#$03` (4 tiles).
+
+**FALSIFIED hypothesis — "`GetDrawInfo2` is an uncovered draw path."**
+The initial theory was that `GetDrawInfo2` bypasses the WS-FLAG cull
+widening and computes off-screen against the vanilla 256 window.
+Checking the *generated* code disproved it:
+- In the recomp, `GetDrawInfo2`'s body is folded into
+  `GetDrawInfo_Bank23_Recomp_*`. Its cull store writes **`$15C4`**
+  (the disassembly's `SpriteWayOffscreenX` label resolves to `$15C4`,
+  the same address WS-FLAG targets), at `src/gen/bank02_v2.c:114603`
+  (block `0x02D38C`), and **WS-FLAG is already injected there.** So
+  GetDrawInfo2's cull *is* widened to `[-(64+extra), 256+extra)`.
+- `FinishOAMWrite` **recomputes each tile's x-high from world coords**
+  (`CODE_01B844`), independent of the size-buffer byte the draw routine
+  supplied. The `Y=#$FF` path clears x-high then recomputes it; the
+  generic `Y>=0` path does the same recompute. So the platform uses the
+  identical x-high machinery as every sprite that renders correctly.
+In short, the chain platform shares the *same* widened cull and the
+*same* per-tile x-high recompute as ordinary sprites. The simple
+"coverage gap" explanation does not hold.
+
+**Open questions for the next session (runtime, ring buffers — do NOT
+pause):** with the platform misbehaving in the right margin, query the
+VRAM/OAM and WRAM-write rings (and `cpu_trace_ring`) for the `$A3`
+slot and capture, per affected tile:
+- the OAM low-X (`OAMTileXPos+$100`) and finalized x-high bit
+  (`OAMTileSize+$40` bit0) actually written by `FinishOAMWrite`;
+- the sprite world X (`$00E4`/`$14E0`) and camera (`$001A/$1B`) at that
+  frame, vs the runner's widened wrap threshold;
+- whether the displaced/phantom tiles come from this `$A3` sprite at
+  all, or from the chain "balls" / a sibling cluster sprite drawn by a
+  *different* routine (the `$E0` cluster spawns via custom
+  `Load3Platforms`, `bank_02.asm:6211`, not the generic path).
+Confirm the failing element's draw routine before theorizing again —
+the chain links may not be `FlyingPlatformGfx` at all.
+
+---
+
 ## Session 2026-05-28 — Option-1 cpu->S model breaks SMW (two-layer root cause; Layer A fixed, Layer B localized)
 
 **Context:** snesrecomp `main` advanced from pre-Option-1 `fe39fb7` to

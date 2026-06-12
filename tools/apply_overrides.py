@@ -98,17 +98,104 @@ MARKER = "/*WS-OVERRIDE*/"
 # already invisible there. Hysteresis: spawn column -0x30-extra stays
 # inside the shallowest left despawn -(64+extra).
 #
-# WS-SPAWN: shift ParseLevelSpriteList's spawn-trigger column outward by
-# g_ws_extra so sprites spawn beyond the visible widescreen margin
-# instead of materializing inside it. Vanilla parses the level sprite
-# list at column camera-0x30 when scrolling left / camera+0x120 when
-# scrolling right ($55 = 0/2; $5B bit0 = vertical level, left untouched
-# — widescreen is horizontal-only). At the join block $02A828 the column
-# low byte (&0xF0) is in $00 and the high byte is in A; the snippet
-# recomputes both with the widened offset. Hysteresis vs WS-DESPAWN is
-# preserved: both sides move by the same extra (vanilla gap: spawn
-# +0x120 < erase +0x130; spawn -0x30 > erase -0x40). If the widened
-# column would precede the level start (<0) the vanilla column is kept.
+# WS-CHAIN: the brown chained platform ($5F, BrownChainedPlat) is the ONE
+# sprite in the ROM that draws its OAM without GetDrawInfo (audit: exactly
+# four $15C4 SpriteWayOffscreenX stores exist — banks 01/02/03 GetDrawInfo,
+# all WS-FLAG-covered, plus the platform's private store at $01C9EC). Two
+# widescreen defects follow:
+#
+# 1. Interaction window: $01C9EC compares the DRAWN platform screen-x
+#    (BrSwingPlatXPos $14B8 - camera, i.e. up to 0x50+0x28 px away from the
+#    sprite's nominal x) against a hardcoded [-0x10, 0x110) window and
+#    early-returns past the Mario-contact check when outside. In widescreen
+#    a platform visible in either margin is non-solid and flagged
+#    way-offscreen. Widen to [-(0x10+extra), 0x110+extra).
+#
+# 2. 9-bit alias hole: the routine writes raw 8-bit tile x; presentation
+#    reconstructs sign via the x-high bit against the widened wrap
+#    threshold 256+extra, so the representable tile window is
+#    [-(256-extra), 255+extra) mod 512. Vanilla's threshold 256 covers
+#    [-256,255] exactly (no hole), and vanilla geometry keeps this
+#    sprite's tiles >= -160 (despawn at nominal -64, frozen-pose graphic
+#    -0x50-0x28 further left). The WIDENED despawn (-(64+extra)) keeps it
+#    alive with tiles near -(64+extra+0xA8) ~ -215 < -185: those encode as
+#    9-bit 256..326 and present INSIDE the visible right margin — the
+#    user-visible "second platform pops in at the top-right and vanishes"
+#    (it is the frozen LEFT neighbor, wrapped). Mirror case: a swinging
+#    platform far right (tiles >= 512-extra) presents in the left margin
+#    ("phantom flicker"). Fix: after the vanilla store, if any of the
+#    sprite's tiles could encode into a visible margin from the far side,
+#    park all 10 of its OAM tiles (y=0xF0) for this frame. The hide can
+#    never blank a partially-visible platform: the alias zones and the
+#    visible margins are >120px apart and the sprite spans <=160px.
+#
+# Generic sprites stay safe without this: GetDrawInfo's widened cull
+# (WS-FLAG) guarantees origin >= -(64+extra), and no generic SMW sprite
+# draws tiles more than (256-extra)-(64+extra) = 192-2*extra (= 50px at
+# extra=71) left of its origin. The chained platform (0xA8 left) is the
+# sole outlier — hence this patch completes the class.
+#
+# WS-SLOT: give the chained platform ($5F) a third reserved sprite slot
+# in widescreen. Sprite-memory settings with ReservedSprite1 == $5F
+# (header $01/$11) confine $5F to a reserved slot range; the allocation
+# loop at $02A918 scans X = SpriteSlotMax1 (7) down to EXCLUSIVE floor
+# _6 = SpriteSlotStart1 (5), i.e. slots {6,7} only — two simultaneous
+# $5F. Levels are authored to that budget against VANILLA despawn
+# windows: in the level-$097 platform row, vanilla's shallow $5F left
+# bound (-0x10) erases the previous platform exactly as the next one's
+# spawn column enters the parse sweep, time-multiplexing the two slots.
+# WS-DESPAWN's left cushion (-(64+extra)) keeps the previous platform
+# alive through the whole camera swing, permanently starving the next
+# platform's spawn (allocation fails, load-status is cleared, the
+# column is re-swept but the slots are never free) — user-visible as
+# "the right grey block has no platform attached". Re-tightening the
+# bounds would bring back visible blink-out, so instead widen the slot
+# budget: when allocating a $5F and the reserved floor is 5, lower the
+# floor to 4 so the loop also tries slot 5 — three platforms coexist.
+# Slot 5 is the top of the normal-sprite range (normals fill 5 down to
+# 0), so it is only contended when five+ normal sprites are live.
+# Gated like every WS patch; vanilla allocation is untouched when off.
+#
+# WS-SPAWN: widen ParseLevelSpriteList's spawn trigger so sprites spawn
+# beyond the visible widescreen margin instead of materializing inside
+# it. Vanilla parses ONE column per run (every other frame): camera-0x30
+# scrolling left / camera+0x120 scrolling right ($55 = 0/2; $5B bit0 =
+# vertical level, left untouched — widescreen is horizontal-only). At
+# the join block $02A828 the column low byte (&0xF0) is in $00 and the
+# high byte is in A; the snippet recomputes both.
+#
+# A plain outward shift of the single column is NOT enough: the parser
+# is a moving sweep EDGE, and shifting it leaves the strip between the
+# vanilla edge and the widened edge permanently unswept. A sprite that
+# despawns while its column sits in that strip can never respawn unless
+# the camera retreats past it — observed with the $5F chain-platform
+# row in level $097: riding a platform swings the camera in a ~136px
+# oscillation; the next platform's column (cam+165..+311) lies inside
+# the strip forever, so after one early erase the platform is gone for
+# good ("the right grey block has no platform"). Vanilla's unshifted
+# edge re-crosses such columns every camera oscillation and re-spawns
+# them (load-status $1938 dedups sprites that are still alive).
+#
+# So the snippet alternates per parse run (run index = TrueFrame>>1,
+# the routine only runs on even frames):
+#   odd runs  — LEAD: the widened edge (vanilla offset + extra), same
+#               as before; fires every 4 frames, covering sustained
+#               scroll up to 4px/frame (> SMW's max run speed; only
+#               turn-around camera snaps exceed it, where vanilla
+#               itself pops sprites at the screen edge).
+#   even runs — RECOVERY: a column rotating in 16px steps across
+#               [vanilla edge .. vanilla edge + extra], restoring
+#               vanilla's full sweep coverage so stranded-but-
+#               respawnable sprites come back. Re-parses of loaded
+#               sprites are no-ops via $1938.
+# All swept columns stay inside the WS-DESPAWN-widened erase bounds
+# (checked per bounds class, including $5F's +0x78 init displacement,
+# the tightest case: max recovery column +0x120+0x40+15 = cam+0x167 ==
+# its widened erase threshold) so sweep-spawn never insta-erases.
+# Hysteresis vs WS-DESPAWN is preserved: both sides move by the same
+# extra (vanilla gap: spawn +0x120 < erase +0x130; spawn -0x30 > erase
+# -0x40). If the widened column would precede the level start (<0) the
+# vanilla column is kept.
 
 
 def _ws_despawn_patch(anchor_pc, tbl_lo):
@@ -168,10 +255,58 @@ BLOCK_PATCHES = [
             " cpu_write8(cpu,0x7E,(unsigned short)(0x15C4+_wk), _wdraw ? 0 : 1); } }"
         ),
     },
+    {
+        "marker": "/*WS-CHAIN*/",
+        # The brown chained platform's private way-offscreen store at
+        # $01C9EC (see header comment). The $15C4 store line also appears
+        # in GetDrawInfo bodies, so scope to the one recompiled function
+        # that holds block $01C9EC. Appending to the store line places the
+        # snippet after the vanilla store and before the early-return
+        # branch on _flag_Z, so both can be overridden.
+        "func_match": "sub_1C9EC",
+        "anchor": "0x15c4 + (uint32)cpu->X",
+        "snippet": (
+            " /*WS-CHAIN*/ { extern bool g_ws_active; extern int g_ws_extra;"
+            " if (g_ws_active && cpu_read8(cpu,0x7E,0x0100) == 0x14) {"
+            " int _we = g_ws_extra > 95 ? 95 : g_ws_extra;"
+            " int _wcam = cpu_read8(cpu,0x7E,0x001A) | (cpu_read8(cpu,0x7E,0x001B)<<8);"
+            " int _wplat = (int)(short)(unsigned short)((unsigned int)("
+            "(cpu_read8(cpu,0x7E,0x14B8) | (cpu_read8(cpu,0x7E,0x14B9)<<8)) - _wcam) & 0xFFFFu);"
+            " int _wctr = (int)(short)(unsigned short)((unsigned int)("
+            "(cpu_read8(cpu,0x7E,0x14B0) | (cpu_read8(cpu,0x7E,0x14B1)<<8)) - _wcam) & 0xFFFFu);"
+            " int _wkeep = (_wplat >= -(0x10 + _we)) && (_wplat < 0x110 + _we);"
+            " unsigned char _wval = (unsigned char)((_wkeep ? 0 : 1)"
+            " | cpu_read8(cpu,0x7E,(unsigned short)(cpu->D + 0x009d)));"
+            " cpu_write8(cpu,0x7E,(unsigned short)(0x15C4 + (cpu->X & 0xffffu)), _wval);"
+            " cpu_write_a_m(cpu, (uint16)_wval);"
+            " cpu->_flag_Z = (_wval == 0) ? 1 : 0; cpu->_flag_N = 0;"
+            " int _wlo = (_wplat < _wctr ? _wplat : _wctr) - 0x28;"
+            " int _whi = (_wplat > _wctr ? _wplat : _wctr) + 0x18 + 15;"
+            " if (_wlo < _we - 256 || _whi >= 512 - _we) {"
+            " unsigned int _woi = cpu_read8(cpu,0x7E,(unsigned short)(0x15EA + (cpu->X & 0xffffu)));"
+            " for (int _wk = 0; _wk < 10; _wk++)"
+            " cpu_write8(cpu,0x7E,(unsigned short)(0x0301u + _woi + _wk*4u), 0xF0); } } }"
+        ),
+    },
     # WS-DESPAWN (see header comment): one entry per bank copy.
     _ws_despawn_patch(0x01AC7C, 0xAC11),  # SubOffscreen_Bank01_* join + tables
     _ws_despawn_patch(0x02D076, 0xD007),  # SubOffscreen_Bank02_* join + tables
     _ws_despawn_patch(0x03B8A8, 0xB83F),  # SubOffscreen_Bank03_* join + tables
+    {
+        "marker": "/*WS-SLOT*/",
+        # All copies of the allocation join block $02A916 (Parse entries
+        # + the LoadShooter tail copy); the $5F sprite-number condition
+        # self-scopes, shooters are never $5F.
+        "func_match": "",
+        "anchor": "cpu_trace_block(cpu, 0x02A916)",
+        "snippet": (
+            " /*WS-SLOT*/ { extern bool g_ws_active;"
+            " if (g_ws_active && cpu_read8(cpu,0x7E,0x0100) == 0x14"
+            " && cpu_read8(cpu,0x7E,(unsigned short)(cpu->D + 0x0005)) == 0x5F"
+            " && cpu_read8(cpu,0x7E,(unsigned short)(cpu->D + 0x0006)) == 0x05) {"
+            " cpu_write8(cpu,0x7E,(unsigned short)(cpu->D + 0x0006), 0x04); } }"
+        ),
+    },
     # WS-SPAWN (see header comment): bank-02 ParseLevelSpriteList only.
     {
         "marker": "/*WS-SPAWN*/",
@@ -183,8 +318,13 @@ BLOCK_PATCHES = [
             " && !(cpu_read8(cpu,0x7E,0x005B) & 1)) {"
             " unsigned int _wd = cpu_read8(cpu,0x7E,0x0055);"
             " if (_wd == 0 || _wd == 2) {"
+            " unsigned int _wrun = (unsigned int)cpu_read8(cpu,0x7E,0x0014) >> 1;"
+            " int _woff;"
+            " if (_wrun & 1) { _woff = g_ws_extra; }"
+            " else { int _wnc = g_ws_extra / 16 + 1;"
+            " _woff = 16 * (int)((_wrun >> 1) % (unsigned int)_wnc); }"
             " int _wcol = (cpu_read8(cpu,0x7E,0x001A) | (cpu_read8(cpu,0x7E,0x001B)<<8))"
-            " + ((_wd == 0) ? -(0x30 + g_ws_extra) : (0x120 + g_ws_extra));"
+            " + ((_wd == 0) ? -(0x30 + _woff) : (0x120 + _woff));"
             " if (_wcol >= 0) {"
             " cpu_write8(cpu,0x7E,(unsigned short)(cpu->D + 0x0000),"
             " (unsigned char)(_wcol & 0xF0));"
@@ -194,7 +334,8 @@ BLOCK_PATCHES = [
 ]
 
 # Every marker any injection mode can leave behind (prologues + block patches).
-ALL_MARKERS = (MARKER, "/*WS-FLAG*/", "/*WS-DESPAWN*/", "/*WS-SPAWN*/")
+ALL_MARKERS = (MARKER, "/*WS-FLAG*/", "/*WS-DESPAWN*/", "/*WS-SPAWN*/",
+               "/*WS-CHAIN*/", "/*WS-SLOT*/")
 
 
 def strip_injections(text):
