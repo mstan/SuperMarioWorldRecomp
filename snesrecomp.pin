@@ -3,7 +3,14 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = c17bef708054758030682930de03ef65e7a0b0dd
+sha = f63de713d9cf54a789ab8da30298fad2ef9c645b
+# 2026-06-12 bump (c17bef7 -> f63de71): merge feat/shadow-enhancements —
+# opt-in S-DSP cubic audio + CRT color LUT, all default OFF. Adds three
+# framework sources (snes/dsp_shadow.c, snes/audio_shadow.c,
+# snes/color_lut.c) that the runner build must now compile/link; SMW's
+# src/smw.vcxproj is updated in the same commit to include them (the
+# tip was unbuildable against SMW until then). No regen needed — gen
+# output is unchanged; shadow/LUT paths are runtime-gated and off.
 # 2026-06-11 bump (bf64f0d -> c17bef7): docs-only delta
 # (ISSUES.md turbo music-drop note). No code, no regen, no rebuild.
 # Unifies SMW/MMX/ALttP on the runner main tip ahead of the Zelda

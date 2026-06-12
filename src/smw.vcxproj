@@ -206,6 +206,18 @@
       <Optimization Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Disabled</Optimization>
       <Optimization Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Disabled</Optimization>
     </ClCompile>
+    <ClCompile Include="..\snesrecomp\runner\src\snes\dsp_shadow.c">
+      <Optimization Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Disabled</Optimization>
+      <Optimization Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Disabled</Optimization>
+    </ClCompile>
+    <ClCompile Include="..\snesrecomp\runner\src\snes\audio_shadow.c">
+      <Optimization Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Disabled</Optimization>
+      <Optimization Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Disabled</Optimization>
+    </ClCompile>
+    <ClCompile Include="..\snesrecomp\runner\src\snes\color_lut.c">
+      <Optimization Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Disabled</Optimization>
+      <Optimization Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Disabled</Optimization>
+    </ClCompile>
     <ClCompile Include="..\snesrecomp\runner\src\snes\ppu.c">
       <Optimization Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Disabled</Optimization>
       <Optimization Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Disabled</Optimization>
@@ -235,6 +247,7 @@
     <ClInclude Include="..\snesrecomp\runner\src\snes\dma.h" />
     <ClInclude Include="..\snesrecomp\runner\src\snes\dsp.h" />
     <ClInclude Include="..\snesrecomp\runner\src\snes\dsp_regs.h" />
+    <ClInclude Include="..\snesrecomp\runner\src\snes\dsp_shadow.h" />
     <ClInclude Include="..\snesrecomp\runner\src\snes\ppu.h" />
     <ClInclude Include="..\snesrecomp\runner\src\snes\saveload.h" />
     <ClInclude Include="..\snesrecomp\runner\src\snes\snes.h" />
