@@ -1,38 +1,22 @@
-# v0.3.0 — Playable
+# Super Mario World — macOS (Apple Silicon) build
 
-First milestone where the game is **playable** end-to-end from boot through gameplay. Not exhaustively tested, but every step on the golden path works.
+Native arm64 macOS build of Super Mario World, attached to release **v0.8.2** as
+`SuperMarioWorldRecomp-macos-arm64.zip`.
 
-## What works
+## What this is
+- The original game statically recompiled to native arm64 (no emulator core shipped).
+- Self-contained `.app`: SDL2 bundled via `@executable_path`, ad-hoc codesigned.
+- Verified by manual play on Apple Silicon (looks/sounds correct on the golden path).
 
-- **Attract demo** — frame-perfect, no observable drift through full attract loop (carried over from v0.1.0, still holds).
-- **Menu chain** — title → 1-Player Game → file-select (MARIO A/B/C) → intro cutscene → first level — every Start press lands cleanly.
-- **Save persistence** — in-game save writes to `saves/smw.srm` on graceful window close and reloads on next launch. SRAM survives across runs (3-slot file-select restores the player's progress).
-- **Overworld** — Yoshi's Island map renders correctly with proper terrain, paths, level icons, and the player border. Mario can navigate between nodes.
-- **First-world stages** — at least 4 stages playable end-to-end by manual playthrough. No reproducible regressions in the golden path.
-
-## Caveats
-
-- Only the first world has been hand-tested. Worlds 2–7, Star World, Special World, and any switch-palace mechanics are not verified.
-- No automated regression suite for in-game gameplay — verification is human visual play.
-- Building requires a local SMW ROM (CRC checked at startup); CI cannot build.
-
-## Notable fixes since v0.1.0
-
-- **MVN / MVP block-move src/dst swap** — the recompiler was emitting block-moves backwards (RAM→ROM no-op), so the overworld Map16 buffer kept stale `$25` data and the map rendered as repeating fence stripes. Class fix at the lowering level; all 9 MVN/MVP sites now correct. This was the root cause of overworld corruption *and* of Mario being "stuck on an invalid tile" *and* of the wrong-destination on A-press — one bug, three visible symptoms.
-- **TCP screenshot freezing the visible window** — `cmd_screenshot` rebound `g_ppu->renderBuffer` to a local scratch buffer and never restored it. After the first TCP screenshot, every main-loop frame rendered into the scratch and the SDL texture stayed frozen on the last visible image. Save/restore around the rebind.
-- **SRAM read/write routing** — LoROM `$70-$7D` and HiROM `$00-$3F:6000-7FFF` SRAM accesses now route to `g_sram` via the snes9x cart mapping, unblocking the save chain that was previously falling through to invalid `RomPtr` reads.
-- **Leaf exit-(M, X) auto-routing pass 2** — the auto-router now detects multi-variant convergent leaf functions (closes the "cfg-declared entry is non-mutating, other entries mutate" class).
-- **NLR detector case (d)** — handles `PLA*N` at block-start + branching-tail. Caught `HandleMenuCursor_9ACB` and `RunPlayerBlockCode_00EFE8_ReturnsTwice`.
 
 ## Install
+1. Download `SuperMarioWorldRecomp-macos-arm64.zip` from the **v0.8.2** release and unzip.
+2. First launch: right-click `Super Mario World.app` -> Open (ad-hoc signed), or
+   `xattr -dr com.apple.quarantine "Super Mario World.app"`.
+3. ROM not included — supply your own dump: Super Mario World (USA) .sfc dump
+4. Run: `"Super Mario World.app/Contents/MacOS/Super Mario World" /path/to/rom`
 
-1. Extract the zip.
-2. Place a verified Super Mario World ROM (`smw.sfc`) anywhere on disk.
-3. Run `smw.exe`; first launch prompts for the ROM path and caches it in `rom.cfg`.
-4. Saves land in `saves/smw.srm` (created automatically).
-
-## Components in this release
-
-- `smw.exe` — Oracle x64 build (includes the always-on observability rings for debugging; same gameplay path as Release).
-- `SDL2.dll` — required runtime.
-- `keybinds.ini` — default controller mapping.
+## Build it yourself
+`scripts/release-mac.sh` reproduces this artifact (build -> .app -> zip);
+`scripts/release-mac.sh --publish` re-attaches it to the latest release.
+Requires: `brew install cmake ninja sdl2 dylibbundler` on Apple Silicon.
