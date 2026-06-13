@@ -3,7 +3,13 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = 336926404d362c9bdcd5aa0bdc89200741fec0ab
+sha = 26063a0008bc0fe3699de243743054a79f8c636d
+# 2026-06-13 bump (3369264 -> 26063a0): pick up MSU-1 coprocessor support
+# (843f7d3, default-OFF/byte-identical unless SNESRECOMP_MSU1 is set), the
+# permissive multi-hash ROM resolver (f716b4a) and ASCII-only launcher
+# warnings (a887514), plus the MSVC build fix for msu1.c's dir-scan (26063a0,
+# FindFirstFile branch — a887514's <dirent.h> use did not compile on MSVC).
+# smw.vcxproj gains msu1.c. Runner-only, src/gen untouched (no regen).
 # 2026-06-12 bump (f63de71 -> 3369264): ppu widescreen BG3 widen. New opt-in
 # PpuSetWidescreenBg3Widen(ppu, from_y): on scanlines >= from_y, BG3 (layer 2)
 # gets the same side-margin extension as BG1/BG2 instead of staying clamped to

@@ -33,7 +33,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$bin = Join-Path $root 'build\bin-x64-Release'
+$bin = Join-Path $root 'build\bin-x64-Production'
 $out = Join-Path $root 'release'
 New-Item -ItemType Directory -Force $out | Out-Null
 
@@ -72,7 +72,11 @@ function Set-GenState([string]$kind) {
 }
 
 function Invoke-Build {
-  & $MSBuild (Join-Path $root 'smw.sln') /p:Configuration=Release /p:Platform=x64 /m /v:quiet /nologo
+  # Production|x64: the shipped config. SNESRECOMP_TRACE is OFF, so the TCP
+  # debug server and the always-on observability rings (~2 GB of cpu/vram/oam/
+  # frame buffers) are excluded — Release|x64 is the developer/trace build and
+  # must NOT be released.
+  & $MSBuild (Join-Path $root 'smw.sln') /p:Configuration=Production /p:Platform=x64 /m /v:quiet /nologo
   if ($LASTEXITCODE -ne 0) { throw "MSBuild failed ($LASTEXITCODE)" }
 }
 
