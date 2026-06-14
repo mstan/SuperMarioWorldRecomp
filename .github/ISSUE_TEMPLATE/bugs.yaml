@@ -50,15 +50,27 @@ body:
     attributes:
       label: Operating System
       options:
-      - Windows 11
-      - Windows 10 (64bit)
-      - Windows 10 (32bit)
+      - Windows 
       - Linux
-      - macOS 13 (Ventura)
-      - macOS 12 (Monterey)
-      - macOS 11 (Big Sur)
-      - macOS 10.15 (Catalina)
-      - macOS 10.14 (Mojave)
+      - Mac
+    validations:
+      required: true
+  - type: dropdown
+    id: renderer
+    attributes:
+      label: Graphic Renderer
+      options:
+      - SDL
+      - SDL-Software
+      - OpenGL
+    validations:
+      required: true
+  - type: input
+    id: app_version
+    attributes:
+      label: Please type in the game/launcher version you're currently using.
+    validations:
+      required: true
   - type: input
     id: os-distro
     attributes:
