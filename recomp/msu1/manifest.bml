@@ -1,0 +1,110 @@
+unverified
+
+cartridge region=NTSC
+  rom name=program.rom size=0x80000
+  ram name=save.ram size=0x800
+  map id=rom address=00-7f,80-ff:8000-ffff mask=0x8000
+  map id=ram address=70-7f,f0-ff:0000-ffff
+
+  msu1
+    rom name=smw_msu1.msu size=0x0000
+    map id=io address=00-3f,80-bf:2000-2007
+    
+    track number=1 name=smw_msu1-1.pcm
+    track number=2 name=smw_msu1-2.pcm
+    track number=3 name=smw_msu1-3.pcm
+    track number=4 name=smw_msu1-4.pcm
+    track number=5 name=smw_msu1-5.pcm
+    track number=6 name=smw_msu1-6.pcm
+    track number=7 name=smw_msu1-7.pcm
+    track number=8 name=smw_msu1-8.pcm
+    track number=9 name=smw_msu1-9.pcm
+    track number=10 name=smw_msu1-10.pcm
+    track number=11 name=smw_msu1-11.pcm
+    track number=12 name=smw_msu1-12.pcm
+    track number=13 name=smw_msu1-13.pcm
+    track number=14 name=smw_msu1-14.pcm
+    track number=15 name=smw_msu1-15.pcm
+    track number=16 name=smw_msu1-16.pcm
+    track number=17 name=smw_msu1-17.pcm
+    track number=18 name=smw_msu1-18.pcm
+    track number=19 name=smw_msu1-19.pcm
+    track number=20 name=smw_msu1-20.pcm
+    track number=21 name=smw_msu1-21.pcm
+    track number=22 name=smw_msu1-22.pcm
+    track number=23 name=smw_msu1-23.pcm
+    track number=24 name=smw_msu1-24.pcm
+    track number=25 name=smw_msu1-25.pcm
+    track number=26 name=smw_msu1-26.pcm
+    track number=27 name=smw_msu1-27.pcm
+    track number=28 name=smw_msu1-28.pcm
+    track number=29 name=smw_msu1-29.pcm
+    track number=30 name=smw_msu1-30.pcm
+    track number=31 name=smw_msu1-31.pcm
+    track number=32 name=smw_msu1-32.pcm
+    track number=33 name=smw_msu1-33.pcm
+    track number=34 name=smw_msu1-34.pcm
+    track number=35 name=smw_msu1-35.pcm
+    track number=36 name=smw_msu1-36.pcm
+    track number=37 name=smw_msu1-37.pcm
+    track number=38 name=smw_msu1-38.pcm
+    track number=39 name=smw_msu1-39.pcm
+    track number=40 name=smw_msu1-40.pcm
+    track number=41 name=smw_msu1-41.pcm
+
+unverified
+
+board region=ntsc
+  rom name=program.rom size=0x80000
+    map address=00-7f,80-ff:8000-ffff mask=0x8000
+  ram name=save.ram size=0x800
+    map address=70-7f,f0-ff:0000-ffff
+
+  msu1
+    rom name=smw_msu1.msu size=0x0000
+    map address=00-3f,80-bf:2000-2007
+    
+    track number=1 name=smw_msu1-1.pcm
+    track number=2 name=smw_msu1-2.pcm
+    track number=3 name=smw_msu1-3.pcm
+    track number=4 name=smw_msu1-4.pcm
+    track number=5 name=smw_msu1-5.pcm
+    track number=6 name=smw_msu1-6.pcm
+    track number=7 name=smw_msu1-7.pcm
+    track number=8 name=smw_msu1-8.pcm
+    track number=9 name=smw_msu1-9.pcm
+    track number=10 name=smw_msu1-10.pcm
+    track number=11 name=smw_msu1-11.pcm
+    track number=12 name=smw_msu1-12.pcm
+    track number=13 name=smw_msu1-13.pcm
+    track number=14 name=smw_msu1-14.pcm
+    track number=15 name=smw_msu1-15.pcm
+    track number=16 name=smw_msu1-16.pcm
+    track number=17 name=smw_msu1-17.pcm
+    track number=18 name=smw_msu1-18.pcm
+    track number=19 name=smw_msu1-19.pcm
+    track number=20 name=smw_msu1-20.pcm
+    track number=21 name=smw_msu1-21.pcm
+    track number=22 name=smw_msu1-22.pcm
+    track number=23 name=smw_msu1-23.pcm
+    track number=24 name=smw_msu1-24.pcm
+    track number=25 name=smw_msu1-25.pcm
+    track number=26 name=smw_msu1-26.pcm
+    track number=27 name=smw_msu1-27.pcm
+    track number=28 name=smw_msu1-28.pcm
+    track number=29 name=smw_msu1-29.pcm
+    track number=30 name=smw_msu1-30.pcm
+    track number=31 name=smw_msu1-31.pcm
+    track number=32 name=smw_msu1-32.pcm
+    track number=33 name=smw_msu1-33.pcm
+    track number=34 name=smw_msu1-34.pcm
+    track number=35 name=smw_msu1-35.pcm
+    track number=36 name=smw_msu1-36.pcm
+    track number=37 name=smw_msu1-37.pcm
+    track number=38 name=smw_msu1-38.pcm
+    track number=39 name=smw_msu1-39.pcm
+    track number=40 name=smw_msu1-40.pcm
+    track number=41 name=smw_msu1-41.pcm
+    
+information
+  title: Super Mario World (USA)

@@ -61,7 +61,12 @@ typedef struct Config {
   // authentic centered HUD.
   bool widescreen_hud;
   bool display_perf_title;
-  bool disable_frame_delay;
+
+  // MSU-1 streamed audio. Off by default (authentic SPC audio). When enabled
+  // and msu1_dir holds a pack, the launcher exports SNESRECOMP_MSU1 so the
+  // runtime streams the .pcm tracks. Persisted to config.ini [Sound].
+  bool msu1_enabled;
+  char msu1_dir[512];
 
   char *memory_buffer;
   const char *shader;
@@ -97,5 +102,9 @@ enum {
 extern Config g_config;
 
 void ParseConfigFile(const char *filename);
+// Persist the launcher-editable settings back into `filename` (or config.ini)
+// with a surgical, comment-preserving in-place update. Called after the GUI
+// launcher returns PLAY so the chosen settings survive the next boot.
+void WriteConfigFile(const char *filename);
 int FindCmdForSdlKey(SDL_Keycode code, SDL_Keymod mod);
 int FindCmdForGamepadButton(int button, uint32 modifiers);

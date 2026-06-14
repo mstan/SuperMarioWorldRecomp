@@ -3,7 +3,12 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = 26063a0008bc0fe3699de243743054a79f8c636d
+sha = 2ae1488ef808cdd87bd9c6fa8fa7d63a33beccc6
+# 2026-06-13 bump (26063a0 -> 2ae1488): add the shared RmlUi pre-boot
+# launcher module (runner/src/launcher/) + RmlUi/FreeType submodules.
+# Companion SMW side wires the launcher (smw.vcxproj, main.c GameInfo,
+# config WriteConfigFile) and bundles the SMW MSU-1 driver. Runner-only
+# for the engine; src/gen untouched (the launcher needs no regen).
 # 2026-06-13 bump (3369264 -> 26063a0): pick up MSU-1 coprocessor support
 # (843f7d3, default-OFF/byte-identical unless SNESRECOMP_MSU1 is set), the
 # permissive multi-hash ROM resolver (f716b4a) and ASCII-only launcher

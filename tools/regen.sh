@@ -59,8 +59,23 @@ ROM="smw.sfc"
 
 step() { echo; echo "=== $* ==="; }
 
+# MSU-1: the build is recompiled from an MSU-1-patched ROM (Conn's audio-only
+# SMW MSU-1 patch injects the driver into bank $04 freespace; recomp/bank04.cfg
+# emits it). We apply the bundled IPS to the user's STOCK rom in a throwaway
+# file — the user never patches anything, and at runtime still uses their stock
+# ROM (the launcher applies the same patch beside it). See recomp/msu1/.
+MSU_IPS="recomp/msu1/smw_msu.ips"
+GEN_ROM="$ROM"
+if [ -f "$MSU_IPS" ]; then
+  PATCHED_ROM=".build/smw_msu1.sfc"
+  mkdir -p "$(dirname "$PATCHED_ROM")"
+  step "Applying MSU-1 patch (Conn, audio-only — recomp/msu1/)"
+  python tools/apply_msu_patch.py --rom "$ROM" --ips "$MSU_IPS" --out "$PATCHED_ROM"
+  GEN_ROM="$PATCHED_ROM"
+fi
+
 step "Regenerating 9 banks"
-python snesrecomp/tools/v2_regen.py --rom "$ROM" \
+python snesrecomp/tools/v2_regen.py --rom "$GEN_ROM" \
     --cfg-dir recomp --out-dir src/gen
 
 step "Syncing funcs.h"
@@ -71,7 +86,7 @@ if [ "$STRICT_IDEMPOTENT" -eq 1 ]; then
   step "Idempotency check: regen into temp dir + byte-diff"
   TMP_GEN="$(mktemp -d)"
   trap 'rm -rf "$TMP_GEN"' EXIT
-  python snesrecomp/tools/v2_regen.py --rom "$ROM" \
+  python snesrecomp/tools/v2_regen.py --rom "$GEN_ROM" \
       --cfg-dir recomp --out-dir "$TMP_GEN"
   drift_count=0
   for b in "${BANKS[@]}"; do

@@ -31,6 +31,9 @@
 #endif
 
 #include "launcher.h"
+#if defined(SNES_LAUNCHER)
+#include "launcher/launcher_capi.h"
+#endif
 #include "keybinds.h"
 
 typedef struct GamepadInfo {
@@ -702,9 +705,107 @@ int main(int argc, char** argv) {
    * CRC32 of Super Mario World (USA), unheadered 512KB. The launcher
    * skips a 512-byte SMC copier header automatically before hashing,
    * so headered and unheadered dumps both verify against this value. */
-  static char rom_path_buf[512];
+  static char rom_path_buf[1024];
+  static const uint32_t kSmwUsaCrc32 = 0xB19ED489u;
+  int rom_resolved_by_launcher = 0;
+
+#if defined(SNES_LAUNCHER)
+  /* GUI launcher: pick/verify ROM + tune settings before boot. Skipped for
+   * headless/scripted paths (--paused/--script/--framedump), an explicit
+   * positional ROM, or SNESRECOMP_NO_LAUNCHER. On UNAVAILABLE it falls through
+   * to the console resolver below. */
   {
-    static const uint32_t kSmwUsaCrc32 = 0xB19ED489u;
+    int headless = start_paused || (script_file != NULL) || (framedump_dir != NULL);
+    int have_positional = (argc >= 1 && argv[0] && argv[0][0] != '-' && argv[0][0] != '\0');
+    const char *no_launcher = getenv("SNESRECOMP_NO_LAUNCHER");
+    if (!headless && !have_positional && !(no_launcher && *no_launcher)) {
+      SnesLauncherCSettings ls;
+      memset(&ls, 0, sizeof(ls));
+      ls.output_method = g_config.output_method;
+      ls.window_scale  = g_config.window_scale ? g_config.window_scale : 2;
+      ls.fullscreen    = g_config.fullscreen;
+      ls.ignore_aspect = g_config.ignore_aspect_ratio;
+      ls.linear_filter = g_config.linear_filtering;
+      ls.widescreen    = g_config.widescreen;
+      ls.widescreen_hud= g_config.widescreen_hud;
+      ls.enable_audio  = g_config.enable_audio;
+      ls.audio_freq    = g_config.audio_freq;
+      ls.volume        = 100;
+      ls.player_src[0] = g_config.enable_gamepad[0] ? 2 : ((g_config.has_keyboard_controls & 1) ? 1 : 1);
+      ls.player_src[1] = g_config.enable_gamepad[1] ? 2 : ((g_config.has_keyboard_controls & 2) ? 1 : 0);
+      ls.deadzone[0] = ls.deadzone[1] = 30;
+      ls.msu1_enabled = g_config.msu1_enabled;
+      snprintf(ls.msu1_dir, sizeof(ls.msu1_dir), "%s", g_config.msu1_dir);
+
+      char init_rom[1024]; init_rom[0] = '\0';
+      {
+        FILE *rc = fopen("rom.cfg", "r");
+        if (rc) {
+          if (fgets(init_rom, sizeof(init_rom), rc)) {
+            size_t l = strlen(init_rom);
+            while (l && (init_rom[l-1] == '\n' || init_rom[l-1] == '\r')) init_rom[--l] = '\0';
+          }
+          fclose(rc);
+        }
+      }
+
+      SnesLauncherCGameInfo gi;
+      memset(&gi, 0, sizeof(gi));
+      gi.name = "Super Mario World";
+      gi.region = "(USA)";
+      gi.expected_crc = kSmwUsaCrc32;
+      gi.has_expected_crc = 1;
+      gi.widescreen_supported = 1;
+      /* MSU-1: the shipped build is recompiled from Conn's audio-only SMW
+       * MSU-1 patch (driver baked into bank $04 — see recomp/msu1/). It runs
+       * on the stock ROM: with no pack present the driver replays native SPC
+       * audio (authentic); drop a matching PCM pack + enable MSU-1 in Settings
+       * to stream it. No runtime ROM patching needed (driver is in the C). */
+      gi.msu1_supported = 1;
+      gi.msu1_note = "Uses the audio-only \"SMW MSU-1\" patch (zeldix t1436). "
+                     "PCM packs must be built for THIS patch \xE2\x80\x94 packs for "
+                     "SMW MSU+ or Plus Ultra will not line up.";
+
+      int act = snes_launcher_run_window("Super Mario World \xE2\x80\x94 Launcher",
+                                         &ls, &gi, "launcher", init_rom,
+                                         rom_path_buf, sizeof(rom_path_buf));
+      if (act == 1) return 0;  /* user closed the launcher */
+      if (act == 0) {
+        g_config.output_method       = (uint8)ls.output_method;
+        g_config.window_scale        = (uint8)ls.window_scale;
+        g_config.fullscreen          = (uint8)ls.fullscreen;
+        g_config.ignore_aspect_ratio = ls.ignore_aspect != 0;
+        g_config.linear_filtering    = ls.linear_filter != 0;
+        g_config.widescreen          = ls.widescreen != 0;
+        g_config.widescreen_hud      = ls.widescreen_hud != 0;
+        g_config.enable_audio        = true;  /* audio is always on; MSU-1 vs SPC is the toggle */
+        g_config.audio_freq          = (uint16)ls.audio_freq;
+        g_config.enable_gamepad[0]   = ls.player_src[0] == 2;
+        g_config.enable_gamepad[1]   = ls.player_src[1] == 2;
+        g_config.has_keyboard_controls =
+            (uint8)((ls.player_src[0] == 1 ? 1 : 0) | (ls.player_src[1] == 1 ? 2 : 0));
+        g_config.msu1_enabled = ls.msu1_enabled != 0;
+        snprintf(g_config.msu1_dir, sizeof(g_config.msu1_dir), "%s", ls.msu1_dir);
+        if (g_config.msu1_enabled && g_config.msu1_dir[0]) {
+          static char msu_env[600];
+          snprintf(msu_env, sizeof(msu_env), "SNESRECOMP_MSU1=%s", g_config.msu1_dir);
+          _putenv(msu_env);
+        }
+        /* Persist the launcher's choices so they're remembered next boot. */
+        WriteConfigFile(config_file);
+        if (rom_path_buf[0]) {
+          FILE *rc = fopen("rom.cfg", "w");
+          if (rc) { fprintf(rc, "%s\n", rom_path_buf); fclose(rc); }
+          rom_resolved_by_launcher = 1;
+        }
+      }
+      /* act == 2 (unavailable) -> console resolver below */
+    }
+  }
+#endif
+
+  /* Resolve the SNES ROM path: argv[0] -> rom.cfg cache -> file picker. */
+  if (!rom_resolved_by_launcher) {
     char *la_argv[2] = {
       (char *)"smw",
       (char *)((argc >= 1 && argv[0]) ? argv[0] : "")
@@ -721,6 +822,11 @@ int main(int argc, char** argv) {
   resolved_argv[1] = NULL;
   argv = resolved_argv;
   argc = 1;
+
+  /* Let MSU-1 derive its pack base from the ROM name when SNESRECOMP_MSU1=auto
+   * (the launcher normally passes the pack folder explicitly, which msu1.c also
+   * resolves). Harmless when MSU-1 is disabled. */
+  { extern void msu1_set_rom_path(const char *); msu1_set_rom_path(rom_path_buf); }
 
   // Initialize debug server
   {
@@ -1073,7 +1179,11 @@ error_reading:;
     // if vsync isn't working, delay manually
     curTick = SDL_GetTicks();
 
-    if (!g_snes->disableRender && !g_config.disable_frame_delay) {
+    /* Frame-delay pacing is always on: it locks the loop to ~60 fps so audio
+     * (SPC + MSU-1, both produced at 1/60 s per frame) stays in sync with the
+     * sound device. The old DisableFrameDelay option removed it and broke audio
+     * on any non-60 Hz / vsync-quirky display, so it was dropped. */
+    if (!g_snes->disableRender) {
       static const uint8 delays[3] = { 17, 17, 16 }; // 60 fps
       lastTick += delays[frameCtr % 3];
 
@@ -1396,10 +1506,6 @@ static const char kDefaultConfigIniContent[] =
   "[General]\n"
   "# Automatically save state on quit and reload on start\n"
   "Autosave = 0\n"
-  "\n"
-  "# Disable the SDL_Delay that happens each frame (slightly better\n"
-  "# perf if your display is set to exactly 60hz)\n"
-  "DisableFrameDelay = 0\n"
   "\n"
   "[Graphics]\n"
   "# Window size (Auto or WidthxHeight)\n"

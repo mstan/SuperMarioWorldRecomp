@@ -149,6 +149,43 @@ framework, or otherwise need to re-run the recompiler:
 `tools/` and notes in `docs/` for the current shape, but expect them
 to drift.)
 
+## MSU-1 audio
+
+This build supports [MSU-1](https://sneslab.net/wiki/MSU1) — CD-quality
+streaming music in place of the SPC soundtrack — using your **stock** SMW
+(USA) ROM.
+
+**You don't patch anything.** The MSU-1 driver is **Conn's "Super Mario
+World MSU-1"** patch (the *audio-only* music-replacement patch — no gameplay
+changes). The regen step applies the bundled patch
+([`recomp/msu1/`](recomp/msu1/)) to a throwaway copy of your stock ROM and
+recompiles the driver into the binary, so at runtime you just load your stock
+ROM: no pack → authentic SPC audio; matching pack + MSU-1 enabled → streamed
+music. Sound effects always stay on the SPC.
+
+**Enable it** in the launcher (Settings → Audio → MSU-1), then drop a pack in
+the MSU-1 folder (defaults to `msu/` next to the exe). Or headless:
+
+```sh
+SNESRECOMP_MSU1=/path/to/smw_msu_pack  smw.exe smw.sfc
+```
+
+> ⚠ **There are three different SMW MSU-1 patches, and their PCM packs are NOT
+> interchangeable.** We use **"SMW MSU-1"** (Conn, audio-only —
+> [zeldix t1436](https://www.zeldix.net/t1436-super-mario-world-native)). A pack
+> built for **SMW MSU+** ([t1437](https://www.zeldix.net/t1437-super-mario-world-msu))
+> or **SMW MSU-1 Plus Ultra** ([t2535](https://www.zeldix.net/t2535-super-mario-world-msu-1-plus-ultra-130-tracks-total))
+> will play the wrong tracks. Use a pack made for the audio-only "SMW MSU-1"
+> patch.
+
+### Thanks
+
+The MSU-1 driver is **not** ours — it's **Conn's** Super Mario World MSU-1
+patch (with thanks to Ikari_01, EmuandCo, Kiddo and the SMW Central / Zeldix
+MSU-1 community), shared freely. We bundle it with gratitude; full credit and
+the which-patch / pack-matching details are in
+[`recomp/msu1/ATTRIBUTION.md`](recomp/msu1/ATTRIBUTION.md).
+
 ## Repo layout
 
 - `src/` — runtime C (CPU state, runtime helpers, hand-written

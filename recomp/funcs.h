@@ -15,7 +15,7 @@
 
 #include "cpu_state.h"
 
-/* 1938 functions across all banks (5 decls each). */
+/* 1943 functions across all banks (5 decls each). */
 
 void I_RESET(CpuState *cpu);  /* $00:8000 alias */
 RecompReturn I_RESET_M0X0(CpuState *cpu);
@@ -7407,6 +7407,31 @@ RecompReturn OwEventProcess01_DestroyTileAnimation_04EEAA_M0X0(CpuState *cpu);
 RecompReturn OwEventProcess01_DestroyTileAnimation_04EEAA_M0X1(CpuState *cpu);
 RecompReturn OwEventProcess01_DestroyTileAnimation_04EEAA_M1X0(CpuState *cpu);
 RecompReturn OwEventProcess01_DestroyTileAnimation_04EEAA_M1X1(CpuState *cpu);
+void Msu1_Main(CpuState *cpu);  /* $04:EF46 alias */
+RecompReturn Msu1_Main_M0X0(CpuState *cpu);
+RecompReturn Msu1_Main_M0X1(CpuState *cpu);
+RecompReturn Msu1_Main_M1X0(CpuState *cpu);
+RecompReturn Msu1_Main_M1X1(CpuState *cpu);
+void Msu1_TrackLoop(CpuState *cpu);  /* $04:EFCE alias */
+RecompReturn Msu1_TrackLoop_M0X0(CpuState *cpu);
+RecompReturn Msu1_TrackLoop_M0X1(CpuState *cpu);
+RecompReturn Msu1_TrackLoop_M1X0(CpuState *cpu);
+RecompReturn Msu1_TrackLoop_M1X1(CpuState *cpu);
+void Msu1_PauseMSU(CpuState *cpu);  /* $04:F0F2 alias */
+RecompReturn Msu1_PauseMSU_M0X0(CpuState *cpu);
+RecompReturn Msu1_PauseMSU_M0X1(CpuState *cpu);
+RecompReturn Msu1_PauseMSU_M1X0(CpuState *cpu);
+RecompReturn Msu1_PauseMSU_M1X1(CpuState *cpu);
+void Msu1_FadeScreen(CpuState *cpu);  /* $04:F111 alias */
+RecompReturn Msu1_FadeScreen_M0X0(CpuState *cpu);
+RecompReturn Msu1_FadeScreen_M0X1(CpuState *cpu);
+RecompReturn Msu1_FadeScreen_M1X0(CpuState *cpu);
+RecompReturn Msu1_FadeScreen_M1X1(CpuState *cpu);
+void Msu1_FadeMusic(CpuState *cpu);  /* $04:F131 alias */
+RecompReturn Msu1_FadeMusic_M0X0(CpuState *cpu);
+RecompReturn Msu1_FadeMusic_M0X1(CpuState *cpu);
+RecompReturn Msu1_FadeMusic_M1X0(CpuState *cpu);
+RecompReturn Msu1_FadeMusic_M1X1(CpuState *cpu);
 void DrawFlyingSwitchBlocks(CpuState *cpu);  /* $04:F290 alias */
 RecompReturn DrawFlyingSwitchBlocks_M0X0(CpuState *cpu);
 RecompReturn DrawFlyingSwitchBlocks_M0X1(CpuState *cpu);
