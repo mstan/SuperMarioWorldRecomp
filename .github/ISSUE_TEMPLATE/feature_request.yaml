@@ -4,6 +4,24 @@ description: Suggest a new feature for the launcher
 labels: ["Enhancement / Feature Request"]
 
 body:
+  - type: checkboxes
+    id: duplicate_check
+    attributes:
+      label: Duplicate Check
+      description: Please make sure this is not a duplicate issue.
+      options:
+        - label: I have searched the existing issues (including closed ones) and this is not a duplicate.
+          required: true
+  - type: dropdown
+    id: launcherorgame
+    attributes:
+      label: Game or Launcher
+      description: "Select the one that is related to the feature."
+      options:
+      - Launcher
+      - Game
+    validations:
+      required: true
   - type: textarea
     id: desc
     attributes:
