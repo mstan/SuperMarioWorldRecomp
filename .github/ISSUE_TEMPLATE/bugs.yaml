@@ -1,15 +1,20 @@
 # Docs - https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/syntax-for-githubs-form-schema
 name: Bug Report
-description: Report any bugs related to the game or the launcher
+description: Report any bugs related to the game or the launcher.
 labels: [bug]
 # assignees:
 #   - octocat
 body:
+- type: checkboxes
+  attributes:
+    options:
+    - ✅
+    - label: I have checked the gh for dupes
   - type: dropdown
     id: launcherorgame
     attributes:
-      label: Game or Launcher?
-      description: "Select which one is related to the issue"
+      label: Game or Launcher
+      description: "Select the one that is related to the issue."
       options:
       - Launcher
       - Game
@@ -18,29 +23,15 @@ body:
   - type: textarea
     id: desc
     attributes:
-      label: Describe the Bug
-      description: "A clear explanation or description of what the bug is"
-    validations:
-      required: true
-  - type: textarea
-    id: repro
-    attributes:
-      label: Reproduction Steps
-      description: "Steps to reproduce the behavior"
+      label: Describe the Bug and Reproduction Steps
+      description: "A clear explanation or description of what the bug is and how to reproduce it."
     validations:
       required: true
   - type: textarea
     id: expect
     attributes:
       label: Expected Behavior
-      description: "A clear explanation or description of what you expected to happen"
-    validations:
-      required: true
-  - type: textarea
-    id: actual
-    attributes:
-      label: Actual Behavior
-      description: "A clear explanation or description of what actually happens instead"
+      description: "A clear explanation or description of is expected to happen."
     validations:
       required: true
   - type: dropdown
@@ -57,18 +48,18 @@ body:
       - macOS 11 (Big Sur)
       - macOS 10.15 (Catalina)
       - macOS 10.14 (Mojave)
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: "Screenshots"
+      description: |
+        Screenshots and images to help with the context of the issue.
+    validations:
+      required: false
   - type: input
     id: os-distro
     attributes:
       label: If Linux - Specify Distro And Debian Landmark
       placeholder: "Example: Arch/Buster/Bookworm/Rex/etc"
-    validations:
-      required: false
-  - type: textarea
-    id: logsDumps
-    attributes:
-      label: "Screenshots"
-      description: |
-        Screenshots and images to help with the context of the issue.
     validations:
       required: false
