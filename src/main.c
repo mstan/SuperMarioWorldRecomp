@@ -835,7 +835,7 @@ int main(int argc, char** argv) {
       memset(&gi, 0, sizeof(gi));
       gi.name = "Super Mario World";
       gi.region = "(USA)";
-      gi.sram_path = "saves/smw.srm";  /* matches kSmwGameInfo.title for the SAVES panel */
+      gi.sram_path = "saves/save.srm";  /* generic SRAM path (RtlReadSram migrates legacy) */
       gi.expected_crc = kSmwUsaCrc32;
       gi.has_expected_crc = 1;
       gi.widescreen_supported = 1;
