@@ -686,6 +686,14 @@ int main(int argc, char** argv) {
   }
   if (!config_file)
     EnsureConfigIni();
+  /* Pin config.ini to the exe directory for all reads/writes, regardless of the
+   * current working directory (defense in depth with snesrecomp_anchor_to_exe_dir
+   * above + OFN_NOCHANGEDIR on the file dialogs). EnsureConfigIni already created
+   * it next to the exe; this keeps a stray chdir from relocating later writes. */
+  static char config_exe_path[1024];
+  if (!config_file &&
+      snesrecomp_exe_dir_path("config.ini", config_exe_path, sizeof(config_exe_path)))
+    config_file = config_exe_path;
   ParseConfigFile(config_file);
   // Apply local overrides if present (gitignored). Lets a developer
   // mute audio etc. without touching the checked-in config.ini. Last
