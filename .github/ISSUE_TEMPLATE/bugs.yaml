@@ -5,14 +5,13 @@ labels: [bug]
 # assignees:
 #   - octocat
 body:
-- type: checkboxes
+  - type: checkboxes
     id: duplicate_check
     attributes:
       label: Duplicate Check
       description: Please make sure this is not a duplicate issue.
       options:
         - label: I have searched the existing issues (including closed ones) and this is not a duplicate.
-    validations:
           required: true
   - type: dropdown
     id: launcherorgame
