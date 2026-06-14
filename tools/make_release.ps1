@@ -28,7 +28,7 @@ Usage: powershell -File tools\make_release.ps1 -Version 0.9.0
 param(
   [Parameter(Mandatory = $true)][string]$Version,
   [string]$MSBuild = 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe',
-  [int]$ExpectedInjections = 91
+  [int]$ExpectedInjections = 95
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot

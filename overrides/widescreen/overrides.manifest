@@ -15,3 +15,9 @@
 #
 # GetDrawInfo off-screen flag computation (smw_02, the >=256 / 0x180 checks):
 #   GetDrawInfo                   -> Override_GetDrawInfo
+#
+# Mario fireball (extended sprite) draws its OAM directly with a private 4:3 cull
+# that deletes the sprite at the screen edge (bypassing GetDrawInfo/WS-FLAG).
+# Override widens the horizontal keep window to [-extra, 256+extra) and sets the
+# OAM x-high bit in the margins. Body in fireball.c. See its header comment.
+GenericExtendedSpriteGFXRt_FireballEntry -> Override_FireballGfx
