@@ -1,11 +1,18 @@
 # Docs - https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/syntax-for-githubs-form-schema
-name: Launcher Bug Report
-description: Found a bug or issue with the launcher? Sumbit it here!
-title: "[BUG]: "
+name: Bug Report
+description: Report any bugs related to the game or the launcher
 labels: [Bug]
 # assignees:
 #   - octocat
 body:
+  - type: dropdown
+    id: launcherorgame
+    attributes:
+      label: Game or Launcher?
+      description: "Select which one is related to the issue"
+      options:
+      - Launcher
+      - Game
   - type: textarea
     id: desc
     attributes:
