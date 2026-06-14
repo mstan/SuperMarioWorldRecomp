@@ -34,9 +34,17 @@ body:
     id: expect
     attributes:
       label: Expected Behavior
-      description: "A clear explanation or description of is expected to happen."
+      description: "A clear explanation or description of what is expected to happen."
     validations:
       required: true
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: "Footage of the Bug"
+      description: |
+        Footage of the bug that's happening in the game or the launcher itself.
+    validations:
+      required: false
   - type: dropdown
     id: os
     attributes:
@@ -51,14 +59,6 @@ body:
       - macOS 11 (Big Sur)
       - macOS 10.15 (Catalina)
       - macOS 10.14 (Mojave)
-  - type: textarea
-    id: screenshots
-    attributes:
-      label: "Screenshots"
-      description: |
-        Screenshots and images to help with the context of the issue.
-    validations:
-      required: false
   - type: input
     id: os-distro
     attributes:
