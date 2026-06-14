@@ -1,0 +1,80 @@
+# Docs - https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/syntax-for-githubs-form-schema
+name: Bug Report
+description: Report any bugs related to the game or the launcher.
+labels: [bug]
+# assignees:
+#   - octocat
+body:
+  - type: checkboxes
+    id: duplicate_check
+    attributes:
+      label: Duplicate Check
+      description: Please make sure this is not a duplicate issue.
+      options:
+        - label: I have searched the existing issues (including closed ones) and this is not a duplicate.
+          required: true
+  - type: dropdown
+    id: launcherorgame
+    attributes:
+      label: Game or Launcher
+      description: "Select the one that is related to the issue."
+      options:
+      - Launcher
+      - Game
+    validations:
+      required: true
+  - type: textarea
+    id: desc
+    attributes:
+      label: Describe the Bug and Reproduction Steps
+      description: "A clear explanation or description of what the bug is and how to reproduce it."
+    validations:
+      required: true
+  - type: textarea
+    id: expect
+    attributes:
+      label: Expected Behavior
+      description: "A clear explanation or description of what is expected to happen."
+    validations:
+      required: true
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: "Footage of the Bug"
+      description: |
+        Footage of the bug that's happening in the game or the launcher itself.
+    validations:
+      required: false
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+      - Windows 
+      - Linux
+      - Mac
+    validations:
+      required: true
+  - type: dropdown
+    id: renderer
+    attributes:
+      label: Graphic Renderer
+      options:
+      - SDL
+      - SDL-Software
+      - OpenGL
+    validations:
+      required: true
+  - type: input
+    id: app_version
+    attributes:
+      label: Please type in the game/launcher version you're currently using.
+    validations:
+      required: true
+  - type: input
+    id: os-distro
+    attributes:
+      label: If OS is Linux - Specify Distro And Debian Landmark
+      placeholder: "Example: Arch/Buster/Bookworm/Rex/etc"
+    validations:
+      required: false

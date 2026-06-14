@@ -1,0 +1,48 @@
+# Docs - https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/syntax-for-githubs-form-schema
+name: Feature request
+description: Suggest a new feature for the game or the launcher.
+labels: [enhancement]
+
+body:
+  - type: checkboxes
+    id: duplicate_check
+    attributes:
+      label: Duplicate Check
+      description: Please make sure this is not a duplicate issue.
+      options:
+        - label: I have searched the existing issues (including closed ones) and this is not a duplicate.
+          required: true
+  - type: dropdown
+    id: launcherorgame
+    attributes:
+      label: Game or Launcher
+      description: "Select the one that is related to the feature."
+      options:
+      - Launcher
+      - Game
+    validations:
+      required: true
+  - type: textarea
+    id: desc
+    attributes:
+      label: Description
+      description: |
+        What feature/enhancement do you want?
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Behavior
+      description: |
+        How is this feature/enhancement going to work or behave?
+    validations:
+      required: true
+  - type: textarea
+    id: examples
+    attributes:
+      label: Examples
+      description: |
+        Provide some examples and if possible, videos or screenshots to show how your wanted feature exactly works.
+    validations:
+      required: false

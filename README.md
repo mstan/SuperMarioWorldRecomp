@@ -226,6 +226,10 @@ reverse-engineering and emulation work, and we're grateful for it:
 See the [snesrecomp framework](https://github.com/mstan/snesrecomp)
 README for the full framework-side attribution.
 
+## Discord
+
+https://discord.gg/S4MvUGQFwd
+
 ## License
 
 Not yet declared. Code in this repo is original except where noted in
