@@ -1,7 +1,7 @@
 # Docs - https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/syntax-for-githubs-form-schema
 name: Feature request
 description: Suggest a new feature for the launcher
-labels: ["Enhancement / Feature Request"]
+labels: [enhancment]
 
 body:
   - type: checkboxes
