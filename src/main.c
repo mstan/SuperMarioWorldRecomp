@@ -612,6 +612,45 @@ static const char *AbsolutizePathArg(const char *path, char *buf, size_t size) {
 }
 
 #undef main
+/* Issue #4: bring the selected ROM into the exe directory so the ROM lives
+ * alongside the saves/, config.ini and keybinds.ini that are already anchored
+ * there. Copies (never moves — the user's original is untouched) the ROM under
+ * its own basename into the exe dir and rewrites `rom_path` to the local copy.
+ * No-op when the ROM is already in the exe dir or the copy can't be made.
+ * Returns 1 if `rom_path` was changed to the local copy. */
+static int RelocateRomToExeDir(char *rom_path, size_t cap) {
+  if (!rom_path || !rom_path[0]) return 0;
+  const char *base = rom_path;
+  for (const char *p = rom_path; *p; p++)
+    if (*p == '/' || *p == '\\') base = p + 1;
+  if (!*base) return 0;
+
+  char dst[1024];
+  if (!snesrecomp_exe_dir_path(base, dst, sizeof(dst))) return 0;
+#ifdef _WIN32
+  if (_stricmp(dst, rom_path) == 0) return 0;  /* already in the exe dir */
+#else
+  if (strcmp(dst, rom_path) == 0) return 0;
+#endif
+
+  FILE *in = fopen(rom_path, "rb");
+  if (!in) return 0;
+  FILE *out = fopen(dst, "wb");
+  if (!out) { fclose(in); return 0; }
+  char buf[65536];
+  size_t n;
+  int ok = 1;
+  while ((n = fread(buf, 1, sizeof(buf), in)) > 0)
+    if (fwrite(buf, 1, n, out) != n) { ok = 0; break; }
+  fclose(in);
+  fclose(out);
+  if (!ok) { remove(dst); return 0; }
+
+  snprintf(rom_path, cap, "%s", dst);
+  printf("[Launcher] Copied ROM into the game directory: %s\n", dst);
+  return 1;
+}
+
 int main(int argc, char** argv) {
   signal(SIGSEGV, crash_handler);
   signal(SIGABRT, crash_handler);
@@ -668,6 +707,13 @@ int main(int argc, char** argv) {
     static char framedump_abs[1024];
     framedump_dir = AbsolutizePathArg(argv[1], framedump_abs, sizeof(framedump_abs));
     argc -= 2, argv += 2;
+  }
+  /* Force the GUI launcher even when SkipLauncher = 1 is set in config.ini.
+   * (The other way back is to set SkipLauncher = 0 in config.ini.) */
+  int force_launcher = 0;
+  if (argc >= 1 && strcmp(argv[0], "--launcher") == 0) {
+    force_launcher = 1;
+    argc -= 1, argv += 1;
   }
   if (argc >= 1 && argv[0] && argv[0][0] != '-' && argv[0][0] != '\0') {
     /* Positional ROM path. */
@@ -726,7 +772,33 @@ int main(int argc, char** argv) {
     int headless = start_paused || (script_file != NULL) || (framedump_dir != NULL);
     int have_positional = (argc >= 1 && argv[0] && argv[0][0] != '-' && argv[0][0] != '\0');
     const char *no_launcher = getenv("SNESRECOMP_NO_LAUNCHER");
-    if (!headless && !have_positional && !(no_launcher && *no_launcher)) {
+    int want_launcher = !headless && !have_positional && !(no_launcher && *no_launcher);
+
+    /* SkipLauncher (issue #5): boot straight from the cached ROM, skipping the
+     * GUI, unless --launcher forces it back. If the cache is missing/unreadable
+     * we fall through and show the launcher so a fresh user can still pick a ROM. */
+    if (want_launcher && g_config.skip_launcher && !force_launcher) {
+      char cached[1024]; cached[0] = '\0';
+      FILE *rc = fopen("rom.cfg", "r");
+      if (rc) {
+        if (fgets(cached, sizeof(cached), rc)) {
+          size_t l = strlen(cached);
+          while (l && (cached[l-1] == '\n' || cached[l-1] == '\r')) cached[--l] = '\0';
+        }
+        fclose(rc);
+      }
+      if (cached[0]) {
+        FILE *probe = fopen(cached, "rb");
+        if (probe) {
+          fclose(probe);
+          snprintf(rom_path_buf, sizeof(rom_path_buf), "%s", cached);
+          rom_resolved_by_launcher = 1;
+          want_launcher = 0;
+        }
+      }
+    }
+
+    if (want_launcher) {
       SnesLauncherCSettings ls;
       memset(&ls, 0, sizeof(ls));
       ls.output_method = g_config.output_method;
@@ -741,7 +813,9 @@ int main(int argc, char** argv) {
       ls.volume        = 100;
       ls.player_src[0] = g_config.enable_gamepad[0] ? 2 : ((g_config.has_keyboard_controls & 1) ? 1 : 1);
       ls.player_src[1] = g_config.enable_gamepad[1] ? 2 : ((g_config.has_keyboard_controls & 2) ? 1 : 0);
-      ls.deadzone[0] = ls.deadzone[1] = 30;
+      ls.deadzone[0] = g_config.deadzone[0];
+      ls.deadzone[1] = g_config.deadzone[1];
+      ls.skip_launcher = g_config.skip_launcher;
       ls.msu1_enabled = g_config.msu1_enabled;
       snprintf(ls.msu1_dir, sizeof(ls.msu1_dir), "%s", g_config.msu1_dir);
 
@@ -761,6 +835,7 @@ int main(int argc, char** argv) {
       memset(&gi, 0, sizeof(gi));
       gi.name = "Super Mario World";
       gi.region = "(USA)";
+      gi.sram_path = "saves/smw.srm";  /* matches kSmwGameInfo.title for the SAVES panel */
       gi.expected_crc = kSmwUsaCrc32;
       gi.has_expected_crc = 1;
       gi.widescreen_supported = 1;
@@ -792,6 +867,9 @@ int main(int argc, char** argv) {
         g_config.enable_gamepad[1]   = ls.player_src[1] == 2;
         g_config.has_keyboard_controls =
             (uint8)((ls.player_src[0] == 1 ? 1 : 0) | (ls.player_src[1] == 1 ? 2 : 0));
+        g_config.deadzone[0] = (uint8)ls.deadzone[0];
+        g_config.deadzone[1] = (uint8)ls.deadzone[1];
+        g_config.skip_launcher = ls.skip_launcher != 0;
         g_config.msu1_enabled = ls.msu1_enabled != 0;
         snprintf(g_config.msu1_dir, sizeof(g_config.msu1_dir), "%s", ls.msu1_dir);
         if (g_config.msu1_enabled && g_config.msu1_dir[0]) {
@@ -825,11 +903,34 @@ int main(int argc, char** argv) {
       return 1;
     }
   }
+  /* Issue #4: co-locate the ROM with the exe (interactive launches only — leave
+   * explicit scripted/headless paths exactly where the caller pointed them). */
+  if (!start_paused && script_file == NULL && framedump_dir == NULL) {
+    if (RelocateRomToExeDir(rom_path_buf, sizeof(rom_path_buf))) {
+      FILE *rc = fopen("rom.cfg", "w");
+      if (rc) { fprintf(rc, "%s\n", rom_path_buf); fclose(rc); }
+    }
+  }
+
   static char *resolved_argv[2];
   resolved_argv[0] = rom_path_buf;
   resolved_argv[1] = NULL;
   argv = resolved_argv;
   argc = 1;
+
+  /* Honor the persisted MSU-1 choice on every boot path — launcher, SkipLauncher,
+   * positional ROM, SNESRECOMP_NO_LAUNCHER. The launcher exports this when it runs;
+   * doing it here too means a launcher-skipping boot still streams MSU-1 if the
+   * user enabled it. An existing env value (set by the launcher or the shell) wins. */
+  if (g_config.msu1_enabled && g_config.msu1_dir[0] && !getenv("SNESRECOMP_MSU1")) {
+    static char msu_env[600];
+    snprintf(msu_env, sizeof(msu_env), "SNESRECOMP_MSU1=%s", g_config.msu1_dir);
+#ifdef _WIN32
+    _putenv(msu_env);
+#else
+    setenv("SNESRECOMP_MSU1", g_config.msu1_dir, 1);
+#endif
+  }
 
   /* Let MSU-1 derive its pack base from the ROM name when SNESRECOMP_MSU1=auto
    * (the launcher normally passes the pack folder explicitly, which msu1.c also
@@ -1187,11 +1288,12 @@ error_reading:;
     // if vsync isn't working, delay manually
     curTick = SDL_GetTicks();
 
-    /* Frame-delay pacing is always on: it locks the loop to ~60 fps so audio
-     * (SPC + MSU-1, both produced at 1/60 s per frame) stays in sync with the
-     * sound device. The old DisableFrameDelay option removed it and broke audio
-     * on any non-60 Hz / vsync-quirky display, so it was dropped. */
-    if (!g_snes->disableRender) {
+    /* Frame-delay pacing locks the loop to ~60 fps so audio (SPC + MSU-1, both
+     * produced at 1/60 s per frame) stays in sync with the sound device. On by
+     * default. Power users on an exactly-60 Hz / vsync-correct display can set
+     * DisableFrameDelay = 1 in config.ini (cfg-only, no UI) to skip it for
+     * slightly better perf — at the risk of audio desync on other displays. */
+    if (!g_snes->disableRender && !g_config.disable_frame_delay) {
       static const uint8 delays[3] = { 17, 17, 16 }; // 60 fps
       lastTick += delays[frameCtr % 3];
 
@@ -1480,7 +1582,13 @@ static void HandleGamepadAxisInput(GamepadInfo *gi, int axis, Sint16 value) {
   if (axis == SDL_CONTROLLER_AXIS_LEFTX || axis == SDL_CONTROLLER_AXIS_LEFTY) {
     *(axis == SDL_CONTROLLER_AXIS_LEFTX ? &gi->last_axis_x : &gi->last_axis_y) = value;
     int buttons = 0;
-    if (gi->last_axis_x * gi->last_axis_x + gi->last_axis_y * gi->last_axis_y >= 10000 * 10000) {
+    /* Deadzone radius from config (per player), as a fraction of full stick
+     * range; below it the stick reports no direction. Replaces a hardcoded
+     * 10000 (~30%) that ignored the Configure Controllers value (issue #3). */
+    int dz_player = (int)(gi - g_gamepad);
+    if (dz_player < 0 || dz_player > 1) dz_player = 0;
+    int dz_radius = g_config.deadzone[dz_player] * 32767 / 100;
+    if (gi->last_axis_x * gi->last_axis_x + gi->last_axis_y * gi->last_axis_y >= dz_radius * dz_radius) {
       // in the non deadzone part, divide the circle into eight 45 degree
       // segments rotated by 22.5 degrees that control which direction to move.
       // todo: do this without floats?
@@ -1514,6 +1622,10 @@ static const char kDefaultConfigIniContent[] =
   "[General]\n"
   "# Automatically save state on quit and reload on start\n"
   "Autosave = 0\n"
+  "\n"
+  "# Disable the SDL_Delay that paces each frame (slightly better perf if your\n"
+  "# display is set to exactly 60hz; may desync audio on other displays)\n"
+  "DisableFrameDelay = 0\n"
   "\n"
   "[Graphics]\n"
   "# Window size (Auto or WidthxHeight)\n"

@@ -62,6 +62,20 @@ typedef struct Config {
   bool widescreen_hud;
   bool display_perf_title;
 
+  // Skip the per-frame SDL_Delay pacing. Off by default (pacing on) so SPC +
+  // MSU-1 audio stays in sync; cfg-only escape hatch (DisableFrameDelay = 1)
+  // for users on an exactly-60 Hz / vsync-correct display who want the perf.
+  bool disable_frame_delay;
+
+  // Gamepad analog-stick deadzone, per player, 0..100 % of full stick range.
+  // Applied where the left stick is mapped to the d-pad. Default 30.
+  uint8 deadzone[2];
+
+  // Boot straight to the game, skipping the GUI launcher, on subsequent runs.
+  // Set from the launcher's dashboard checkbox. Force the launcher back with the
+  // --launcher argument or by setting SkipLauncher = 0 in config.ini.
+  bool skip_launcher;
+
   // MSU-1 streamed audio. Off by default (authentic SPC audio). When enabled
   // and msu1_dir holds a pack, the launcher exports SNESRECOMP_MSU1 so the
   // runtime streams the .pcm tracks. Persisted to config.ini [Sound].

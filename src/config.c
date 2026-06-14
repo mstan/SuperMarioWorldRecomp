@@ -302,6 +302,14 @@ static bool HandleIniConfig(int section, const char *key, char *value) {
       return ParseBool(value, &g_config.enable_gamepad[0]);
     } else if (StringEqualsNoCase(key, "EnableGamepad2")) {
       return ParseBool(value, &g_config.enable_gamepad[1]);
+    } else if (StringEqualsNoCase(key, "Deadzone")) {
+      int dz = (int)strtol(value, NULL, 10);
+      g_config.deadzone[0] = (uint8)(dz < 0 ? 0 : dz > 100 ? 100 : dz);
+      return true;
+    } else if (StringEqualsNoCase(key, "DeadzoneP2")) {
+      int dz = (int)strtol(value, NULL, 10);
+      g_config.deadzone[1] = (uint8)(dz < 0 ? 0 : dz > 100 ? 100 : dz);
+      return true;
     } else {
       for (int i = 0; i < countof(kKeyNameId); i++) {
         if (StringEqualsNoCase(key, kKeyNameId[i].name)) {
@@ -379,11 +387,9 @@ static bool HandleIniConfig(int section, const char *key, char *value) {
     } else if (StringEqualsNoCase(key, "DisplayPerfInTitle")) {
       return ParseBool(value, &g_config.display_perf_title);
     } else if (StringEqualsNoCase(key, "DisableFrameDelay")) {
-      /* Removed: frame-delay pacing is always on now (keeps SPC + MSU-1 audio in
-       * sync). Accept the key from older config.ini files without erroring; the
-       * value is ignored. */
-      (void)value;
-      return true;
+      return ParseBool(value, &g_config.disable_frame_delay);
+    } else if (StringEqualsNoCase(key, "SkipLauncher")) {
+      return ParseBool(value, &g_config.skip_launcher);
     }
   } else if (section == 4) {
   }
@@ -445,6 +451,10 @@ void ParseConfigFile(const char *filename) {
    * = false` in config.ini overrides this. */
   g_config.enable_gamepad[0] = true;
   g_config.enable_gamepad[1] = true;
+  /* Analog-stick deadzone default ~30% of full range (matches the prior
+   * hardcoded magnitude gate in HandleGamepadAxisInput). */
+  g_config.deadzone[0] = 30;
+  g_config.deadzone[1] = 30;
   /* HUD-to-the-edges defaults on; inert unless Widescreen is also on.
    * `WidescreenHud = 0` keeps the authentic centered status bar. */
   g_config.widescreen_hud = true;
@@ -542,6 +552,9 @@ void WriteConfigFile(const char *filename) {
     { "Sound",    "Msu1Dir" },
     { "GamepadMap", "EnableGamepad1" },
     { "GamepadMap", "EnableGamepad2" },
+    { "General",    "SkipLauncher" },
+    { "GamepadMap", "Deadzone" },
+    { "GamepadMap", "DeadzoneP2" },
   };
   const int N = (int)countof(kvs);
   snprintf(kvs[0].val, sizeof(kvs[0].val), "%d", g_config.window_scale ? g_config.window_scale : 3);
@@ -553,6 +566,9 @@ void WriteConfigFile(const char *filename) {
   snprintf(kvs[6].val, sizeof(kvs[6].val), "%s", g_config.msu1_dir);
   snprintf(kvs[7].val, sizeof(kvs[7].val), "%s", g_config.enable_gamepad[0] ? "true" : "false");
   snprintf(kvs[8].val, sizeof(kvs[8].val), "%s", g_config.enable_gamepad[1] ? "true" : "false");
+  snprintf(kvs[9].val, sizeof(kvs[9].val), "%d", g_config.skip_launcher ? 1 : 0);
+  snprintf(kvs[10].val, sizeof(kvs[10].val), "%d", g_config.deadzone[0]);
+  snprintf(kvs[11].val, sizeof(kvs[11].val), "%d", g_config.deadzone[1]);
 
   /* Read the existing file (may be absent on a fresh extract). */
   char *data = NULL;
