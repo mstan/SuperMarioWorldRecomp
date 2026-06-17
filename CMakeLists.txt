@@ -28,6 +28,12 @@ if(NOT SMW_GEN_SOURCES)
         "at the repo root before building.")
 endif()
 
+# Active gameplay overrides (widescreen edge-cull, etc.). Globbed so new
+# override .c files are picked up automatically: the Windows .vcxproj lists
+# them explicitly, and that drift previously broke the Linux link —
+# bank02_v2.c references Override_FireballGfx from overrides/widescreen/.
+file(GLOB SMW_OVERRIDE_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/overrides/*/*.c)
+
 add_executable(SuperMarioWorldSNESRecomp
     ${SNESRECOMP_RUNNER_SOURCES}
     # game-specific runtime
@@ -46,6 +52,8 @@ add_executable(SuperMarioWorldSNESRecomp
     third_party/gl_core/gl_core_3_1.c
     # recompiled banks (generated)
     ${SMW_GEN_SOURCES}
+    # gameplay overrides (globbed above)
+    ${SMW_OVERRIDE_SOURCES}
 )
 
 target_include_directories(SuperMarioWorldSNESRecomp PRIVATE
