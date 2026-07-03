@@ -7,6 +7,7 @@
 #include "funcs.h"
 #include "debug_server.h"
 #include "cpu_trace.h"
+#include "snes/interp_bridge.h"   /* faithful LLE of the $806B main loop */
 
 void SmwDrawPpuFrame(void) {
   SimpleHdma hdma_chans[3];
@@ -110,7 +111,40 @@ void RunOneFrameOfGame(void) {
    * boot-time REP #$38 in I_RESET is expected and intentional; we only
    * want to know where x flips during ProcessGameMode dispatch. */
   cpu_trace_arm_px_tripwire();
-  RunOneFrameOfGame_Internal();
+  /* Swappable scheduler tier (mirrors mmx_rtl.c). SMW has no cooperative task
+   * scheduler — its "scheduler" is the single main loop at $00:806B:
+   *     $806B: LDA $10 ; BEQ $806B      ; wait for vblank (NMI sets $10 != 0)
+   *            CLI ; INC $13 ; JSR ProcessGameMode ; STZ $10 ; BRA $806B
+   * so LLE is just interp_bridge_run_scheduler with entry == yield == the spin
+   * PC and flag == waiting_for_vblank ($10). No yield-primitive/coroutine
+   * machinery (unlike MMX): the loop's only "yield" is the spin, detected when
+   * the interp reaches $806B with $10 cleared (one frame's ProcessGameMode
+   * done). I_NMI already set $10 != 0 (frames 1+); we also force it here so
+   * frame 0 (I_NMI skipped) still processes — matches MMX's belt-and-suspenders
+   * waiting_for_vblank = 0xFF. Task bodies bounce to compiled code via the
+   * paired ABI (or interpret when SNESRECOMP_LLE_BOUNCE=0).
+   *
+   * HLE (default, shipped) stays RunOneFrameOfGame_Internal (calls
+   * ProcessGameMode directly). Opt-in LLE via SNESRECOMP_SMW_SCHED_LLE=1;
+   * per-build default SMW_SCHED_LLE_DEFAULT (0 = HLE, keeps production). */
+#ifndef SMW_SCHED_LLE_DEFAULT
+#define SMW_SCHED_LLE_DEFAULT 0
+#endif
+  { static int s_lle = -1;
+    if (s_lle < 0) { s_lle = SMW_SCHED_LLE_DEFAULT;
+                     const char *e = getenv("SNESRECOMP_SMW_SCHED_LLE");
+                     if (e && e[0]) s_lle = (e[0] != '0') ? 1 : 0; }
+    if (s_lle) {
+      waiting_for_vblank = 0xFF;
+      /* Bank $00: hardware reset leaves PB=$00 and the `BRA $806B` main loop
+       * never leaves bank 0, so the real loop executes at K=$00 (entering at
+       * the $80:806B LoROM mirror instead would desync PB vs the interp's
+       * real-K tracking). */
+      interp_bridge_run_scheduler(&g_cpu, 0x00806B, 0x00806B, 0x0010);
+    } else {
+      RunOneFrameOfGame_Internal();
+    }
+  }
   cpu_trace_px_breadcrumb(&g_cpu, 0x2003, "after_Internal");
   g_first_frame_done = true;
 }
