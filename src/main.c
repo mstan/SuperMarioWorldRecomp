@@ -35,6 +35,7 @@
 #include "launcher/launcher_capi.h"
 #endif
 #include "keybinds.h"
+#include "host_report.h"
 
 typedef struct GamepadInfo {
   uint32 modifiers;
@@ -99,6 +100,14 @@ enum {
   kDefaultChannels = 2,
   kDefaultSamples = 2048,
 };
+
+/* Release stamp baked in by make_release.ps1 via
+ * /p:SnesRecompBuildVersion=<ver> (vcxproj turns the MSBuild property
+ * into this define). Local/IDE builds report "dev"; the post-mortem
+ * report's build.pe_timestamp still uniquely identifies those. */
+#ifndef SNESRECOMP_BUILD_VERSION
+#define SNESRECOMP_BUILD_VERSION "dev"
+#endif
 
 static const char kWindowTitle[] = "Super Mario World (Recompiled)";
 static uint32 g_win_flags = SDL_WINDOW_RESIZABLE;
@@ -247,6 +256,10 @@ static uint32 TickScript(void) {
 }
 
 void NORETURN Die(const char *error) {
+  /* Record the message before exiting: the atexit post-mortem dump
+   * includes it and preserves a timestamped crash copy (see
+   * host_report_has_fatal in post_mortem.c). */
+  host_report_fatal(error);
   SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, kWindowTitle, error, NULL);
   fprintf(stderr, "Error: %s\n", error);
   exit(1);
@@ -404,6 +417,11 @@ void RtlApuUnlock(void) {
 }
 
 static void SDLCALL AudioCallback(void *userdata, Uint8 *stream, int len) {
+  /* Boot-stage marker: proves the audio thread reached the mixer at
+   * least once (the "crashed before the first sound" class of report). */
+  static SDL_atomic_t first_cb;
+  if (SDL_AtomicCAS(&first_cb, 0, 1))
+    host_report_breadcrumb("first audio callback (len=%d)", len);
   if (SDL_LockMutex(g_audio_mutex)) Die("Mutex lock failed!");
   while (len != 0) {
     if (g_audiobuffer_end - g_audiobuffer_cur == 0) {
@@ -652,7 +670,15 @@ static int RelocateRomToExeDir(char *rom_path, size_t cap) {
 }
 
 int main(int argc, char** argv) {
+#ifndef _WIN32
+  /* On Windows, do NOT install a SIGSEGV handler: the MSVC CRT's signal
+   * shim intercepts access violations BEFORE the SetUnhandledExceptionFilter
+   * SEH filter, so crashes would reach crash_handler with no
+   * EXCEPTION_POINTERS — no exception record in the minidump/report. With
+   * SIGSEGV left uninstalled, AVs reach seh_handler with full fault
+   * context. SIGABRT (abort/assert) stays handled on all platforms. */
   signal(SIGSEGV, crash_handler);
+#endif
   signal(SIGABRT, crash_handler);
 #ifdef _WIN32
   SetUnhandledExceptionFilter(seh_handler);
@@ -662,6 +688,7 @@ int main(int argc, char** argv) {
   SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
 #endif
   atexit(post_mortem_atexit);
+  host_report_init("Super Mario World", SNESRECOMP_BUILD_VERSION);
   /* ARM the backwards watcher BEFORE any recompiled code runs. Without
    * this, the trace ring records but no tripwires fire. With this:
    * - DB-watch on every byte SMW shouldn't legitimately use as DB
@@ -728,7 +755,9 @@ int main(int argc, char** argv) {
    * stays authoritative; see launcher.h.) */
   {
     extern int snesrecomp_anchor_to_exe_dir(void);
-    snesrecomp_anchor_to_exe_dir();
+    int anchored = snesrecomp_anchor_to_exe_dir();
+    host_report_breadcrumb("exe-dir anchor: %s",
+                           anchored ? "ok" : "declined (cwd stays authoritative)");
   }
 
   /* Carry a legacy saves/smw.srm forward to the generic saves/save.srm BEFORE the
@@ -756,6 +785,12 @@ int main(int argc, char** argv) {
       ParseConfigFile("config.local.ini");
     }
   }
+  host_report_breadcrumb(
+      "config parsed: output=%d new_renderer=%d scale=%d fullscreen=%d "
+      "audio=%d freq=%d samples=%d skip_launcher=%d",
+      g_config.output_method, g_config.new_renderer, g_config.window_scale,
+      g_config.fullscreen, g_config.enable_audio, g_config.audio_freq,
+      g_config.audio_samples, g_config.skip_launcher);
 
   /* Resolve the SNES ROM path: argv[0] -> rom.cfg cache -> file picker.
    * On success, replace argv so the existing ReadWholeFile + oracle init
@@ -799,11 +834,13 @@ int main(int argc, char** argv) {
           snprintf(rom_path_buf, sizeof(rom_path_buf), "%s", cached);
           rom_resolved_by_launcher = 1;
           want_launcher = 0;
+          host_report_breadcrumb("launcher skipped (SkipLauncher=1, cached rom)");
         }
       }
     }
 
     if (want_launcher) {
+      host_report_breadcrumb("launcher: opening GUI");
       SnesLauncherCSettings ls;
       memset(&ls, 0, sizeof(ls));
       ls.output_method = g_config.output_method;
@@ -853,10 +890,13 @@ int main(int argc, char** argv) {
       gi.msu1_note = "Uses the audio-only \"SMW MSU-1\" patch (zeldix t1436). "
                      "PCM packs must be built for THIS patch \xE2\x80\x94 packs for "
                      "SMW MSU+ or Plus Ultra will not line up.";
+      gi.config_path = config_file;  /* hotkey editor targets the live config */
 
       int act = snes_launcher_run_window("Super Mario World \xE2\x80\x94 Launcher",
                                          &ls, &gi, "launcher", init_rom,
                                          rom_path_buf, sizeof(rom_path_buf));
+      host_report_breadcrumb("launcher: action=%d rom=%s", act,
+                             rom_path_buf[0] ? rom_path_buf : "(none)");
       if (act == 1) return 0;  /* user closed the launcher */
       if (act == 0) {
         g_config.output_method       = (uint8)ls.output_method;
@@ -884,6 +924,11 @@ int main(int argc, char** argv) {
         }
         /* Persist the launcher's choices so they're remembered next boot. */
         WriteConfigFile(config_file);
+        /* The launcher's Hotkeys editor writes [KeyMap] straight into the
+         * config file, which was parsed before the launcher ran — re-apply
+         * so rebinds work on THIS boot, not the next one. (WriteConfigFile
+         * above preserves [KeyMap] lines, so order is safe.) */
+        ConfigReloadKeyMap(config_file);
         if (rom_path_buf[0]) {
           FILE *rc = fopen("rom.cfg", "w");
           if (rc) { fprintf(rc, "%s\n", rom_path_buf); fclose(rc); }
@@ -922,6 +967,7 @@ int main(int argc, char** argv) {
   resolved_argv[1] = NULL;
   argv = resolved_argv;
   argc = 1;
+  host_report_breadcrumb("rom resolved: %s", rom_path_buf);
 
   /* Honor the persisted MSU-1 choice on every boot path — launcher, SkipLauncher,
    * positional ROM, SNESRECOMP_NO_LAUNCHER. The launcher exports this when it runs;
@@ -1004,9 +1050,13 @@ int main(int argc, char** argv) {
 
   // set up SDL
   if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER) != 0) {
+    host_report_breadcrumb("SDL_Init FAILED: %s", SDL_GetError());
     printf("Failed to init SDL: %s\n", SDL_GetError());
     return 1;
   }
+  host_report_breadcrumb("SDL init ok: video=%s audio=%s",
+                         SDL_GetCurrentVideoDriver() ? SDL_GetCurrentVideoDriver() : "(none)",
+                         SDL_GetCurrentAudioDriver() ? SDL_GetCurrentAudioDriver() : "(none)");
 
   /* Load (or generate) keybinds.ini next to the executable. */
   keybinds_init(NULL);
@@ -1033,10 +1083,12 @@ int main(int argc, char** argv) {
     if (!kRom)
       goto error_reading;
   }
+  host_report_breadcrumb("rom loaded: %u bytes", kRom_SIZE);
 
   extern const RtlGameInfo kSmwGameInfo;
   RtlRegisterGame(&kSmwGameInfo);
   Snes *snes = SnesInit(kRom, kRom_SIZE);
+  host_report_breadcrumb("SnesInit: %s", snes ? "ok" : "FAILED");
   if (snes == NULL) {
 error_reading:;
 #ifdef __SWITCH__
@@ -1074,14 +1126,23 @@ error_reading:;
 
   SDL_Window *window = SDL_CreateWindow(kWindowTitle, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, window_width, window_height, g_win_flags);
   if(window == NULL) {
+    host_report_breadcrumb("SDL_CreateWindow FAILED: %s", SDL_GetError());
     printf("Failed to create window: %s\n", SDL_GetError());
     return 1;
   }
   g_window = window;
   SDL_SetWindowHitTest(window, HitTestCallback, NULL);
+  host_report_breadcrumb("window created: %dx%d flags=0x%x",
+                         window_width, window_height, g_win_flags);
 
-  if (!g_renderer_funcs.Initialize(window))
+  if (!g_renderer_funcs.Initialize(window)) {
+    host_report_breadcrumb("renderer init FAILED (output_method=%d)",
+                           g_config.output_method);
     return 1;
+  }
+  host_report_breadcrumb("renderer initialized: %s",
+      g_config.output_method == kOutputMethod_OpenGL ? "opengl" :
+      g_config.output_method == kOutputMethod_SDLSoftware ? "sdl-software" : "sdl");
 
   g_audio_mutex = SDL_CreateMutex();
   if (!g_audio_mutex) Die("No mutex");
@@ -1089,8 +1150,19 @@ error_reading:;
   g_spc_player = SmwSpcPlayer_Create();
 
   g_spc_player->initialize(g_spc_player);
+  host_report_breadcrumb("SPC player initialized");
 
   if (g_config.enable_audio) {
+    /* Enumerate output devices into the breadcrumb ring: which device
+     * SDL picks (and what else was available) is exactly the per-machine
+     * variable a non-reproducible audio/boot crash report needs. */
+    {
+      int ndev = SDL_GetNumAudioDevices(0);
+      host_report_breadcrumb("audio outputs: %d device(s)", ndev);
+      for (int i = 0; i < ndev && i < 8; i++)
+        host_report_breadcrumb("audio output[%d]: %s", i,
+                               SDL_GetAudioDeviceName(i, 0));
+    }
     SDL_AudioSpec want = { 0 }, have;
     want.freq = g_config.audio_freq;
     want.format = AUDIO_S16;
@@ -1099,6 +1171,7 @@ error_reading:;
     want.callback = &AudioCallback;
     g_audio_device = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
     if (g_audio_device == 0) {
+      host_report_breadcrumb("audio device open FAILED: %s", SDL_GetError());
       printf("Failed to open audio device: %s\n", SDL_GetError());
       return 1;
     }
@@ -1111,6 +1184,11 @@ error_reading:;
      * frame: 32040->534 (1:1, no resample), 48000->800, 44100->735. */
     g_frames_per_block = (534 * have.freq + 32040 / 2) / 32040;
     g_audiobuffer = (uint8 *)calloc(g_frames_per_block * have.channels * sizeof(int16), 1);
+    host_report_breadcrumb(
+        "audio device opened: freq=%d (want %d) ch=%d samples=%d frames_per_block=%d",
+        have.freq, want.freq, have.channels, have.samples, g_frames_per_block);
+  } else {
+    host_report_breadcrumb("audio disabled in config");
   }
 
   PpuBeginDrawing(g_ppu, g_my_pixels, (size_t)g_snes_width * 4, 0);
@@ -1163,8 +1241,14 @@ error_reading:;
   uint8 audiopaused = true;
   GamepadInfo *gi;
 
+  host_report_breadcrumb("entering main loop");
+
   while (running) {
     SDL_Event event;
+
+    /* Inert unless SNESRECOMP_CRASH_TEST is set — support drill for the
+     * whole crash-capture pipeline (minidump + report + crash copy). */
+    host_report_crash_test_tick();
 
     while (SDL_PollEvent(&event)) {
       switch (event.type) {
@@ -1285,6 +1369,10 @@ error_reading:;
     // Bank validation removed — 100% oracle mode, no banks enabled.
 
     frameCtr++;
+    if (frameCtr == 1)
+      host_report_breadcrumb("first frame simulated");
+    else if (frameCtr % 3600 == 0)  /* ~once a minute at 60 fps */
+      host_report_breadcrumb("heartbeat: frame=%u", frameCtr);
     /* Dev-only headless turbo stress (SNESRECOMP_FORCE_TURBO=1): forces the
      * turbo path every frame so an automated soak can exercise the LLE path's
      * turbo-safety (raster-IRQ-on-render-skip) without a human holding Tab.

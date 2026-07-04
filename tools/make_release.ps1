@@ -58,7 +58,10 @@ Write-Host "gen state: widescreen overrides injected ($count markers)"
 
 # Production|x64: the shipped config (SNESRECOMP_TRACE OFF, console-free). Builds
 # the launcher + stages its assets into build\bin-x64-Production\launcher\.
-& $MSBuild (Join-Path $root 'smw.sln') /p:Configuration=Production /p:Platform=x64 /m /v:quiet /nologo
+# SnesRecompBuildVersion stamps SNESRECOMP_BUILD_VERSION into the exe so
+# user crash reports (last_run_report.json / crash_report_*.json) name the
+# release they came from.
+& $MSBuild (Join-Path $root 'smw.sln') /p:Configuration=Production /p:Platform=x64 "/p:SnesRecompBuildVersion=$Version" /m /v:quiet /nologo
 if ($LASTEXITCODE -ne 0) { throw "MSBuild failed ($LASTEXITCODE)" }
 
 $stageName = "SuperMarioWorldRecomp-windows-x64-v$Version"
@@ -108,6 +111,17 @@ See https://github.com/mstan/SuperMarioWorldRecomp for source.
 $zip = Join-Path $out "$stageName.zip"
 if (Test-Path $zip) { Remove-Item -Force $zip }
 Compress-Archive -Path "$stage\*" -DestinationPath $zip
+
+# Archive the PDB NEXT TO the zip (never inside it): it's what turns a
+# user's crash_minidump_*.dmp / module+offset stack into file:line. Keep
+# it with the release artifacts forever.
+$pdb = Join-Path $bin 'smw.pdb'
+if (Test-Path $pdb) {
+  Copy-Item $pdb (Join-Path $out "smw-v$Version.pdb")
+  Write-Host "PDB archived: $out\smw-v$Version.pdb (do NOT ship; keep for symbolizing user crash dumps)"
+} else {
+  Write-Warning "smw.pdb missing from $bin - crash minidumps from this release won't symbolize."
+}
 Write-Host "--- $stageName ---"
 Get-ChildItem $stage | Select-Object Name, Length | Out-Host
 Get-Item $zip | Select-Object Name, Length | Out-Host
