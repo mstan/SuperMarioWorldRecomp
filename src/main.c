@@ -1388,7 +1388,7 @@ error_reading:;
     } else {
       /* Turbo (render skipped): SmwDrawPpuFrame / draw_ppu_frame is NOT purely
        * cosmetic — it also simulates HDMA and fires the raster IRQ (I_IRQ).
-       * Under the LLE scheduler (SNESRECOMP_SMW_SCHED_LLE) the game runs the
+       * Under the default LLE scheduler the game runs the
        * REAL NMI/IRQ machinery, so skipping the raster IRQ 15/16 frames would
        * let an IRQ-gated guest path spin, the 5s watchdog longjmp out mid-frame
        * without restoring guest S, and the stack leak until underflow (the MMX

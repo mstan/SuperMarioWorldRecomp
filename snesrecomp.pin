@@ -3,7 +3,11 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = 2ae1488ef808cdd87bd9c6fa8fa7d63a33beccc6
+sha = 11e11fed13cf580da6402fd243eb9bbae4f104e8
+# 2026-07-13 bump (2ae1488 -> 11e11fe): shared first-class LLE execution-mode
+# policy plus mixed interpreted/compiled stack continuations, interrupt-owned
+# memory/input poll yields, and return-PC guards validated by Super Metroid.
+# Runner/compiler only; SMW generated banks remain unchanged.
 # 2026-06-13 bump (26063a0 -> 2ae1488): add the shared RmlUi pre-boot
 # launcher module (runner/src/launcher/) + RmlUi/FreeType submodules.
 # Companion SMW side wires the launcher (smw.vcxproj, main.c GameInfo,

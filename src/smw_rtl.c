@@ -4,10 +4,17 @@
 #include "snes/snes.h"
 #include "snes/ppu.h"
 #include "cpu_state.h"
+#include "execution_mode.h"
 #include "funcs.h"
 #include "debug_server.h"
 #include "cpu_trace.h"
 #include "snes/interp_bridge.h"   /* faithful LLE of the $806B main loop */
+
+static SnesrecompExecutionMode smw_execution_mode(void) {
+  /* LLE is the correctness floor. The hand-written frame driver remains an
+   * explicit optimization selected with SNESRECOMP_EXECUTION_MODE=hle. */
+  return snesrecomp_execution_mode(SNESRECOMP_EXECUTION_MODE_LLE);
+}
 
 void SmwDrawPpuFrame(void) {
   SimpleHdma hdma_chans[3];
@@ -124,17 +131,11 @@ void RunOneFrameOfGame(void) {
    * waiting_for_vblank = 0xFF. Task bodies bounce to compiled code via the
    * paired ABI (or interpret when SNESRECOMP_LLE_BOUNCE=0).
    *
-   * HLE (default, shipped) stays RunOneFrameOfGame_Internal (calls
-   * ProcessGameMode directly). Opt-in LLE via SNESRECOMP_SMW_SCHED_LLE=1;
-   * per-build default SMW_SCHED_LLE_DEFAULT (0 = HLE, keeps production). */
-#ifndef SMW_SCHED_LLE_DEFAULT
-#define SMW_SCHED_LLE_DEFAULT 0
-#endif
-  { static int s_lle = -1;
-    if (s_lle < 0) { s_lle = SMW_SCHED_LLE_DEFAULT;
-                     const char *e = getenv("SNESRECOMP_SMW_SCHED_LLE");
-                     if (e && e[0]) s_lle = (e[0] != '0') ? 1 : 0; }
-    if (s_lle) {
+   * LLE is the default correctness path. The existing HLE frame driver stays
+   * available as a convenience override through the shared execution-mode
+   * option rather than an SMW-specific scheduler switch. */
+  {
+    if (smw_execution_mode() == SNESRECOMP_EXECUTION_MODE_LLE) {
       waiting_for_vblank = 0xFF;
       /* Bank $00: hardware reset leaves PB=$00 and the `BRA $806B` main loop
        * never leaves bank 0, so the real loop executes at K=$00 (entering at
@@ -148,4 +149,3 @@ void RunOneFrameOfGame(void) {
   cpu_trace_px_breadcrumb(&g_cpu, 0x2003, "after_Internal");
   g_first_frame_done = true;
 }
-
