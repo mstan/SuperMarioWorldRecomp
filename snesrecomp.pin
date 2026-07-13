@@ -3,7 +3,11 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = 11e11fed13cf580da6402fd243eb9bbae4f104e8
+sha = 8c14fc11eb5bea8730545a83ba1686de08463340
+# 2026-07-13 bump (11e11fe -> 8c14fc1): CPU-to-SPC port writes now use
+# hardware-immediate visibility by default. The host wall-time deferred path
+# remains only as an explicit diagnostic override, keeping APU semantics
+# independent of the LLE/HLE scheduler tier. Runner-only; no bank regen.
 # 2026-07-13 bump (2ae1488 -> 11e11fe): shared first-class LLE execution-mode
 # policy plus mixed interpreted/compiled stack continuations, interrupt-owned
 # memory/input poll yields, and return-PC guards validated by Super Metroid.
