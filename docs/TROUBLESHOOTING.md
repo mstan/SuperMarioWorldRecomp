@@ -197,7 +197,7 @@ longer depends on its freshness.
 ## Step 6 — regen, build, hand the exe to the user
 
 ```
-$ python snesrecomp/tools/v2_regen.py --rom smw.sfc \
+$ python snesrecomp/tools/v2_emit.py --rom smw.sfc \
     --cfg-dir recomp --out-dir src/gen
 $ MSBuild smw.sln /p:Configuration=Release /p:Platform=x64 /m /v:minimal
 $ taskkill /F /IM smw.exe; build/bin-x64-Release/smw.exe
@@ -213,7 +213,7 @@ necessary, not sufficient.
 | 1. surface the byte-level divergence + writer function + stack | `vram_write_diff` (always-on byte-paired rings) | seconds |
 | 2. diff CpuState at every block boundary in the matching call | `trace_get_v2` (recomp) + `emu_get_insn_trace` (oracle), filter by PC and call instance | seconds |
 | 3. read 4 lines of v2 emit code | grep + Read | minutes |
-| 4. one-line fix + regen + build + visual | v2_regen.py + MSBuild | a few minutes |
+| 4. one-line fix + regen + build + visual | v2_emit.py + MSBuild | a few minutes |
 
 Total tool round-trips: ~6. None required arming a probe before the
 buggy code ran — the rings were already populated from boot.

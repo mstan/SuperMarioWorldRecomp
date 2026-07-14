@@ -53,7 +53,6 @@ done
 
 cd "$ROOT"
 
-BANKS=(00 01 02 03 04 05 07 0c 0d)
 TESTS="snesrecomp/tests/run_tests.py"
 ROM="smw.sfc"
 
@@ -75,7 +74,7 @@ if [ -f "$MSU_IPS" ]; then
 fi
 
 step "Regenerating 9 banks"
-python snesrecomp/tools/v2_regen.py --rom "$GEN_ROM" \
+python snesrecomp/tools/v2_emit.py --rom "$GEN_ROM" \
     --cfg-dir recomp --out-dir src/gen
 
 step "Syncing funcs.h"
@@ -83,29 +82,13 @@ python snesrecomp/tools/v2_sync_funcs_h.py --cfg-dir recomp \
     --out recomp/funcs.h
 
 if [ "$STRICT_IDEMPOTENT" -eq 1 ]; then
-  step "Idempotency check: regen into temp dir + byte-diff"
+  step "Idempotency check: regen into temp dir + byte-compare"
   TMP_GEN="$(mktemp -d)"
   trap 'rm -rf "$TMP_GEN"' EXIT
-  python snesrecomp/tools/v2_regen.py --rom "$GEN_ROM" \
+  python snesrecomp/tools/v2_emit.py --rom "$GEN_ROM" \
       --cfg-dir recomp --out-dir "$TMP_GEN"
-  drift_count=0
-  for b in "${BANKS[@]}"; do
-    if ! diff -q "src/gen/bank${b}_v2.c" "$TMP_GEN/bank${b}_v2.c" \
-            > /dev/null 2>&1; then
-      echo "  DRIFT: bank $b" >&2
-      drift_count=$((drift_count + 1))
-    fi
-  done
-  if ! diff -q "src/gen/unresolved_stubs_v2.c" \
-          "$TMP_GEN/unresolved_stubs_v2.c" > /dev/null 2>&1; then
-    echo "  DRIFT: unresolved stubs" >&2
-    drift_count=$((drift_count + 1))
-  fi
-  if [ "$drift_count" -gt 0 ]; then
-    echo "regen: $drift_count bank(s) non-deterministic" >&2
-    exit 1
-  fi
-  echo "  all 9 banks byte-identical across two regens"
+  python snesrecomp/tools/v2_compare_output.py \
+      --expected src/gen --actual "$TMP_GEN"
 fi
 
 if [ "$RUN_TESTS" -eq 1 ]; then
