@@ -1022,9 +1022,13 @@ int main(int argc, char** argv) {
     g_snes_width = 256 + g_ws_extra * 2;
     g_ws_active = (g_ws_extra > 0);
   }
+  // A wider viewport can expose more sprites on one scanline than the SNES
+  // could see at 256px. Keep authentic caps configurable at 4:3, but lift them
+  // whenever widescreen is active so sprites do not disappear prematurely.
   g_ppu_render_flags = g_config.new_renderer * kPpuRenderFlags_NewRenderer |
     g_config.extend_y * kPpuRenderFlags_Height240 |
-    g_config.no_sprite_limits * kPpuRenderFlags_NoSpriteLimits;
+    (g_config.no_sprite_limits || g_ws_active) *
+      kPpuRenderFlags_NoSpriteLimits;
 
   if (g_config.fullscreen == 1)
     g_win_flags ^= SDL_WINDOW_FULLSCREEN_DESKTOP;
