@@ -16,6 +16,7 @@
 #endif
 
 #include "snes/ppu.h"
+#include "snes/interp_bridge.h"
 
 #include "types.h"
 #include "smw_rtl.h"
@@ -1022,6 +1023,10 @@ int main(int argc, char** argv) {
     g_snes_width = 256 + g_ws_extra * 2;
     g_ws_active = (g_ws_extra > 0);
   }
+  extern void SmwWidescreenInterpPreOpcode(CpuState *cpu, uint32_t pc24);
+  interp_bridge_set_pre_opcode_hook(
+      0x02A828u,
+      g_config.widescreen ? SmwWidescreenInterpPreOpcode : NULL);
   // A wider viewport can expose more sprites on one scanline than the SNES
   // could see at 256px. Keep authentic caps configurable at 4:3, but lift them
   // whenever widescreen is active so sprites do not disappear prematurely.
