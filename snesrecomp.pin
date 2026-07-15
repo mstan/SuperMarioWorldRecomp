@@ -3,7 +3,10 @@
 # repo evolving on its own cadence). Update via:
 #   git -C ../snesrecomp rev-parse main > /tmp/sha && \
 #     sed -i "s|^sha = .*|sha = $(cat /tmp/sha)|" snesrecomp.pin
-sha = f6e300193e9d68950b4982753f4169165e138e14
+sha = ccd78f976efe19e073ea4736c3107894d700dc7b
+# 2026-07-14 DerrickGold candidate integration: SimpleHDMA bounds, generated
+# bank sharding, opt-in widescreen policies, no-sprite-limits support, and the
+# filtered interpreter hook used by SMW's user-validated 16:9 spawn window.
 # 2026-07-14 bump (88c41ad -> f6e3001): preserve guest non-local returns
 # across direct AOT/interpreter bounces. Fresh atomic regen and a 35k-frame
 # LLE title-attract soak completed with Mario alive, normal visuals, advancing
