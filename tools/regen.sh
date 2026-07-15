@@ -75,7 +75,8 @@ fi
 
 step "Regenerating 9 banks"
 python snesrecomp/tools/v2_emit.py --rom "$GEN_ROM" \
-    --cfg-dir recomp --out-dir src/gen
+    --cfg-dir recomp --out-dir src/gen \
+    --source-root src --source-root recomp/widescreen_aot_roots.c
 
 step "Syncing funcs.h"
 python snesrecomp/tools/v2_sync_funcs_h.py --cfg-dir recomp \
@@ -86,7 +87,8 @@ if [ "$STRICT_IDEMPOTENT" -eq 1 ]; then
   TMP_GEN="$(mktemp -d)"
   trap 'rm -rf "$TMP_GEN"' EXIT
   python snesrecomp/tools/v2_emit.py --rom "$GEN_ROM" \
-      --cfg-dir recomp --out-dir "$TMP_GEN"
+      --cfg-dir recomp --out-dir "$TMP_GEN" \
+      --source-root src --source-root recomp/widescreen_aot_roots.c
   python snesrecomp/tools/v2_compare_output.py \
       --expected src/gen --actual "$TMP_GEN"
 fi

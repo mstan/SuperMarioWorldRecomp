@@ -9,7 +9,8 @@ without SDL2.dll and the launcher/ assets):
 CONSOLIDATED (was dual standard/widescreen zips): the GUI launcher now has a
 Widescreen 16:9 toggle and persists it to config.ini, so a separate widescreen
 zip is redundant - one build serves both. The widescreen game-logic overrides
-(apply_overrides.py, 91 runtime-gated patches) are injected into src/gen, but
+(apply_overrides.py, 21 generated-code patches plus the live LLE spawn hook)
+are injected into src/gen, but
 config.ini ships Widescreen = 0, so by default the game is authentic 256-wide
 and the overrides are inert (gated on g_ws_active). The player flips widescreen
 in the launcher.
@@ -28,7 +29,7 @@ Usage: powershell -File tools\make_release.ps1 -Version 0.9.0
 param(
   [Parameter(Mandatory = $true)][string]$Version,
   [string]$MSBuild = 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe',
-  [int]$ExpectedInjections = 95
+  [int]$ExpectedInjections = 21
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
