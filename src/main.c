@@ -879,6 +879,7 @@ int main(int argc, char** argv) {
       gi.name = "Super Mario World";
       gi.region = "(USA)";
       gi.sram_path = "saves/save.srm";  /* generic SRAM path (RtlReadSram migrates legacy) */
+      gi.num_players = 1;               /* single active controller (no P2 row) */
       gi.expected_crc = kSmwUsaCrc32;
       gi.has_expected_crc = 1;
       gi.widescreen_supported = 1;
