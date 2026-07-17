@@ -35,7 +35,6 @@ Thumbs.db
 .DS_Store
 
 # External repos accessed via junction/symlink (tracked in their own repos)
-snesrecomp/
 
 # Oracle disassembly repo (independent git clone)
 SMWDisX/
