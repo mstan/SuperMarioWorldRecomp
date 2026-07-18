@@ -107,7 +107,7 @@ System shortcuts (configured in `config.ini`'s `[KeyMap]` section):
 ## Building from source
 
 Prerequisites: Windows 10+, Visual Studio 2022 (with C++ desktop
-workload), Python 3.9+ on PATH.
+workload), Python 3.9+ on PATH, and `rustup` for regeneration.
 
 ```bash
 git clone --recurse-submodules https://github.com/mstan/SuperMarioWorldRecomp
@@ -142,7 +142,9 @@ framework, or otherwise need to re-run the recompiler:
    excludes it).
 2. Run `bash tools/regen.sh`. This drives `snesrecomp/recompiler/`
    over the ROM and rewrites `src/gen/*.c`, `recomp/funcs.h`, and
-   the per-bank registry.
+   the per-bank registry. It builds and requires the fast native analyzer by
+   default; set `SNESRECOMP_ANALYSIS_BACKEND=python` only to use the slower
+   reference path.
 3. Rebuild as above.
 
 (Build and run instructions are not yet stable — see scripts under

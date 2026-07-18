@@ -56,7 +56,24 @@ cd "$ROOT"
 TESTS="snesrecomp/tests/run_tests.py"
 ROM="smw.sfc"
 
+PYTHON="${PYTHON:-$(command -v python3 || command -v python || true)}"
+if [ -z "$PYTHON" ]; then
+  echo "regen.sh: no python3/python interpreter found on PATH" >&2
+  exit 1
+fi
+
 step() { echo; echo "=== $* ==="; }
+
+ANALYSIS_BACKEND="${SNESRECOMP_ANALYSIS_BACKEND:-native}"
+case "$ANALYSIS_BACKEND" in
+  native|python|auto) ;;
+  *) echo "regen.sh: invalid SNESRECOMP_ANALYSIS_BACKEND: $ANALYSIS_BACKEND" >&2; exit 2 ;;
+esac
+
+if [ "$ANALYSIS_BACKEND" = native ]; then
+  step "Building native analyzer"
+  "$PYTHON" snesrecomp/tools/build_native_analyzer.py
+fi
 
 # MSU-1: the build is recompiled from an MSU-1-patched ROM (Conn's audio-only
 # SMW MSU-1 patch injects the driver into bank $04 freespace; recomp/bank04.cfg
@@ -69,42 +86,44 @@ if [ -f "$MSU_IPS" ]; then
   PATCHED_ROM=".build/smw_msu1.sfc"
   mkdir -p "$(dirname "$PATCHED_ROM")"
   step "Applying MSU-1 patch (Conn, audio-only — recomp/msu1/)"
-  python tools/apply_msu_patch.py --rom "$ROM" --ips "$MSU_IPS" --out "$PATCHED_ROM"
+  "$PYTHON" tools/apply_msu_patch.py --rom "$ROM" --ips "$MSU_IPS" --out "$PATCHED_ROM"
   GEN_ROM="$PATCHED_ROM"
 fi
 
 step "Regenerating 9 banks"
-python snesrecomp/tools/v2_emit.py --rom "$GEN_ROM" \
+"$PYTHON" snesrecomp/tools/v2_emit.py --rom "$GEN_ROM" \
     --cfg-dir recomp --out-dir src/gen \
-    --source-root src --source-root recomp/widescreen_aot_roots.c
+    --source-root src --source-root recomp/widescreen_aot_roots.c \
+    --analysis-backend "$ANALYSIS_BACKEND"
 
 step "Syncing funcs.h"
-python snesrecomp/tools/v2_sync_funcs_h.py --cfg-dir recomp \
+"$PYTHON" snesrecomp/tools/v2_sync_funcs_h.py --cfg-dir recomp \
     --out recomp/funcs.h
 
 if [ "$STRICT_IDEMPOTENT" -eq 1 ]; then
   step "Idempotency check: regen into temp dir + byte-compare"
   TMP_GEN="$(mktemp -d)"
   trap 'rm -rf "$TMP_GEN"' EXIT
-  python snesrecomp/tools/v2_emit.py --rom "$GEN_ROM" \
+  "$PYTHON" snesrecomp/tools/v2_emit.py --rom "$GEN_ROM" \
       --cfg-dir recomp --out-dir "$TMP_GEN" \
-      --source-root src --source-root recomp/widescreen_aot_roots.c
-  python snesrecomp/tools/v2_compare_output.py \
+      --source-root src --source-root recomp/widescreen_aot_roots.c \
+      --analysis-backend "$ANALYSIS_BACKEND"
+  "$PYTHON" snesrecomp/tools/v2_compare_output.py \
       --expected src/gen --actual "$TMP_GEN"
 fi
 
 if [ "$RUN_TESTS" -eq 1 ]; then
   step "Framework tests"
-  python "$TESTS"
+  "$PYTHON" "$TESTS"
 fi
 
 if [ "$RUN_FUZZ" -eq 1 ]; then
   step "Phase B fuzz"
-  python snesrecomp/fuzz/generate_snippets.py > /dev/null
-  python snesrecomp/fuzz/run_recomp.py
+  "$PYTHON" snesrecomp/fuzz/generate_snippets.py > /dev/null
+  "$PYTHON" snesrecomp/fuzz/run_recomp.py
   taskkill //F //IM smw.exe > /dev/null 2>&1 || true
-  python snesrecomp/fuzz/run_oracle.py
-  python snesrecomp/fuzz/diff.py
+  "$PYTHON" snesrecomp/fuzz/run_oracle.py
+  "$PYTHON" snesrecomp/fuzz/diff.py
 fi
 
 step "Done"
