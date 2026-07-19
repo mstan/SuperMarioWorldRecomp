@@ -7,6 +7,7 @@ build/
 *.dll
 *.tlog
 *.log
+.worktrees/
 *.idb
 
 # ROM files (copyrighted)
