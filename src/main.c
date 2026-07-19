@@ -960,9 +960,13 @@ int main(int argc, char** argv) {
         g_config.msu1_enabled = ls.msu1_enabled != 0;
         snprintf(g_config.msu1_dir, sizeof(g_config.msu1_dir), "%s", ls.msu1_dir);
         if (g_config.msu1_enabled && g_config.msu1_dir[0]) {
+#ifdef _WIN32
           static char msu_env[600];
           snprintf(msu_env, sizeof(msu_env), "SNESRECOMP_MSU1=%s", g_config.msu1_dir);
           _putenv(msu_env);
+#else
+          setenv("SNESRECOMP_MSU1", g_config.msu1_dir, 1);
+#endif
         }
         /* Persist the launcher's choices so they're remembered next boot. */
         WriteConfigFile(config_file);
