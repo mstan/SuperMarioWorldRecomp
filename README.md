@@ -1,5 +1,13 @@
 # SuperMarioWorldRecomp
 
+> _This recompilation is a **byproduct of developing
+> [snesrecomp](https://github.com/mstan/snesrecomp)** — the games are the proving ground, the framework is the
+> goal, and depth will keep landing over months, not days. My time for any one
+> title is limited, so I ask for your patience. Contributions are welcome —
+> testing, issues, and PRs to the game or framework all help and will
+> accelerate this game's polish. More on the why at:
+> [Recomp + AI: 5 Months Later »](https://1379.tech/recomp-ai-5-months-later/)_
+
 Static recompilation of *Super Mario World* (SNES) into native C,
 using the [snesrecomp](https://github.com/mstan/snesrecomp) framework.
 This repo is the per-game side: the runtime, the recompiled C output,
