@@ -26,21 +26,21 @@ The target outcome is zero `LOST` transition commands at normal speed and turbo.
 
 ### Shared fix boundary
 
-The correction belongs in `snesrecomp/runner/src/common_rtl.c` and its APU queue support, not in SMW-generated code or the SDL callback. The CPU-to-APU write path must keep writes visible at the current emulated APU time while preventing a distinct command from being overwritten before one SPC poll. Any scheduling change must retain the real upload handshake behavior that motivated immediate visibility.
+The correction belongs in `snesrecomp/runner/src/snes/apu.c` and its queue state, not in SMW-generated code, `common_rtl.c`, or the SDL callback. A write remains immediately visible when the port has no queued or unobserved command. A later distinct value waits for the existing `APU_PORT_MIN_DWELL`; an SPC read clears the gate. This preserves CPU↔SPC upload handshakes because their CPU writes follow SPC observations.
 
 The SMW repository consumes the corrected runner through its `snesrecomp` submodule. After the runner fix is validated, update the submodule pointer in SMW. No compatibility flag, game-specific workaround, or default environment override will remain.
 
 ### Regression coverage
 
-Add the smallest deterministic runner-level test that creates distinct writes to the same APU port across a callback-style production burst and asserts the SPC observes each command in order. Exercise both the normal path and turbo-equivalent compressed producer timing. Keep the existing SMW `sfx_probe.py` transition capture as the end-to-end smoke test for SPC and MSU-1.
+`tests/runtime_dispatch/apu_port_transition_test.c` queues a fade, a music command, and the NMI clear at one produced-sample point. It advances the queue at each dwell boundary, records the SPC observation, and asserts every value is visible in order. The test models both a callback collision and turbo-compressed producer timing.
 
 ## Verification
 
-1. Run the new focused runner test; it fails before the fix because the first distinct command is not observed.
-2. Apply the minimal shared APU fix and rerun the test until it passes.
-3. Run the existing relevant runner test suite.
-4. Run the SMW transition capture from the same save state with SPC, then MSU-1; each reports zero `LOST` commands and audio continues after the transition.
-5. Record and fix only additional reproducible failures discovered by those runs.
+1. Run the new focused runner test; it fails before the queue’s observation APIs exist.
+2. Apply the shared APU fix and rerun the test until it passes.
+3. Build the current Linux target; it must link with MSU-1 launcher support.
+4. Start the executable and confirm SDL opens the audio device.
+5. End-to-end TCP audio-trace capture remains required before claiming a manual SPC/MSU-1 transition test; this harness could not reach the process-local listener.
 
 ## Non-goals
 
