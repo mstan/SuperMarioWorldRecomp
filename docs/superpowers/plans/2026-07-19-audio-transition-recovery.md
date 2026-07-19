@@ -32,8 +32,8 @@
 - [ ] **Step 1: Build a debug executable from a matching v0.9.5 checkout**
 
 ```sh
-git -C ../../.. worktree add --detach .worktrees/v0.9.5-audio-baseline v0.9.5
-cd ../../.worktrees/v0.9.5-audio-baseline
+git -C ../.. worktree add --detach .worktrees/v0.9.5-audio-baseline v0.9.5
+cd ../v0.9.5-audio-baseline
 git submodule update --init --recursive
 cp /absolute/path/to/legal/smw.sfc smw.sfc
 bash tools/regen.sh
