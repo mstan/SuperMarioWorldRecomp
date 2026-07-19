@@ -29,10 +29,12 @@
 - Consumes: the debug server command `audio_events` and the existing `sfx_probe.py` classification.
 - Produces: a saved transition trace whose nonzero commands are classified as `LOST`, `SEEN`, or `SEEN-NOKON`.
 
-- [ ] **Step 1: Build a debug executable with the v0.9.5 runner revision**
+- [ ] **Step 1: Build a debug executable from a matching v0.9.5 checkout**
 
 ```sh
-git -C snesrecomp checkout 2ae1488ef808cdd87bd9c6fa8fa7d63a33beccc6
+git -C ../../.. worktree add --detach .worktrees/v0.9.5-audio-baseline v0.9.5
+cd ../../.worktrees/v0.9.5-audio-baseline
+git submodule update --init --recursive
 cp /absolute/path/to/legal/smw.sfc smw.sfc
 bash tools/regen.sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
