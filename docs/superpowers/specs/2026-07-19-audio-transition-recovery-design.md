@@ -38,9 +38,10 @@ The SMW repository consumes the corrected runner through its `snesrecomp` submod
 
 1. Run the new focused runner test; it fails before the queue’s observation APIs exist.
 2. Apply the shared APU fix and rerun the test until it passes.
-3. Build the current Linux target; it must link with MSU-1 launcher support.
-4. Start the executable and confirm SDL opens the audio device.
-5. End-to-end TCP audio-trace capture remains required before claiming a manual SPC/MSU-1 transition test; this harness could not reach the process-local listener.
+3. Run the runner framework suite; v2 checkouts skip the obsolete v1-only `sync_funcs_h` contract instead of importing a namespace package as its missing backend.
+4. Build the current Linux target; it must link with MSU-1 launcher support.
+5. Start the executable and confirm SDL opens the audio device.
+6. End-to-end TCP audio-trace capture remains required before claiming a manual SPC/MSU-1 transition test; this harness could not reach the process-local listener.
 
 ## Non-goals
 
