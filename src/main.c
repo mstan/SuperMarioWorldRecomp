@@ -1015,6 +1015,20 @@ int main(int argc, char** argv) {
   argc = 1;
   host_report_breadcrumb("rom resolved: %s", rom_path_buf);
 
+  /* SMW emits one-frame SFX commands followed by a zero clear. Keep ordinary
+   * game commands on the deferred scheduler so the callback-driven SPC sees
+   * every pulse; the HLE upload path bypasses and flushes this queue when it
+   * takes ownership of a live transfer. An explicit environment setting wins
+   * for diagnostics and A/B timing experiments. */
+  if (!getenv("SNESRECOMP_APU_IMMEDIATE_PORTS")) {
+#ifdef _WIN32
+    static char apu_ports_env[] = "SNESRECOMP_APU_IMMEDIATE_PORTS=0";
+    _putenv(apu_ports_env);
+#else
+    setenv("SNESRECOMP_APU_IMMEDIATE_PORTS", "0", 0);
+#endif
+  }
+
   /* Honor the persisted MSU-1 choice on every boot path — launcher, SkipLauncher,
    * positional ROM, SNESRECOMP_NO_LAUNCHER. The launcher exports this when it runs;
    * doing it here too means a launcher-skipping boot still streams MSU-1 if the
