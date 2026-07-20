@@ -1011,11 +1011,11 @@ int main(int argc, char** argv) {
   argc = 1;
   host_report_breadcrumb("rom resolved: %s", rom_path_buf);
 
-  /* SMW sends one-frame SFX commands followed by a zero clear. Immediate
-   * host-time port writes can let that clear overtake the SPC's next poll
-   * when the 60.0988 Hz NMI crosses the 60 Hz audio-callback phase. Use the
-   * existing deferred scheduler by default; keep the env override for
-   * diagnostics and alternate timing experiments. */
+  /* SMW emits one-frame SFX commands followed by a zero clear. Keep ordinary
+   * game commands on the deferred scheduler so the callback-driven SPC sees
+   * every pulse. The reconciled HLE upload path bypasses and flushes this queue
+   * when it takes ownership of a live transfer. An explicit environment
+   * setting wins for diagnostics and A/B timing experiments. */
   if (!getenv("SNESRECOMP_APU_IMMEDIATE_PORTS")) {
 #ifdef _WIN32
     static char apu_ports_env[] = "SNESRECOMP_APU_IMMEDIATE_PORTS=0";
