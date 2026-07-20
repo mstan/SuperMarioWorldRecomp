@@ -91,8 +91,16 @@ if [ -f "$MSU_IPS" ]; then
 fi
 
 step "Regenerating 9 banks"
+# --cfg-roots is the static-coverage policy (mirrors MegamanXRecomp): every
+# declared `func` seeds the analysis closure so the proven surface is
+# materialized as AOT; the interpreter is a failsafe for the unprovable
+# remainder (e.g. the $7F8000 RAM-resident routine), never the plan of record
+# for known code. Verified 2026-07-20: raises SMW to 2246 AOT variants and cuts
+# runtime interp gap sites 333 -> 16 with a clean attract cycle and zero tier2
+# bails / dispatch misses. The --cfg-roots mode-handler regression noted in the
+# 2026-07-17 handoff was already fixed by PR #6's decoder rewrite.
 "$PYTHON" snesrecomp/tools/v2_emit.py --rom "$GEN_ROM" \
-    --cfg-dir recomp --out-dir src/gen \
+    --cfg-dir recomp --out-dir src/gen --cfg-roots \
     --source-root src --source-root recomp/widescreen_aot_roots.c \
     --analysis-backend "$ANALYSIS_BACKEND"
 
@@ -105,7 +113,7 @@ if [ "$STRICT_IDEMPOTENT" -eq 1 ]; then
   TMP_GEN="$(mktemp -d)"
   trap 'rm -rf "$TMP_GEN"' EXIT
   "$PYTHON" snesrecomp/tools/v2_emit.py --rom "$GEN_ROM" \
-      --cfg-dir recomp --out-dir "$TMP_GEN" \
+      --cfg-dir recomp --out-dir "$TMP_GEN" --cfg-roots \
       --source-root src --source-root recomp/widescreen_aot_roots.c \
       --analysis-backend "$ANALYSIS_BACKEND"
   "$PYTHON" snesrecomp/tools/v2_compare_output.py \
