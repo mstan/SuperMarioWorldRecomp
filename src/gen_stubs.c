@@ -1,33 +1,15 @@
-// gen_stubs.c — Residual functions that are not generated from ROM.
+// gen_stubs.c — (intentionally empty)
 //
-// SmwRunDecompressFromWRAM / _Entry2 — two WRAM-executed functions.
-// Cartridge ROM contains no instructions at bank $7F; the game
-// decompresses code into WRAM at boot and executes it from there. By
-// definition, a recompiler that reads from ROM cannot generate these.
-// They are modelled as HLE and will remain so permanently.
-
-#include "common_rtl.h"
-#include "cpu_state.h"
-#include "funcs.h"
-#include "variables.h"
-
-// SmwRunDecompressFromWRAM ($7F:8000) — clears 128 OAM Y to $F0.
+// SmwRunDecompressFromWRAM / _Entry2 ($7F:8000 / $7F:812E) used to be modelled
+// here as HLE forwarders to ResetSpritesFunc(). They are now recompiled
+// LITERALLY (LLE) from the captured WRAM snapshot as guarded AOT bodies: the
+// `ram_routine 7F8000 ...` directive in recomp/bank00.cfg appends the snapshot
+// to the ROM image via a synthetic reloc region, the recompiler emits the real
+// bodies into src/gen/bank7f_v2.c, and runtime dispatch is gated on a live
+// WRAM byte-match (g_ram_routine_guards). Defining them here as well would be a
+// duplicate-symbol (LNK2005) conflict with the generated bodies, so this file
+// no longer defines anything. ResetSpritesFunc itself remains a normal ROM-side
+// body in src/smw_00.c and is unaffected.
 //
-// v2 (M, X) per-variant ABI: every gen-generated v2 function is named
-// <base>_M{m}X{x}. Gen call sites use the variant matching caller's
-// (m, x) at the JSL site. Since this is a hand-body HLE stub (not gen)
-// we declare all four variants as aliases delegating to the canonical
-// implementation. Behaviour is M/X-independent (no register-width-
-// sensitive code in ResetSpritesFunc), so a single body suffices.
-void SmwRunDecompressFromWRAM(CpuState *cpu) { (void)cpu; ResetSpritesFunc(0); }
-RecompReturn SmwRunDecompressFromWRAM_M0X0(CpuState *cpu) { SmwRunDecompressFromWRAM(cpu); return RECOMP_RETURN_NORMAL; }
-RecompReturn SmwRunDecompressFromWRAM_M0X1(CpuState *cpu) { SmwRunDecompressFromWRAM(cpu); return RECOMP_RETURN_NORMAL; }
-RecompReturn SmwRunDecompressFromWRAM_M1X0(CpuState *cpu) { SmwRunDecompressFromWRAM(cpu); return RECOMP_RETURN_NORMAL; }
-RecompReturn SmwRunDecompressFromWRAM_M1X1(CpuState *cpu) { SmwRunDecompressFromWRAM(cpu); return RECOMP_RETURN_NORMAL; }
-
-// SmwRunDecompressFromWRAM_Entry2 ($7F:812E) — clears sprites 100-127.
-void SmwRunDecompressFromWRAM_Entry2(CpuState *cpu) { (void)cpu; ResetSpritesFunc(100); }
-RecompReturn SmwRunDecompressFromWRAM_Entry2_M0X0(CpuState *cpu) { SmwRunDecompressFromWRAM_Entry2(cpu); return RECOMP_RETURN_NORMAL; }
-RecompReturn SmwRunDecompressFromWRAM_Entry2_M0X1(CpuState *cpu) { SmwRunDecompressFromWRAM_Entry2(cpu); return RECOMP_RETURN_NORMAL; }
-RecompReturn SmwRunDecompressFromWRAM_Entry2_M1X0(CpuState *cpu) { SmwRunDecompressFromWRAM_Entry2(cpu); return RECOMP_RETURN_NORMAL; }
-RecompReturn SmwRunDecompressFromWRAM_Entry2_M1X1(CpuState *cpu) { SmwRunDecompressFromWRAM_Entry2(cpu); return RECOMP_RETURN_NORMAL; }
+// This TU is retained (referenced by CMakeLists.txt) as a home for any future
+// genuinely-non-generated residual bodies.
