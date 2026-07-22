@@ -44,6 +44,7 @@
  * (launcher_profile_apply("snes", ...)). */
 #include "recomp_launcher.h"   /* recomp_launcher_run_window() */
 #include "launcher_profile.h"  /* launcher_profile_apply("snes", &gi) — SNES identity */
+#include "recomp_runtime_ui.h"
 #elif defined(SNES_LAUNCHER)
 #include "launcher/launcher_capi.h"
 #endif
@@ -135,6 +136,14 @@ static int g_ppu_render_flags = 0;
 static int g_snes_width, g_snes_height;
 static int g_sdl_audio_mixer_volume = SDL_MIX_MAXVOLUME;
 static struct RendererFuncs g_renderer_funcs;
+
+#if defined(RECOMP_LAUNCHER)
+static RecompRuntimeUi *g_runtime_ui;
+static uint8_t *g_runtime_ui_frame;
+static size_t g_runtime_ui_frame_capacity;
+static int g_runtime_ui_frame_width;
+static int g_runtime_ui_frame_height;
+#endif
 
 static GamepadInfo g_gamepad[2];
 
@@ -398,12 +407,12 @@ void RtlDrawPpuFrame(uint8 *pixel_buffer, size_t pitch, uint32 render_flags) {
 
 static void DrawPpuFrameWithPerf(void) {
   int render_scale = PpuGetCurrentRenderScale(g_ppu, g_ppu_render_flags);
+  int draw_width = g_snes_width * render_scale;
+  int draw_height = g_snes_height * render_scale;
   uint8 *pixel_buffer = 0;
   int pitch = 0;
 
-  g_renderer_funcs.BeginDraw(g_snes_width * render_scale,
-                             g_snes_height * render_scale,
-                             &pixel_buffer, &pitch);
+  g_renderer_funcs.BeginDraw(draw_width, draw_height, &pixel_buffer, &pitch);
   if (g_display_perf || g_config.display_perf_title) {
     static float history[64], average;
     static int history_pos;
@@ -421,8 +430,62 @@ static void DrawPpuFrameWithPerf(void) {
   if (g_display_perf)
     RenderNumber(pixel_buffer + pitch * render_scale, pitch, g_curr_fps, render_scale == 4);
 
+#if defined(RECOMP_LAUNCHER)
+  /* Cache the clean host frame before overlay composition. While the menu is
+   * open, this is re-presented without advancing the emulated machine. */
+  {
+    size_t row_bytes = (size_t)draw_width * 4;
+    size_t needed = row_bytes * (size_t)draw_height;
+    if (needed > g_runtime_ui_frame_capacity) {
+      uint8_t *grown = (uint8_t *)realloc(g_runtime_ui_frame, needed);
+      if (grown) {
+        g_runtime_ui_frame = grown;
+        g_runtime_ui_frame_capacity = needed;
+      }
+    }
+    if (g_runtime_ui_frame && needed <= g_runtime_ui_frame_capacity) {
+      for (int y = 0; y < draw_height; y++)
+        memcpy(g_runtime_ui_frame + (size_t)y * row_bytes,
+               pixel_buffer + (size_t)y * pitch, row_bytes);
+      g_runtime_ui_frame_width = draw_width;
+      g_runtime_ui_frame_height = draw_height;
+    }
+    if (g_runtime_ui && recomp_runtime_ui_is_open(g_runtime_ui))
+      recomp_runtime_ui_render_argb8888(g_runtime_ui, pixel_buffer,
+                                        draw_width, draw_height, pitch);
+  }
+#endif
+
   g_renderer_funcs.EndDraw();
 }
+
+#if defined(RECOMP_LAUNCHER)
+static void PresentRuntimeUi(void) {
+  if (!g_runtime_ui || !recomp_runtime_ui_is_open(g_runtime_ui))
+    return;
+  if (!g_runtime_ui_frame) {
+    g_runtime_ui_frame_width = g_snes_width;
+    g_runtime_ui_frame_height = g_snes_height;
+    g_runtime_ui_frame_capacity =
+        (size_t)g_runtime_ui_frame_width * g_runtime_ui_frame_height * 4;
+    g_runtime_ui_frame = (uint8_t *)calloc(g_runtime_ui_frame_capacity, 1);
+    if (!g_runtime_ui_frame) return;
+  }
+  uint8 *pixels = NULL;
+  int pitch = 0;
+  int width = g_runtime_ui_frame_width;
+  int height = g_runtime_ui_frame_height;
+  size_t row_bytes = (size_t)width * 4;
+  g_renderer_funcs.BeginDraw(width, height, &pixels, &pitch);
+  if (!pixels || pitch < (int)row_bytes)
+    return;
+  for (int y = 0; y < height; y++)
+    memcpy(pixels + (size_t)y * pitch,
+           g_runtime_ui_frame + (size_t)y * row_bytes, row_bytes);
+  recomp_runtime_ui_render_argb8888(g_runtime_ui, pixels, width, height, pitch);
+  g_renderer_funcs.EndDraw();
+}
+#endif
 
 static SDL_mutex *g_audio_mutex;
 static uint8 *g_audiobuffer, *g_audiobuffer_cur, *g_audiobuffer_end;
@@ -608,6 +671,232 @@ static const struct RendererFuncs kSdlRendererFuncs = {
   &SdlRenderer_BeginDraw,
   &SdlRenderer_EndDraw,
 };
+
+#if defined(RECOMP_LAUNCHER)
+typedef struct RuntimeUiContext {
+  const char *config_path;
+} RuntimeUiContext;
+
+static RuntimeUiContext g_runtime_ui_context;
+static const char *const kFullscreenChoices[] = {
+  "Windowed", "Borderless", "Exclusive"
+};
+/* One vocabulary shared by the pre-boot ImGui launcher and runtime menu. */
+static const char *const kSmwViewModes[] = {
+  "Standard (4:3)", "16:9 fixed", "Adaptive"
+};
+static const RecompRuntimeUiItem kRuntimeUiItems[] = {
+  { "fullscreen", "Display", "Fullscreen", "Choose windowed or fullscreen output.",
+    RECOMP_RUNTIME_UI_CHOICE, 0, 2, 1, kFullscreenChoices, 3 },
+  { "window_scale", "Display", "Window scale", "Resize the window in native-size steps.",
+    RECOMP_RUNTIME_UI_INT, 1, kMaxWindowScale, 1, NULL, 0 },
+  { "view_mode", "Display", "View mode", "Use the same view policy as the launcher.",
+    RECOMP_RUNTIME_UI_CHOICE, kWidescreenMode_Standard,
+    kWidescreenMode_Adaptive, 1, kSmwViewModes, countof(kSmwViewModes) },
+  { "widescreen_hud", "Display", "Edge HUD", "Anchor status groups to widescreen edges.",
+    RECOMP_RUNTIME_UI_BOOL, 0, 1, 1, NULL, 0 },
+  { "linear_filter", "Graphics", "Linear filter", "Smooth the final game image.",
+    RECOMP_RUNTIME_UI_BOOL, 0, 1, 1, NULL, 0 },
+  { "new_renderer", "Graphics", "New PPU renderer", "Switch the PPU rendering path live.",
+    RECOMP_RUNTIME_UI_BOOL, 0, 1, 1, NULL, 0 },
+  { "no_sprite_limits", "Graphics", "No sprite limits", "Lift authentic per-scanline sprite limits.",
+    RECOMP_RUNTIME_UI_BOOL, 0, 1, 1, NULL, 0 },
+  { "audio", "Audio", "Audio", "Enable or mute game audio output.",
+    RECOMP_RUNTIME_UI_BOOL, 0, 1, 1, NULL, 0 },
+  { "volume", "Audio", "Volume", "Set the in-game mixer volume.",
+    RECOMP_RUNTIME_UI_INT, 0, 100, 5, NULL, 0 },
+  { "resume", "System", "Resume game", "Close settings and return to the game.",
+    RECOMP_RUNTIME_UI_ACTION, 0, 0, 0, NULL, 0 },
+  { "save_state", "System", "Save state 1", "Save the current game state to slot 1.",
+    RECOMP_RUNTIME_UI_ACTION, 0, 0, 0, NULL, 0 },
+  { "load_state", "System", "Load state 1", "Load game state slot 1.",
+    RECOMP_RUNTIME_UI_ACTION, 0, 0, 0, NULL, 0 },
+  { "reset", "System", "Reset game", "Reset the emulated SNES.",
+    RECOMP_RUNTIME_UI_ACTION, 0, 0, 0, NULL, 0 },
+};
+
+static int RuntimeUiGet(void *context, const RecompRuntimeUiItem *item, int *out) {
+  (void)context;
+  if (!strcmp(item->key, "fullscreen")) *out = g_config.fullscreen;
+  else if (!strcmp(item->key, "window_scale")) *out = g_current_window_scale;
+  else if (!strcmp(item->key, "view_mode")) *out = g_config.widescreen_mode;
+  else if (!strcmp(item->key, "widescreen_hud")) *out = g_config.widescreen_hud;
+  else if (!strcmp(item->key, "linear_filter")) *out = g_config.linear_filtering;
+  else if (!strcmp(item->key, "new_renderer")) *out = g_new_ppu;
+  else if (!strcmp(item->key, "no_sprite_limits")) *out = g_config.no_sprite_limits;
+  else if (!strcmp(item->key, "audio")) *out = g_config.enable_audio;
+  else if (!strcmp(item->key, "volume")) *out = g_config.volume;
+  else return 0;
+  return 1;
+}
+
+static void RuntimeUiApplyViewMode(int mode) {
+#ifndef SMW_COOP_BUILD
+  extern void SmwWidescreenInterpPreOpcode(CpuState *cpu, uint32_t pc24);
+  mode = IntMax(kWidescreenMode_Standard,
+                IntMin(mode, kWidescreenMode_Adaptive));
+  g_config.widescreen_mode = (uint8)mode;
+  void (*hook)(CpuState *, uint32_t) =
+      mode == kWidescreenMode_Standard ? NULL : SmwWidescreenInterpPreOpcode;
+  interp_bridge_set_pre_opcode_hook(0x02A828u, hook);
+  interp_bridge_set_pre_opcode_hook(0x02A916u, hook);
+  UpdateWidescreen();
+  if (mode != kWidescreenMode_Adaptive &&
+      !(SDL_GetWindowFlags(g_window) &
+        (SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_FULLSCREEN))) {
+    SDL_SetWindowSize(g_window, g_snes_width * g_current_window_scale,
+                      g_snes_height * g_current_window_scale);
+  }
+#else
+  (void)mode;
+#endif
+}
+
+static int RuntimeUiSet(void *context, const RecompRuntimeUiItem *item, int value) {
+  (void)context;
+  if (!strcmp(item->key, "fullscreen")) {
+    Uint32 flag = value == 1 ? SDL_WINDOW_FULLSCREEN_DESKTOP
+                             : value == 2 ? SDL_WINDOW_FULLSCREEN : 0;
+    if (SDL_SetWindowFullscreen(g_window, flag) != 0) return 0;
+    g_config.fullscreen = (uint8)value;
+    g_win_flags &= ~(SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_FULLSCREEN);
+    g_win_flags |= flag;
+  } else if (!strcmp(item->key, "window_scale")) {
+    ChangeWindowScale(value - g_current_window_scale);
+    g_config.window_scale = g_current_window_scale;
+  } else if (!strcmp(item->key, "view_mode")) {
+    RuntimeUiApplyViewMode(value);
+  } else if (!strcmp(item->key, "widescreen_hud")) {
+    g_config.widescreen_hud = value != 0;
+  } else if (!strcmp(item->key, "linear_filter")) {
+    g_config.linear_filtering = value != 0;
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY,
+                g_config.linear_filtering ? "best" : "nearest");
+    if (g_texture)
+      SDL_SetTextureScaleMode(g_texture, g_config.linear_filtering
+          ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
+  } else if (!strcmp(item->key, "new_renderer")) {
+    g_config.new_renderer = value != 0;
+    g_new_ppu = g_config.new_renderer;
+    if (g_new_ppu) g_ppu_render_flags |= kPpuRenderFlags_NewRenderer;
+    else g_ppu_render_flags &= ~kPpuRenderFlags_NewRenderer;
+  } else if (!strcmp(item->key, "no_sprite_limits")) {
+    g_config.no_sprite_limits = value != 0;
+  } else if (!strcmp(item->key, "audio")) {
+    g_config.enable_audio = value != 0;
+  } else if (!strcmp(item->key, "volume")) {
+    g_config.volume = (uint8)value;
+    g_sdl_audio_mixer_volume = value * SDL_MIX_MAXVOLUME / 100;
+  } else {
+    return 0;
+  }
+  if (g_config.no_sprite_limits ||
+      g_config.widescreen_mode != kWidescreenMode_Standard)
+    g_ppu_render_flags |= kPpuRenderFlags_NoSpriteLimits;
+  else
+    g_ppu_render_flags &= ~kPpuRenderFlags_NoSpriteLimits;
+  return 1;
+}
+
+static int RuntimeUiAction(void *context, const RecompRuntimeUiItem *item) {
+  (void)context;
+  if (!strcmp(item->key, "resume")) recomp_runtime_ui_close(g_runtime_ui);
+  else if (!strcmp(item->key, "save_state")) RtlSaveLoad(kSaveLoad_Save, 0);
+  else if (!strcmp(item->key, "load_state")) RtlSaveLoad(kSaveLoad_Load, 0);
+  else if (!strcmp(item->key, "reset")) RtlReset(1);
+  else return 0;
+  return 1;
+}
+
+static int RuntimeUiEnabled(void *context, const RecompRuntimeUiItem *item) {
+  (void)context;
+#ifdef SMW_COOP_BUILD
+  if (!strcmp(item->key, "view_mode") || !strcmp(item->key, "widescreen_hud"))
+    return 0;
+#endif
+  if (!strcmp(item->key, "widescreen_hud") &&
+      g_config.widescreen_mode == kWidescreenMode_Standard)
+    return 0;
+  if (!strcmp(item->key, "window_scale") &&
+      (SDL_GetWindowFlags(g_window) &
+       (SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_FULLSCREEN)))
+    return 0;
+  return 1;
+}
+
+static void RuntimeUiSave(void *context) {
+  RuntimeUiContext *ui = (RuntimeUiContext *)context;
+  WriteConfigFile(ui->config_path);
+}
+
+static void RuntimeUiVisibility(void *context, int open) {
+  (void)context;
+  g_input_state = 0;
+  g_pad_buttons = 0;
+  g_gamepad[0].axis_buttons = g_gamepad[1].axis_buttons = 0;
+  SDL_ShowCursor(open || g_cursor ? SDL_ENABLE : SDL_DISABLE);
+}
+
+static int RuntimeUiHandleKey(const SDL_KeyboardEvent *event) {
+  int was_open = g_runtime_ui && recomp_runtime_ui_is_open(g_runtime_ui);
+  RecompRuntimeUiInput input;
+  switch (event->keysym.sym) {
+  case SDLK_F1: case SDLK_ESCAPE: input = RECOMP_RUNTIME_UI_INPUT_TOGGLE; break;
+  case SDLK_BACKSPACE: input = RECOMP_RUNTIME_UI_INPUT_BACK; break;
+  case SDLK_UP: input = RECOMP_RUNTIME_UI_INPUT_UP; break;
+  case SDLK_DOWN: input = RECOMP_RUNTIME_UI_INPUT_DOWN; break;
+  case SDLK_LEFT: input = RECOMP_RUNTIME_UI_INPUT_LEFT; break;
+  case SDLK_RIGHT: input = RECOMP_RUNTIME_UI_INPUT_RIGHT; break;
+  case SDLK_RETURN: case SDLK_KP_ENTER: case SDLK_SPACE:
+    input = RECOMP_RUNTIME_UI_INPUT_ACCEPT; break;
+  default: return was_open;
+  }
+  return recomp_runtime_ui_handle_input(
+      g_runtime_ui, input, event->type == SDL_KEYDOWN, event->repeat != 0);
+}
+
+static int RuntimeUiHandleController(const SDL_ControllerButtonEvent *event) {
+  int was_open = g_runtime_ui && recomp_runtime_ui_is_open(g_runtime_ui);
+  RecompRuntimeUiInput input;
+  switch (event->button) {
+  case SDL_CONTROLLER_BUTTON_GUIDE: input = RECOMP_RUNTIME_UI_INPUT_TOGGLE; break;
+  case SDL_CONTROLLER_BUTTON_B: input = RECOMP_RUNTIME_UI_INPUT_BACK; break;
+  case SDL_CONTROLLER_BUTTON_A: input = RECOMP_RUNTIME_UI_INPUT_ACCEPT; break;
+  case SDL_CONTROLLER_BUTTON_DPAD_UP: input = RECOMP_RUNTIME_UI_INPUT_UP; break;
+  case SDL_CONTROLLER_BUTTON_DPAD_DOWN: input = RECOMP_RUNTIME_UI_INPUT_DOWN; break;
+  case SDL_CONTROLLER_BUTTON_DPAD_LEFT: input = RECOMP_RUNTIME_UI_INPUT_LEFT; break;
+  case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: input = RECOMP_RUNTIME_UI_INPUT_RIGHT; break;
+  default: return was_open;
+  }
+  return recomp_runtime_ui_handle_input(
+      g_runtime_ui, input, event->type == SDL_CONTROLLERBUTTONDOWN, 0);
+}
+
+static void RuntimeUiCreate(const char *config_path) {
+  RecompRuntimeUiConfig config;
+  memset(&config, 0, sizeof(config));
+#ifdef SMW_COOP_BUILD
+  config.title = "Super Mario World Co-op";
+#else
+  config.title = "Super Mario World";
+#endif
+  config.subtitle = "SETTINGS";
+  config.theme = "snes";
+  config.accept_label = "A / Enter";
+  config.back_label = "B / Backspace";
+  config.items = kRuntimeUiItems;
+  config.item_count = countof(kRuntimeUiItems);
+  g_runtime_ui_context.config_path = config_path;
+  config.callbacks.context = &g_runtime_ui_context;
+  config.callbacks.get_value = RuntimeUiGet;
+  config.callbacks.set_value = RuntimeUiSet;
+  config.callbacks.run_action = RuntimeUiAction;
+  config.callbacks.is_enabled = RuntimeUiEnabled;
+  config.callbacks.save = RuntimeUiSave;
+  config.callbacks.visibility_changed = RuntimeUiVisibility;
+  g_runtime_ui = recomp_runtime_ui_create(&config);
+}
+#endif
 
 
 void MkDir(const char *s) {
@@ -865,6 +1154,7 @@ int main(int argc, char** argv) {
       ParseConfigFile("config.local.ini");
     }
   }
+  g_sdl_audio_mixer_volume = g_config.volume * SDL_MIX_MAXVOLUME / 100;
 #ifdef SMW_COOP_BUILD
   /* The simultaneous co-op ROM and the audio-only MSU ROM both replace
    * expansion-bank data. They cannot be layered into one analysis image. */
@@ -1002,9 +1292,6 @@ int main(int argc, char** argv) {
       gi.widescreen_supported = 0;
       gi.adaptive_view_supported = 0;
 #ifndef SMW_COOP_BUILD
-      static const char *const kSmwViewModes[] = {
-        "Standard (4:3)", "16:9 fixed", "Adaptive"
-      };
       gi.aspect_labels = kSmwViewModes;
       gi.num_aspect_labels = (int)countof(kSmwViewModes);
       gi.aspect_experimental = 1;
@@ -1392,7 +1679,10 @@ error_reading:;
   g_spc_player->initialize(g_spc_player);
   host_report_breadcrumb("SPC player initialized");
 
-  if (g_config.enable_audio) {
+  /* Open the device even when audio starts disabled. SDL devices begin paused,
+   * which lets the runtime menu enable output later without reinitializing the
+   * callback/mixer graph. */
+  {
     /* Enumerate output devices into the breadcrumb ring: which device
      * SDL picks (and what else was available) is exactly the per-machine
      * variable a non-reproducible audio/boot crash report needs. */
@@ -1413,22 +1703,23 @@ error_reading:;
     if (g_audio_device == 0) {
       host_report_breadcrumb("audio device open FAILED: %s", SDL_GetError());
       printf("Failed to open audio device: %s\n", SDL_GetError());
-      return 1;
+      if (g_config.enable_audio)
+        return 1;
+    } else {
+      g_audio_channels = 2;
+      /* One native DSP block is 534 samples at the SPC's true output rate
+       * of 32040 Hz (1.024 MHz / 32). The old divisor of 32000 understated
+       * the rate, playing everything a constant -2.2 cents flat (measured
+       * vs the snes9x oracle, MMX issue #4); the truncating division also
+       * undersized the block for non-multiple rates. Round to the nearest
+       * frame: 32040->534 (1:1, no resample), 48000->800, 44100->735. */
+      g_frames_per_block = (534 * have.freq + 32040 / 2) / 32040;
+      g_audiobuffer = (uint8 *)calloc(
+          g_frames_per_block * have.channels * sizeof(int16), 1);
+      host_report_breadcrumb(
+          "audio device opened: freq=%d (want %d) ch=%d samples=%d frames_per_block=%d",
+          have.freq, want.freq, have.channels, have.samples, g_frames_per_block);
     }
-    g_audio_channels = 2;
-    /* One native DSP block is 534 samples at the SPC's true output rate
-     * of 32040 Hz (1.024 MHz / 32). The old divisor of 32000 understated
-     * the rate, playing everything a constant -2.2 cents flat (measured
-     * vs the snes9x oracle, MMX issue #4); the truncating division also
-     * undersized the block for non-multiple rates. Round to the nearest
-     * frame: 32040->534 (1:1, no resample), 48000->800, 44100->735. */
-    g_frames_per_block = (534 * have.freq + 32040 / 2) / 32040;
-    g_audiobuffer = (uint8 *)calloc(g_frames_per_block * have.channels * sizeof(int16), 1);
-    host_report_breadcrumb(
-        "audio device opened: freq=%d (want %d) ch=%d samples=%d frames_per_block=%d",
-        have.freq, want.freq, have.channels, have.samples, g_frames_per_block);
-  } else {
-    host_report_breadcrumb("audio disabled in config");
   }
 
   PpuBeginDrawing(g_ppu, g_my_pixels, (size_t)g_snes_width * 4, 0);
@@ -1467,6 +1758,10 @@ error_reading:;
   if (framedump_dir)
     FrameDump_Init(framedump_dir);
 
+#if defined(RECOMP_LAUNCHER)
+  RuntimeUiCreate(config_file);
+#endif
+
   bool running = true;
   uint32 lastTick = SDL_GetTicks();
   uint32 curTick = 0;
@@ -1502,6 +1797,10 @@ error_reading:;
         break;
       case SDL_CONTROLLERBUTTONDOWN:
       case SDL_CONTROLLERBUTTONUP: {
+#if defined(RECOMP_LAUNCHER)
+        if (RuntimeUiHandleController(&event.cbutton))
+          break;
+#endif
         gi = GetGamepadInfo(event.cbutton.which);
         if (gi) {
           int b = RemapSdlButton(event.cbutton.button);
@@ -1523,9 +1822,17 @@ error_reading:;
         }
         break;
       case SDL_KEYDOWN:
+#if defined(RECOMP_LAUNCHER)
+        if (RuntimeUiHandleKey(&event.key))
+          break;
+#endif
         HandleInput(event.key.keysym.sym, event.key.keysym.mod, true);
         break;
       case SDL_KEYUP:
+#if defined(RECOMP_LAUNCHER)
+        if (RuntimeUiHandleKey(&event.key))
+          break;
+#endif
         HandleInput(event.key.keysym.sym, event.key.keysym.mod, false);
         break;
       case SDL_QUIT:
@@ -1536,12 +1843,24 @@ error_reading:;
 
     UpdateWidescreen();
 
-    if (g_paused != audiopaused) {
-      audiopaused = g_paused;
+    uint8 should_pause_audio = g_paused || !g_config.enable_audio;
+#if defined(RECOMP_LAUNCHER)
+    should_pause_audio |= g_runtime_ui && recomp_runtime_ui_is_open(g_runtime_ui);
+#endif
+    if (should_pause_audio != audiopaused) {
+      audiopaused = should_pause_audio;
       if (g_audio_device)
         SDL_PauseAudioDevice(g_audio_device, audiopaused);
     }
 
+#if defined(RECOMP_LAUNCHER)
+    if (g_runtime_ui && recomp_runtime_ui_is_open(g_runtime_ui)) {
+      PresentRuntimeUi();
+      SDL_Delay(1);
+      lastTick = SDL_GetTicks();
+      continue;
+    }
+#endif
     if (g_paused) {
       SDL_Delay(16);
       continue;
@@ -1682,6 +2001,14 @@ error_reading:;
     HandleCommand(kKeys_Save + 0, true);
 
   RtlWriteSram();
+
+#if defined(RECOMP_LAUNCHER)
+  recomp_runtime_ui_destroy(g_runtime_ui);
+  g_runtime_ui = NULL;
+  free(g_runtime_ui_frame);
+  g_runtime_ui_frame = NULL;
+  g_runtime_ui_frame_capacity = 0;
+#endif
 
   // clean sdl
   SDL_PauseAudioDevice(g_audio_device, 1);

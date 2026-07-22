@@ -48,6 +48,7 @@ typedef struct Config {
   uint8 fullscreen;
   uint8 window_scale;
   bool enable_audio;
+  uint8 volume;
   bool linear_filtering;
   uint8 output_method;
   uint16 audio_freq;

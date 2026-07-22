@@ -394,6 +394,10 @@ static bool HandleIniConfig(int section, const char *key, char *value) {
   } else if (section == 2) {
     if (StringEqualsNoCase(key, "EnableAudio")) {
       return ParseBool(value, &g_config.enable_audio);
+    } else if (StringEqualsNoCase(key, "Volume")) {
+      int volume = (int)strtol(value, (char**)NULL, 10);
+      g_config.volume = (uint8)(volume < 0 ? 0 : volume > 100 ? 100 : volume);
+      return true;
     } else if (StringEqualsNoCase(key, "AudioFreq")) {
       g_config.audio_freq = (uint16)strtol(value, (char**)NULL, 10);
       return true;
@@ -463,6 +467,7 @@ static bool ParseOneConfigFile(const char *filename, int depth) {
 
 void ParseConfigFile(const char *filename) {
   g_config.enable_audio = true;
+  g_config.volume = 100;
   /* Audio defaults match the values shipped in config.ini's [Sound]
    * section. Without these a release with no config.ini next to the
    * exe leaves audio_freq/audio_channels/audio_samples at 0, which
@@ -635,6 +640,11 @@ void WriteConfigFile(const char *filename) {
     { "General",    "SkipLauncher" },
     { "GamepadMap", "Deadzone" },
     { "GamepadMap", "DeadzoneP2" },
+    { "Graphics",   "Fullscreen" },
+    { "Graphics",   "NewRenderer" },
+    { "Graphics",   "NoSpriteLimits" },
+    { "Graphics",   "WidescreenHud" },
+    { "Sound",      "Volume" },
   };
   const int N = (int)countof(kvs);
   snprintf(kvs[0].val, sizeof(kvs[0].val), "%d", g_config.window_scale ? g_config.window_scale : 3);
@@ -650,6 +660,11 @@ void WriteConfigFile(const char *filename) {
   snprintf(kvs[9].val, sizeof(kvs[9].val), "%d", g_config.skip_launcher ? 1 : 0);
   snprintf(kvs[10].val, sizeof(kvs[10].val), "%d", g_config.deadzone[0]);
   snprintf(kvs[11].val, sizeof(kvs[11].val), "%d", g_config.deadzone[1]);
+  snprintf(kvs[12].val, sizeof(kvs[12].val), "%d", g_config.fullscreen);
+  snprintf(kvs[13].val, sizeof(kvs[13].val), "%d", g_config.new_renderer ? 1 : 0);
+  snprintf(kvs[14].val, sizeof(kvs[14].val), "%d", g_config.no_sprite_limits ? 1 : 0);
+  snprintf(kvs[15].val, sizeof(kvs[15].val), "%d", g_config.widescreen_hud ? 1 : 0);
+  snprintf(kvs[16].val, sizeof(kvs[16].val), "%d", g_config.volume);
 
   /* Read the existing file (may be absent on a fresh extract). */
   char *data = NULL;

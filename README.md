@@ -164,14 +164,23 @@ System shortcuts (configured in `config.ini`'s `[KeyMap]` section):
 
 | Action          | Default     |
 |-----------------|-------------|
-| Save state 1-10 | Shift+F1..F10 |
-| Load state 1-10 | F1..F10 |
+| Open in-game settings | F1 or Escape (controller Guide button) |
+| Save state 1 | In-game settings menu |
+| Load state 1 | In-game settings menu |
+| Save state 2-10 | Shift+F2..F10 |
+| Load state 2-10 | F2..F10 |
 | Toggle pause    | P |
 | Reset           | Ctrl+R |
 | Toggle fullscreen | Alt+Enter |
 | Turbo (fast-forward) | Tab |
 | Toggle renderer | R |
 | Display perf    | F |
+
+The settings overlay pauses game and audio advancement, consumes navigation
+before it reaches the SNES, and applies supported display, graphics, and audio
+changes live. Arrow keys plus Enter/Backspace navigate with the keyboard;
+controller d-pad, A, and B provide the same navigation. Accepted settings are
+written back to `config.ini`.
 
 ## Building from source
 
