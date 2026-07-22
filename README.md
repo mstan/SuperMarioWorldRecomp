@@ -76,7 +76,7 @@ The ROM is **never** redistributed — supply your own dump.
 
 ## Widescreen
 
-The launcher's **Aspect ratio** setting offers three view modes: **Standard
+The one-player launcher's **Aspect ratio** setting offers three view modes: **Standard
 (4:3)**, **16:9 fixed**, and **Adaptive**. The same selection can be set under
 `[Graphics]` in `config.ini` with `Widescreen = Standard`, `Fixed16x9`, or
 `Adaptive`.
@@ -92,7 +92,7 @@ logic expands with the visible margins. Screens without valid extended level
 terrain, including the title screen, overworld, and transitions, remain
 centered and pillarboxed. The maximum logical width is 446 pixels because wider
 views cannot represent every sprite safely in the SNES's 9-bit OAM coordinate
-space. Widescreen remains disabled in the simultaneous co-op build.
+space.
 
 ## Simultaneous co-op build
 
@@ -114,9 +114,11 @@ game controllers, or configure the `[Player1]` and `[Player2]` keyboard
 bindings in `keybinds.ini`. The stock ROM and generated `.coop.sfc` remain
 local and must not be redistributed.
 
-Widescreen is disabled for the co-op build because the hack changes the ROM
-offsets used by the stock-game widescreen hooks. The standard one-player build
-retains the option.
+Widescreen is currently disabled in the co-op build, and its launcher omits the
+aspect-ratio control. Co-op always runs in **Standard (4:3)** even if an older
+configuration or `SNESRECOMP_WIDESCREEN` requests another mode. The experimental
+IPS-specific hooks remain in the source for future work, but extended terrain
+streaming is not yet reliable during normal scrolling.
 
 ### Co-op hack attribution
 

@@ -246,6 +246,22 @@ MARKER = "/*WS-OVERRIDE*/"
 # extra (vanilla gap: spawn +0x120 < erase +0x130; spawn -0x30 > erase
 # -0x40). If the widened column would precede the level start (<0) the
 # vanilla column is kept.
+#
+# WS-COOP-TILE: the simultaneous-co-op IPS redirects the normal level
+# tilemap update at $05:86F7 to its four-camera-aware replacement at
+# $1F:B206. Its Layer 1 column builder ($1F:AA66) uses a much tighter
+# look-ahead table at $1F:B15F: {-1, +17} Map16 columns, versus vanilla's
+# {-8, +23}. +17 is just one column beyond the authentic 256-pixel view;
+# after the centered widescreen view advances, the next VRAM page therefore
+# still contains the hack's $25 clear tile and appears as a patterned slab.
+#
+# The first patch calls the shared priming helper at the replacement update
+# routine's entry. It makes the current cursor stale for just enough opening
+# frames to fill the added columns contiguously. The second patch adjusts the
+# direction-table value already loaded into local `_v11`; the shared helper
+# returns successive prime offsets, then the full live margin. This keeps
+# Standard byte-for-byte authentic, changes only the co-op Layer 1 builder,
+# and streams real Map16 columns rather than synthesizing terrain in the PPU.
 
 
 def _ws_despawn_patch(anchor_pc, tbl_lo):
@@ -278,6 +294,66 @@ def _ws_despawn_patch(anchor_pc, tbl_lo):
 
 
 BLOCK_PATCHES = [
+    {
+        "marker": "/*WS-COOP-TILE*/",
+        "func_match": "bank_1F_B206_M0X0",
+        "anchor": "cpu_trace_block(cpu, 0x1FB206)",
+        "snippet": (
+            " /*WS-COOP-TILE*/ {"
+            " extern void SmwCoopWidescreenTileBegin(CpuState *cpu);"
+            " SmwCoopWidescreenTileBegin(cpu); }"
+        ),
+    },
+    {
+        "marker": "/*WS-COOP-TILE*/",
+        "func_match": "bank_1F_AA66_M1X1",
+        "anchor": "uint16 _v11 = cpu_read16(cpu, (uint8)((((uint32)0x1fb15f + (uint32)cpu->X)) >> 16), (uint16)(((uint32)0x1fb15f + (uint32)cpu->X)));",
+        "snippet": (
+            " /*WS-COOP-TILE*/ {"
+            " extern int SmwCoopWidescreenTileOffset(CpuState *cpu);"
+            " _v11 = (uint16)(_v11 + SmwCoopWidescreenTileOffset(cpu)); }"
+        ),
+    },
+    {
+        "marker": "/*WS-COOP-ROW*/",
+        "func_match": "bank_1F_AB83_M1X1",
+        "anchor": "cpu_trace_block(cpu, 0x1FAB83)",
+        "snippet": (
+            " /*WS-COOP-ROW*/ {"
+            " extern void SmwCoopWidescreenRowBegin(CpuState *cpu);"
+            " SmwCoopWidescreenRowBegin(cpu); }"
+        ),
+    },
+    {
+        "marker": "/*WS-COOP-ROW*/",
+        "func_match": "bank_1F_AB83_M1X1",
+        "anchor": "cpu_trace_block(cpu, 0x1FAC23)",
+        "snippet": (
+            " /*WS-COOP-ROW*/ {"
+            " extern void SmwCoopWidescreenRowEnd(CpuState *cpu);"
+            " SmwCoopWidescreenRowEnd(cpu); }"
+        ),
+    },
+    {
+        "marker": "/*WS-COOP-ROW*/",
+        "func_match": "bank_1F_AC27_M1X1",
+        "anchor": "cpu_trace_block(cpu, 0x1FAC27)",
+        "snippet": (
+            " /*WS-COOP-ROW*/ {"
+            " extern void SmwCoopWidescreenRowBegin(CpuState *cpu);"
+            " SmwCoopWidescreenRowBegin(cpu); }"
+        ),
+    },
+    {
+        "marker": "/*WS-COOP-ROW*/",
+        "func_match": "bank_1F_AC27_M1X1",
+        "anchor": "cpu_trace_block(cpu, 0x1FAC90)",
+        "snippet": (
+            " /*WS-COOP-ROW*/ {"
+            " extern void SmwCoopWidescreenRowEnd(CpuState *cpu);"
+            " SmwCoopWidescreenRowEnd(cpu); }"
+        ),
+    },
     {
         "marker": "/*WS-FLAG*/",
         # Only inside GetDrawInfo* (banks 01/02/03; normal sprites use the
@@ -491,7 +567,8 @@ BLOCK_PATCHES = [
 
 # Every marker any injection mode can leave behind (prologues + block patches).
 ALL_MARKERS = (MARKER, "/*WS-FLAG*/", "/*WS-DESPAWN*/", "/*WS-SPAWN*/",
-               "/*WS-CHAIN*/", "/*WS-SLOT*/", "/*WS-RELOC*/", "/*WS-WING*/")
+               "/*WS-CHAIN*/", "/*WS-SLOT*/", "/*WS-RELOC*/", "/*WS-WING*/",
+               "/*WS-COOP-TILE*/", "/*WS-COOP-ROW*/")
 
 
 def strip_injections(text):

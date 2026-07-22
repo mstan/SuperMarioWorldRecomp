@@ -23,6 +23,7 @@
 #include "common_cpu_infra.h"
 #include "framedump.h"
 #include "config.h"
+#include "widescreen.h"
 #ifdef SMW_COOP_BUILD
 #include "coop_patch.h"
 #endif
@@ -95,16 +96,6 @@ int g_ws_extra = 0;
 // override sources can just `extern bool g_ws_active;` without a mandatory
 // new translation unit. False = authentic SMW behaviour.
 bool g_ws_active = false;
-
-// Hard cap on the border width, from the SNES 9-bit OAM x space: the PPU
-// wrap threshold is 256+extra, and left-margin tiles (down to screen-x
-// -(64+extra), 64 = widest-sprite cushion) live at 512-(64+extra)..511,
-// which must stay >= the threshold: 2*extra <= 192. Beyond this, sprites
-// in the outer margin are unrepresentable (the 16:9 -> ~2.0:1 range is
-// covered; true 21:9 is not). The game-logic override snippets clamp to
-// the same value.
-enum { kWsExtraMax = 95 };
-
 
 enum {
   kDefaultFullscreen = 0,
@@ -365,15 +356,24 @@ void RtlDrawPpuFrame(uint8 *pixel_buffer, size_t pitch, uint32 render_flags) {
   if (g_ws_extra > 0) {
     bool in_level = (g_ram[0x100] == 0x14);  // misc_game_mode: level main routine
     if (in_level) {
-      PpuSetExtraSpace(g_ppu, (uint8_t)g_ws_extra);
-      // HUD split: SMW's status bar lives on BG3 rows 1-4 (scanlines < 40).
-      // Left chunk = MARIO + lives (cols 2-6, x < 56) anchored to the left
-      // edge. Center chunk = the naturally adjacent middle group — yoshi
-      // coins (cols 8-11), bonus stars (9-13), item box frame (14-17; the
-      // boxed item is an OAM sprite and stays with it), TIME label + timer
-      // (19-21) — x 56..183, kept centered. Right chunk = score (23-28) +
-      // coin counter (25-29), x >= 184, anchored to the right edge. Both
-      // outer chunks keep their authentic 16px inset from the screen edge.
+      // Keep the fixed framebuffer budget, but expose only world columns that
+      // exist inside the level. At the first/last camera screen, rendering a
+      // full symmetric margin wraps the tilemap and produces a patterned slab
+      // of unrelated level data (especially obvious at Yoshi's House).
+      int camera_x = g_ram[0x1A] | (g_ram[0x1B] << 8);
+      int last_camera_x = g_ram[0x5E] << 8;
+      int left = IntMin(g_ws_extra, camera_x);
+      int right = IntMin(g_ws_extra, IntMax(0, last_camera_x - camera_x));
+      PpuSetExtraSpaceCentered(g_ppu, (uint8_t)g_ws_extra);
+      PpuSetExtraSideSpace(g_ppu, left, right, 0);
+      if (left != g_ws_extra || right != g_ws_extra)
+        memset(g_my_pixels, 0, row_bytes * g_snes_height);
+      // HUD split: the status bar lives on BG3 rows 1-4 (scanlines < 40).
+      // The 56/184 boundaries were screenshot-validated against both layouts:
+      // stock keeps MARIO/lives left, its middle item/time group centered, and
+      // score/coins right; co-op keeps MARIO/lives left, TIME/coins centered,
+      // and its two replacement player counters right. No cluster is bisected.
+      // Both outer chunks keep their authentic 16px inset from the edge.
       // Message boxes render lower on BG3 and are unaffected.
       PpuSetWidescreenHudSplit(g_ppu, g_config.widescreen_hud ? 40 : 0, 56, 184);
       // The status bar occupies BG3 scanlines < 40; below it, level content on
@@ -392,8 +392,8 @@ void RtlDrawPpuFrame(uint8 *pixel_buffer, size_t pitch, uint32 render_flags) {
     }
   }
   g_rtl_game_info->draw_ppu_frame();
-  for (size_t y = 0, y_end = g_snes_height; y < y_end; y++)
-    memcpy((uint8 *)pixel_buffer + y * pitch, g_my_pixels + y * row_bytes, row_bytes);
+  RtlWidescreenPresent(pixel_buffer, pitch, g_my_pixels,
+                       g_snes_width, g_snes_height);
 }
 
 static void DrawPpuFrameWithPerf(void) {
@@ -870,10 +870,10 @@ int main(int argc, char** argv) {
    * expansion-bank data. They cannot be layered into one analysis image. */
   g_config.msu1_enabled = false;
   g_config.msu1_dir[0] = '\0';
-  /* The stock-game widescreen hooks target code and data offsets changed by
-   * the co-op hack. Keep the feature available to the standard build only. */
+  /* The co-op IPS rewrites the Layer 1 streamer. The experimental port still
+   * corrupts terrain during ordinary scrolling, so never honor a persisted
+   * widescreen choice in this build. */
   g_config.widescreen_mode = kWidescreenMode_Standard;
-  g_config.widescreen_hud = false;
 #endif
   host_report_breadcrumb(
       "config parsed: output=%d new_renderer=%d scale=%d fullscreen=%d "
@@ -998,23 +998,28 @@ int main(int argc, char** argv) {
 #endif
       gi.expected_crc = kSmwUsaCrc32;
       gi.has_expected_crc = 1;
-#ifdef SMW_COOP_BUILD
-      gi.widescreen_supported = 0;
-      gi.msu1_supported = 0;
-      gi.msu1_note = NULL;
-#else
 #if defined(RECOMP_LAUNCHER)
       gi.widescreen_supported = 0;
       gi.adaptive_view_supported = 0;
+#ifndef SMW_COOP_BUILD
       static const char *const kSmwViewModes[] = {
         "Standard (4:3)", "16:9 fixed", "Adaptive"
       };
       gi.aspect_labels = kSmwViewModes;
       gi.num_aspect_labels = (int)countof(kSmwViewModes);
       gi.aspect_experimental = 1;
+#endif
+#else
+#ifdef SMW_COOP_BUILD
+      gi.widescreen_supported = 0;
 #else
       gi.widescreen_supported = 1;
 #endif
+#endif
+#ifdef SMW_COOP_BUILD
+      gi.msu1_supported = 0;
+      gi.msu1_note = NULL;
+#else
       gi.msu1_supported = 1;
       gi.msu1_note = "Uses the audio-only \"SMW MSU-1\" patch (zeldix t1436). "
                      "PCM packs must be built for THIS patch - packs for "
@@ -1058,6 +1063,11 @@ int main(int argc, char** argv) {
 #else
         g_config.widescreen_mode     = ls.widescreen ?
             kWidescreenMode_Fixed16x9 : kWidescreenMode_Standard;
+#endif
+#ifdef SMW_COOP_BUILD
+        /* Keep stale launcher/config values from persisting or activating the
+         * incomplete co-op widescreen spike. */
+        g_config.widescreen_mode     = kWidescreenMode_Standard;
 #endif
         g_config.widescreen_hud      = ls.widescreen_hud != 0;
         g_config.enable_audio        = true;  /* audio is always on; MSU-1 vs SPC is the toggle */
@@ -1200,6 +1210,7 @@ int main(int argc, char** argv) {
   // the window is created; adaptive starts authentic-width and follows the
   // live drawable once the renderer exists. SNESRECOMP_WIDESCREEN accepts
   // Standard/0, Fixed16x9/1, or Adaptive/2 for quick testing.
+#ifndef SMW_COOP_BUILD
   {
     const char *ws_env = getenv("SNESRECOMP_WIDESCREEN");
     if (ws_env && *ws_env) {
@@ -1212,11 +1223,10 @@ int main(int argc, char** argv) {
           kWidescreenMode_Standard;
     }
   }
-#ifdef SMW_COOP_BUILD
-  /* Do not let a shared config.ini or environment override re-enable hooks
-   * whose stock-ROM addresses are invalid in the co-op image. */
+#else
+  /* Co-op is intentionally 4:3-only until its IPS-specific terrain streamer
+   * can fill the extended columns without corrupting the tilemap. */
   g_config.widescreen_mode = kWidescreenMode_Standard;
-  g_config.widescreen_hud = false;
 #endif
   g_ws_extra = 0;
   g_ws_active = false;
@@ -1231,6 +1241,21 @@ int main(int argc, char** argv) {
                                       SmwWidescreenInterpPreOpcode);
     interp_bridge_set_pre_opcode_hook(0x02A916u,
                                       SmwWidescreenInterpPreOpcode);
+#ifdef SMW_COOP_BUILD
+    // The co-op IPS redirects Layer 1 column streaming into bank $1F.
+    interp_bridge_set_pre_opcode_hook(0x1FB206u,
+                                      SmwWidescreenInterpPreOpcode);
+    interp_bridge_set_pre_opcode_hook(0x1FAA7Au,
+                                      SmwWidescreenInterpPreOpcode);
+    interp_bridge_set_pre_opcode_hook(0x1FAB83u,
+                                      SmwWidescreenInterpPreOpcode);
+    interp_bridge_set_pre_opcode_hook(0x1FAC23u,
+                                      SmwWidescreenInterpPreOpcode);
+    interp_bridge_set_pre_opcode_hook(0x1FAC27u,
+                                      SmwWidescreenInterpPreOpcode);
+    interp_bridge_set_pre_opcode_hook(0x1FAC90u,
+                                      SmwWidescreenInterpPreOpcode);
+#endif
   }
   // A wider viewport can expose more sprites on one scanline than the SNES
   // could see at 256px. Keep authentic caps configurable at 4:3, but lift them

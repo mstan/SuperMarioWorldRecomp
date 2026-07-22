@@ -65,6 +65,30 @@ if(SMW_BUILD_COOP)
             "src/gen-coop/ is empty - run `bash tools/regen.sh --coop` with "
             "a verified stock smw.sfc before enabling SMW_BUILD_COOP.")
     endif()
+
+    # Keep the experimental co-op widescreen spike buildable for future work.
+    # The IPS emits separate object-lifecycle variants and moves its Layer 1
+    # streamer into bank $1F, so the generated co-op tree needs its own check.
+    # Runtime and launcher support remain gated off until streaming is reliable.
+    set(SMW_COOP_WIDESCREEN_OVERRIDE_STAMP
+        ${CMAKE_CURRENT_BINARY_DIR}/smw_coop_widescreen_overrides.stamp)
+    add_custom_command(
+        OUTPUT ${SMW_COOP_WIDESCREEN_OVERRIDE_STAMP}
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tools/apply_overrides.py
+                --check
+                --gen-dir ${CMAKE_SOURCE_DIR}/src/gen-coop
+                --manifest ${CMAKE_SOURCE_DIR}/overrides/widescreen/overrides.manifest
+        COMMAND ${CMAKE_COMMAND} -E touch ${SMW_COOP_WIDESCREEN_OVERRIDE_STAMP}
+        DEPENDS
+            ${CMAKE_SOURCE_DIR}/tools/apply_overrides.py
+            ${CMAKE_SOURCE_DIR}/overrides/widescreen/overrides.manifest
+            ${SMW_COOP_GEN_SOURCES}
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMENT "Applying co-op widescreen object-lifecycle hooks"
+        VERBATIM)
+    set_source_files_properties(${SMW_COOP_GEN_SOURCES} PROPERTIES
+        OBJECT_DEPENDS ${SMW_COOP_WIDESCREEN_OVERRIDE_STAMP})
 endif()
 
 file(GLOB SMW_OVERRIDE_SOURCES CONFIGURE_DEPENDS
