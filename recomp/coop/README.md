@@ -1,8 +1,20 @@
 # Simultaneous co-op patch
 
-`smw_coop.ips` is a ROM-data-free delta generated from the user-supplied
-`super_mario_world_co-op_hack.rar`. The archive itself and its patched ROM are
-not distributed by this project.
+`smw_coop.ips` is an IPS delta generated from the user-supplied
+`super_mario_world_co-op_hack.rar`. It contains the co-op hack's changed bytes,
+but not a complete stock or patched ROM. The archive itself and its patched ROM
+are not distributed by this project.
+
+## Hack attribution
+
+This build uses **Super Mario World - 2 Player Simultaneous Co-op Hack**:
+
+- **Noobish Noobsicle** - creator of the original SMW co-op hack
+- **Bloony Fox** and **NesDraug** - developed it into the full hack used here
+
+Source and original credits:
+[Romhack Plaza - Super Mario World - 2 Player Simultaneous Co-op Hack](https://romhackplaza.org/romhacks/super-mario-world-2-player-co-op-hack-snes/).
+This project is not affiliated with or endorsed by the hack authors.
 
 Patch provenance:
 

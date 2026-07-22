@@ -81,12 +81,13 @@ uses the simultaneous co-op gameplay patch while keeping the normal legal ROM
 flow: select an untouched Super Mario World (USA) ROM in the launcher or pass
 it on the command line.
 
-On first use, the executable verifies the stock ROM and applies the bundled
-ROM-data-free IPS patch. The generated file is written beside the executable
-as `<stock-rom-name>.coop.sfc`; that generated co-op ROM is what the runtime
-loads. Subsequent launches reuse it after verifying its CRC. Both headerless
-`.sfc` dumps and 512-byte-headered `.smc` dumps are accepted as input. To force
-a clean repatch, delete the generated `.coop.sfc` file.
+On first use, the executable verifies the stock ROM and applies the bundled IPS
+delta. The IPS contains the co-op hack's changed bytes, but not a complete ROM.
+The generated file is written beside the executable as
+`<stock-rom-name>.coop.sfc`; that generated co-op ROM is what the runtime loads.
+Subsequent launches reuse it after verifying its CRC. Both headerless `.sfc`
+dumps and 512-byte-headered `.smc` dumps are accepted as input. To force a clean
+repatch, delete the generated `.coop.sfc` file.
 
 Player 1 and Player 2 are active simultaneously in levels. Connect two SDL
 game controllers, or configure the `[Player1]` and `[Player2]` keyboard
@@ -96,6 +97,19 @@ local and must not be redistributed.
 Widescreen is disabled for the co-op build because the hack changes the ROM
 offsets used by the stock-game widescreen hooks. The standard one-player build
 retains its widescreen option.
+
+### Co-op hack attribution
+
+This build distributes an IPS delta for **Super Mario World - 2 Player
+Simultaneous Co-op Hack**. Original hack credits:
+
+- **Noobish Noobsicle** - creator of the original SMW co-op hack
+- **Bloony Fox** and **NesDraug** - developed it into the full hack used here
+
+Source and original credits:
+[Romhack Plaza - Super Mario World - 2 Player Simultaneous Co-op Hack](https://romhackplaza.org/romhacks/super-mario-world-2-player-co-op-hack-snes/).
+This recompilation project is not affiliated with or endorsed by the hack
+authors.
 
 ## Controls (default `keybinds.ini`)
 
