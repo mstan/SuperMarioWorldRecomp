@@ -74,6 +74,26 @@ See [`RELEASE.md`](RELEASE.md) for the latest release notes.
 
 The ROM is **never** redistributed — supply your own dump.
 
+## Widescreen
+
+The launcher's **Aspect ratio** setting offers three view modes: **Standard
+(4:3)**, **16:9 fixed**, and **Adaptive**. The same selection can be set under
+`[Graphics]` in `config.ini` with `Widescreen = Standard`, `Fixed16x9`, or
+`Adaptive`.
+
+Both widescreen modes retain the native 224-pixel logical height. Fixed mode
+always renders a roughly 398-pixel-wide 16:9 view. Adaptive derives the logical
+width from the live window or fullscreen aspect ratio, so resizing a window
+wider reveals more of the level; at the native aspect it returns to the
+authentic 256-pixel view.
+
+The in-level status bar follows the wider view, and SMW's spawn and culling
+logic expands with the visible margins. Screens without valid extended level
+terrain, including the title screen, overworld, and transitions, remain
+centered and pillarboxed. The maximum logical width is 446 pixels because wider
+views cannot represent every sprite safely in the SNES's 9-bit OAM coordinate
+space. Widescreen remains disabled in the simultaneous co-op build.
+
 ## Simultaneous co-op build
 
 The repository also produces a separate `SuperMarioWorldCoopSNESRecomp` build. It
@@ -96,7 +116,7 @@ local and must not be redistributed.
 
 Widescreen is disabled for the co-op build because the hack changes the ROM
 offsets used by the stock-game widescreen hooks. The standard one-player build
-retains its widescreen option.
+retains the option.
 
 ### Co-op hack attribution
 

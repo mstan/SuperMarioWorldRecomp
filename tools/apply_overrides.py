@@ -611,7 +611,13 @@ def apply_to_text(text, rules):
                 break
         if chosen is None:
             return whole
-        if MARKER in whole:  # already injected on a previous build
+        # The prologue is appended immediately after the matched opening brace,
+        # so it is not part of `whole`. Check the original text at the match
+        # boundary; testing `MARKER in whole` made repeated CMake invocations
+        # stack duplicate fireball prologues despite this tool's idempotence
+        # contract.
+        after = text[m.end():m.end() + len(MARKER) + 2]
+        if after.lstrip().startswith(MARKER):
             return whole
         return whole + prologue(chosen)
 

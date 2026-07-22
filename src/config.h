@@ -34,6 +34,12 @@ enum {
   kOutputMethod_OpenGL,
 };
 
+enum {
+  kWidescreenMode_Standard,
+  kWidescreenMode_Fixed16x9,
+  kWidescreenMode_Adaptive,
+};
+
 typedef struct Config {
   int window_width;
   int window_height;
@@ -50,11 +56,11 @@ typedef struct Config {
   bool autosave;
   bool extend_y;
   bool no_sprite_limits;
-  // Optional widescreen (16:9). Off by default = authentic 256-wide SNES.
-  // Renderer extends the PPU; SMW game-logic widescreen behaviour (spawn
-  // window, off-screen culling, HUD) is supplied by the override layer and
-  // also gated on this flag.
-  bool widescreen;
+  // Standard 4:3, fixed 16:9, or adaptive widescreen. Adaptive follows the
+  // live host aspect at a fixed 224-line height, up to the sprite-safe 446px
+  // ceiling. SMW's spawn, culling, and HUD behavior is supplied by the
+  // override layer.
+  uint8 widescreen_mode;
   // Split the status bar to the widescreen edges (lives cluster left,
   // TIME/coins/score right, item box centered). Defaults on; only takes
   // effect with widescreen active. `WidescreenHud = 0` keeps the

@@ -47,4 +47,14 @@ void SmwWidescreenInterpPreOpcode(CpuState *cpu, uint32_t pc24) {
       }
     }
   }
+
+  /* Brown chained platforms use a two-slot reserved range in stock SMW. The
+   * wider despawn window can keep three neighboring platforms alive at once,
+   * so include slot 5 when the allocation join executes through LLE. This is
+   * the live counterpart of WS-SLOT in tools/apply_overrides.py. */
+  if ((pc24 & 0x7FFFFFu) == 0x02A916u &&
+      cpu_read8(cpu, 0x7E, (uint16_t)(cpu->D + 0x0005)) == 0x5F &&
+      cpu_read8(cpu, 0x7E, (uint16_t)(cpu->D + 0x0006)) == 0x05) {
+    cpu_write8(cpu, 0x7E, (uint16_t)(cpu->D + 0x0006), 0x04);
+  }
 }

@@ -288,6 +288,35 @@ static int GetIniSection(const char *s) {
   return -1;
 }
 
+static bool ParseWidescreenMode(const char *value, uint8 *mode) {
+  if (StringEqualsNoCase(value, "Standard") ||
+      StringEqualsNoCase(value, "Off") ||
+      StringEqualsNoCase(value, "False") ||
+      StringEqualsNoCase(value, "0")) {
+    *mode = kWidescreenMode_Standard;
+    return true;
+  }
+  if (StringEqualsNoCase(value, "Fixed16x9") ||
+      StringEqualsNoCase(value, "16:9") ||
+      StringEqualsNoCase(value, "On") ||
+      StringEqualsNoCase(value, "True") ||
+      StringEqualsNoCase(value, "1")) {
+    *mode = kWidescreenMode_Fixed16x9;
+    return true;
+  }
+  if (StringEqualsNoCase(value, "Adaptive") ||
+      StringEqualsNoCase(value, "2")) {
+    *mode = kWidescreenMode_Adaptive;
+    return true;
+  }
+  return false;
+}
+
+static const char *WidescreenModeName(uint8 mode) {
+  return mode == kWidescreenMode_Adaptive ? "Adaptive" :
+         mode == kWidescreenMode_Fixed16x9 ? "Fixed16x9" : "Standard";
+}
+
 static bool HandleIniConfig(int section, const char *key, char *value) {
   if (section == 0) {
     for (int i = 0; i < countof(kKeyNameId); i++) {
@@ -355,7 +384,7 @@ static bool HandleIniConfig(int section, const char *key, char *value) {
     } else if (StringEqualsNoCase(key, "NoSpriteLimits")) {
       return ParseBool(value, &g_config.no_sprite_limits);
     } else if (StringEqualsNoCase(key, "Widescreen")) {
-      return ParseBool(value, &g_config.widescreen);
+      return ParseWidescreenMode(value, &g_config.widescreen_mode);
     } else if (StringEqualsNoCase(key, "WidescreenHud")) {
       return ParseBool(value, &g_config.widescreen_hud);
     } else if (StringEqualsNoCase(key, "Shader")) {
@@ -455,7 +484,7 @@ void ParseConfigFile(const char *filename) {
    * hardcoded magnitude gate in HandleGamepadAxisInput). */
   g_config.deadzone[0] = 30;
   g_config.deadzone[1] = 30;
-  /* HUD-to-the-edges defaults on; inert unless Widescreen is also on.
+  /* HUD-to-the-edges defaults on; inert in Standard view mode.
    * `WidescreenHud = 0` keeps the authentic centered status bar. */
   g_config.widescreen_hud = true;
 
@@ -609,7 +638,8 @@ void WriteConfigFile(const char *filename) {
   };
   const int N = (int)countof(kvs);
   snprintf(kvs[0].val, sizeof(kvs[0].val), "%d", g_config.window_scale ? g_config.window_scale : 3);
-  snprintf(kvs[1].val, sizeof(kvs[1].val), "%d", g_config.widescreen ? 1 : 0);
+  snprintf(kvs[1].val, sizeof(kvs[1].val), "%s",
+           WidescreenModeName(g_config.widescreen_mode));
   snprintf(kvs[2].val, sizeof(kvs[2].val), "%d", g_config.linear_filtering ? 1 : 0);
   snprintf(kvs[3].val, sizeof(kvs[3].val), "%d", g_config.enable_audio ? 1 : 0);
   snprintf(kvs[4].val, sizeof(kvs[4].val), "%d", g_config.audio_freq);

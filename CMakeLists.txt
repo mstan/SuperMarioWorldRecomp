@@ -14,6 +14,7 @@ include(${CMAKE_SOURCE_DIR}/recomp-ui/recomp_ui.cmake)
 
 find_package(SDL2 REQUIRED)
 find_package(OpenGL REQUIRED)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 if(WIN32)
     list(FILTER SDL2_LIBRARIES EXCLUDE REGEX "SDL2main")
@@ -26,6 +27,35 @@ if(NOT SMW_STOCK_GEN_SOURCES)
         "src/gen/ is empty - run `bash tools/regen.sh --stock` with a "
         "verified smw.sfc at the repository root before building.")
 endif()
+
+# The extended viewport and SMW's object lifecycle must move together. The
+# generated bank hooks widen draw culling, despawn bounds, sprite allocation,
+# special-object OAM, and fireballs; building pristine generated C would widen
+# only the framebuffer and leave gameplay at the stock 256-pixel boundaries.
+#
+# Make every generated object depend on an idempotent injection stamp. A regen
+# makes the bank C newer than the stamp, so the hooks are restored before any
+# affected source recompiles. Keeping this in CMake also covers direct builds
+# that do not go through a release wrapper.
+set(SMW_WIDESCREEN_OVERRIDE_STAMP
+    ${CMAKE_CURRENT_BINARY_DIR}/smw_widescreen_overrides.stamp)
+add_custom_command(
+    OUTPUT ${SMW_WIDESCREEN_OVERRIDE_STAMP}
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tools/apply_overrides.py
+            --check
+            --gen-dir ${CMAKE_SOURCE_DIR}/src/gen
+            --manifest ${CMAKE_SOURCE_DIR}/overrides/widescreen/overrides.manifest
+    COMMAND ${CMAKE_COMMAND} -E touch ${SMW_WIDESCREEN_OVERRIDE_STAMP}
+    DEPENDS
+        ${CMAKE_SOURCE_DIR}/tools/apply_overrides.py
+        ${CMAKE_SOURCE_DIR}/overrides/widescreen/overrides.manifest
+        ${SMW_STOCK_GEN_SOURCES}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Applying widescreen object-lifecycle hooks"
+    VERBATIM)
+set_source_files_properties(${SMW_STOCK_GEN_SOURCES} PROPERTIES
+    OBJECT_DEPENDS ${SMW_WIDESCREEN_OVERRIDE_STAMP})
 
 if(SMW_BUILD_COOP)
     file(GLOB SMW_COOP_GEN_SOURCES CONFIGURE_DEPENDS
