@@ -76,6 +76,9 @@
     <ClCompile Include="config.c">
       <Filter>Common</Filter>
     </ClCompile>
+    <ClCompile Include="coop_patch.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="main.c">
       <Filter>Common</Filter>
     </ClCompile>

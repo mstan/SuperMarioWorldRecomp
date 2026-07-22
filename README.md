@@ -74,6 +74,43 @@ See [`RELEASE.md`](RELEASE.md) for the latest release notes.
 
 The ROM is **never** redistributed — supply your own dump.
 
+## Simultaneous co-op build
+
+The repository also produces a separate `SuperMarioWorldCoopSNESRecomp` build. It
+uses the simultaneous co-op gameplay patch while keeping the normal legal ROM
+flow: select an untouched Super Mario World (USA) ROM in the launcher or pass
+it on the command line.
+
+On first use, the executable verifies the stock ROM and applies the bundled IPS
+delta. The IPS contains the co-op hack's changed bytes, but not a complete ROM.
+The generated file is written beside the executable as
+`<stock-rom-name>.coop.sfc`; that generated co-op ROM is what the runtime loads.
+Subsequent launches reuse it after verifying its CRC. Both headerless `.sfc`
+dumps and 512-byte-headered `.smc` dumps are accepted as input. To force a clean
+repatch, delete the generated `.coop.sfc` file.
+
+Player 1 and Player 2 are active simultaneously in levels. Connect two SDL
+game controllers, or configure the `[Player1]` and `[Player2]` keyboard
+bindings in `keybinds.ini`. The stock ROM and generated `.coop.sfc` remain
+local and must not be redistributed.
+
+Widescreen is disabled for the co-op build because the hack changes the ROM
+offsets used by the stock-game widescreen hooks. The standard one-player build
+retains its widescreen option.
+
+### Co-op hack attribution
+
+This build distributes an IPS delta for **Super Mario World - 2 Player
+Simultaneous Co-op Hack**. Original hack credits:
+
+- **Noobish Noobsicle** - creator of the original SMW co-op hack
+- **Bloony Fox** and **NesDraug** - developed it into the full hack used here
+
+Source and original credits:
+[Romhack Plaza - Super Mario World - 2 Player Simultaneous Co-op Hack](https://romhackplaza.org/romhacks/super-mario-world-2-player-co-op-hack-snes/).
+This recompilation project is not affiliated with or endorsed by the hack
+authors.
+
 ## Controls (default `keybinds.ini`)
 
 | SNES button | Default key |
@@ -88,8 +125,9 @@ The ROM is **never** redistributed — supply your own dump.
 | Start       | Enter |
 | Select      | Right Shift |
 
-Player 2 is unbound by default — fill in keys in `keybinds.ini` to
-enable a second keyboard player.
+Player 2 is unbound by default — fill in keys in `keybinds.ini` to enable a
+second keyboard player. In the co-op build, the two bindings drive Mario and
+Luigi at the same time rather than taking turns.
 
 **Xbox / PlayStation / Switch Pro controllers** are auto-detected via
 SDL_GameController (XInput on Windows). Plug it in before launching,
@@ -123,24 +161,23 @@ git clone --recurse-submodules https://github.com/mstan/SuperMarioWorldRecomp
 cd SuperMarioWorldRecomp
 ```
 
-The `snesrecomp/` directory is a [sibling repo](https://github.com/mstan/snesrecomp)
-accessed via a junction/symlink. If you don't already have it checked
-out next to this repo, clone it:
+Regenerate the desired variant from your legally obtained stock ROM, then
+build it. The generated C is intentionally untracked:
 
 ```bash
-git clone https://github.com/mstan/snesrecomp ../snesrecomp
+# Normal 1P/MSU build (the default)
+bash tools/regen.sh --stock
+msbuild smw.sln /p:Configuration=Production /p:Platform=x64 /m
+
+# Simultaneous co-op build
+bash tools/regen.sh --coop
+msbuild smw.sln /p:Configuration=CoopProduction /p:Platform=x64 /m
 ```
 
-Then build:
-
-```bash
-# From a Developer Command Prompt for VS 2022, or with MSBuild on PATH:
-msbuild smw.sln /p:Configuration=Release /p:Platform=x64 /m
-```
-
-The recompiled C in `src/gen/` and the `recomp/funcs.h` declarations
-are committed and built directly — no ROM is required at build time.
-Run the exe and the runtime ROM-picker handles the rest.
+The normal configuration remains `smw.exe`; the additive configuration creates
+`SuperMarioWorldCoopSNESRecomp.exe` in its own output directory and copies
+`smw_coop.ips` beside it. CMake builds the normal target by default; configure
+with `-DSMW_BUILD_COOP=ON` to make both targets available in one build tree.
 
 ### Regenerating the recompiled C (contributors)
 
@@ -149,11 +186,13 @@ framework, or otherwise need to re-run the recompiler:
 
 1. Drop a legally-obtained `smw.sfc` at the repo root (`.gitignore`
    excludes it).
-2. Run `bash tools/regen.sh`. This drives `snesrecomp/recompiler/`
-   over the ROM and rewrites `src/gen/*.c`, `recomp/funcs.h`, and
-   the per-bank registry. It builds and requires the fast native analyzer by
-   default; set `SNESRECOMP_ANALYSIS_BACKEND=python` only to use the slower
-   reference path.
+2. Run `bash tools/regen.sh --stock` for the normal build and/or
+   `bash tools/regen.sh --coop` for co-op. Stock emits to `src/gen/` from the
+   existing MSU-capable analysis image. Co-op applies the bundled IPS to a
+   throwaway verified ROM, layers the small CFG fragments in `recomp/coop/`,
+   and emits independently to `src/gen-coop/`. It builds and requires the fast
+   native analyzer by default; set
+   `SNESRECOMP_ANALYSIS_BACKEND=python` only to use the slower reference path.
 3. Rebuild as above.
 
 (Build and run instructions are not yet stable — see scripts under
@@ -162,51 +201,28 @@ to drift.)
 
 ## MSU-1 audio
 
-This build supports [MSU-1](https://sneslab.net/wiki/MSU1) — CD-quality
-streaming music in place of the SPC soundtrack — using your **stock** SMW
-(USA) ROM.
+The normal 1P build supports CD-quality MSU-1 streaming music using a stock
+SMW (USA) ROM. Regeneration applies Conn's audio-only "SMW MSU-1" patch to a
+throwaway copy and compiles the driver into the executable. At runtime, no
+pack means authentic SPC audio; a matching PCM pack plus MSU-1 enabled in the
+launcher means streamed music. Packs for SMW MSU+ or SMW MSU-1 Plus Ultra are
+not interchangeable with this audio-only patch. Full credit and pack details
+are in [`recomp/msu1/ATTRIBUTION.md`](recomp/msu1/ATTRIBUTION.md).
 
-**You don't patch anything.** The MSU-1 driver is **Conn's "Super Mario
-World MSU-1"** patch (the *audio-only* music-replacement patch — no gameplay
-changes). The regen step applies the bundled patch
-([`recomp/msu1/`](recomp/msu1/)) to a throwaway copy of your stock ROM and
-recompiles the driver into the binary, so at runtime you just load your stock
-ROM: no pack → authentic SPC audio; matching pack + MSU-1 enabled → streamed
-music. Sound effects always stay on the SPC.
-
-**Enable it** in the launcher (Settings → Audio → MSU-1), then drop a pack in
-the MSU-1 folder (defaults to `msu/` next to the exe). Or headless:
-
-```sh
-SNESRECOMP_MSU1=/path/to/smw_msu_pack  smw.exe smw.sfc
-```
-
-> ⚠ **There are three different SMW MSU-1 patches, and their PCM packs are NOT
-> interchangeable.** We use **"SMW MSU-1"** (Conn, audio-only —
-> [zeldix t1436](https://www.zeldix.net/t1436-super-mario-world-native)). A pack
-> built for **SMW MSU+** ([t1437](https://www.zeldix.net/t1437-super-mario-world-msu))
-> or **SMW MSU-1 Plus Ultra** ([t2535](https://www.zeldix.net/t2535-super-mario-world-msu-1-plus-ultra-130-tracks-total))
-> will play the wrong tracks. Use a pack made for the audio-only "SMW MSU-1"
-> patch.
-
-### Thanks
-
-The MSU-1 driver is **not** ours — it's **Conn's** Super Mario World MSU-1
-patch (with thanks to Ikari_01, EmuandCo, Kiddo and the SMW Central / Zeldix
-MSU-1 community), shared freely. We bundle it with gratitude; full credit and
-the which-patch / pack-matching details are in
-[`recomp/msu1/ATTRIBUTION.md`](recomp/msu1/ATTRIBUTION.md).
+MSU-1 is disabled only in the simultaneous co-op build. Both patches alter
+expansion ROM data and cannot be layered into one byte-exact analysis image.
 
 ## Repo layout
 
 - `src/` — runtime C (CPU state, runtime helpers, hand-written
   bodies for things the framework doesn't yet recompile).
 - `src/gen/` — recompiler output (do not hand-edit).
+- `src/gen-coop/` — separate co-op recompiler output (do not hand-edit).
 - `recomp/` — per-bank `.cfg` files describing what the framework
   cannot yet derive from the ROM (data regions, calling conventions,
   rare hints).
-- `snesrecomp/` — symlink to a sibling clone of the
-  [snesrecomp framework](https://github.com/mstan/snesrecomp).
+- `recomp/coop/` — co-op CFG overlays, distributed IPS, and attribution.
+- `snesrecomp/` — pinned framework submodule.
 - `tools/` — build, regen, audit, and triage scripts.
 - `docs/` — design / debugging notes (internal-facing, may be stale).
 - `third_party/` — vendored deps with their own licenses.
