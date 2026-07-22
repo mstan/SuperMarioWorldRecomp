@@ -23,7 +23,9 @@
 #include "common_cpu_infra.h"
 #include "framedump.h"
 #include "config.h"
+#ifdef SMW_COOP_BUILD
 #include "coop_patch.h"
+#endif
 #include "util.h"
 #include "smw_spc_player.h"
 
@@ -120,7 +122,11 @@ enum {
 #define SNESRECOMP_BUILD_VERSION "dev"
 #endif
 
+#ifdef SMW_COOP_BUILD
 static const char kWindowTitle[] = "Super Mario World Co-op (Recompiled)";
+#else
+static const char kWindowTitle[] = "Super Mario World (Recompiled)";
+#endif
 static uint32 g_win_flags = SDL_WINDOW_RESIZABLE;
 static SDL_Window *g_window;
 
@@ -649,6 +655,43 @@ static const char *AbsolutizePathArg(const char *path, char *buf, size_t size) {
 }
 
 #undef main
+#ifndef SMW_COOP_BUILD
+/* Issue #4: bring the selected ROM into the exe directory so the ROM lives
+ * alongside saves/, config.ini and keybinds.ini. The original is copied,
+ * never moved. Returns 1 when rom_path changes to the local copy. */
+static int RelocateRomToExeDir(char *rom_path, size_t cap) {
+  if (!rom_path || !rom_path[0]) return 0;
+  const char *base = rom_path;
+  for (const char *p = rom_path; *p; p++)
+    if (*p == '/' || *p == '\\') base = p + 1;
+  if (!*base) return 0;
+
+  char dst[1024];
+  if (!snesrecomp_exe_dir_path(base, dst, sizeof(dst))) return 0;
+#ifdef _WIN32
+  if (_stricmp(dst, rom_path) == 0) return 0;
+#else
+  if (strcmp(dst, rom_path) == 0) return 0;
+#endif
+
+  FILE *in = fopen(rom_path, "rb");
+  if (!in) return 0;
+  FILE *out = fopen(dst, "wb");
+  if (!out) { fclose(in); return 0; }
+  char buf[65536];
+  size_t n;
+  int ok = 1;
+  while ((n = fread(buf, 1, sizeof(buf), in)) > 0)
+    if (fwrite(buf, 1, n, out) != n) { ok = 0; break; }
+  fclose(in);
+  fclose(out);
+  if (!ok) { remove(dst); return 0; }
+
+  snprintf(rom_path, cap, "%s", dst);
+  printf("[Launcher] Copied ROM into the game directory: %s\n", dst);
+  return 1;
+}
+#else
 /* Convert a selected stock ROM basename into <stem>.coop.sfc. The caller
  * places that leaf in the executable directory. */
 static int BuildCoopOutputLeaf(const char *stock_path,
@@ -665,6 +708,7 @@ static int BuildCoopOutputLeaf(const char *stock_path,
   return snprintf(leaf, leaf_size, "%.*s.coop.sfc",
                   (int)stem_length, base) < (int)leaf_size;
 }
+#endif
 
 int main(int argc, char** argv) {
 #ifndef _WIN32
@@ -685,7 +729,11 @@ int main(int argc, char** argv) {
   SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
 #endif
   atexit(post_mortem_atexit);
+#ifdef SMW_COOP_BUILD
   host_report_init("Super Mario World Co-op", SNESRECOMP_BUILD_VERSION);
+#else
+  host_report_init("Super Mario World", SNESRECOMP_BUILD_VERSION);
+#endif
   /* ARM the backwards watcher BEFORE any recompiled code runs. Without
    * this, the trace ring records but no tripwires fire. With this:
    * - DB-watch on every byte SMW shouldn't legitimately use as DB
@@ -895,33 +943,50 @@ int main(int argc, char** argv) {
       SnesLauncherCGameInfo gi;
       memset(&gi, 0, sizeof(gi));
 #endif
+#ifdef SMW_COOP_BUILD
       gi.name = "Super Mario World Co-op";
+#else
+      gi.name = "Super Mario World";
+#endif
       gi.region = "(USA)";
       gi.sram_path = "saves/save.srm";  /* generic SRAM path (RtlReadSram migrates legacy) */
+#ifdef SMW_COOP_BUILD
       gi.num_players = 2;
+#else
+      gi.num_players = 1;
+#endif
       gi.expected_crc = kSmwUsaCrc32;
       gi.has_expected_crc = 1;
 #ifdef SMW_COOP_BUILD
       gi.widescreen_supported = 0;
-#else
-      gi.widescreen_supported = 1;
-#endif
-      /* The co-op patch and the audio-only MSU patch are alternative ROM
-       * analysis inputs and cannot be layered. Keep the inherited runner's
-       * MSU emulation disabled for this build. */
       gi.msu1_supported = 0;
       gi.msu1_note = NULL;
+#else
+      gi.widescreen_supported = 1;
+      gi.msu1_supported = 1;
+      gi.msu1_note = "Uses the audio-only \"SMW MSU-1\" patch (zeldix t1436). "
+                     "PCM packs must be built for THIS patch - packs for "
+                     "SMW MSU+ or Plus Ultra will not line up.";
+#endif
       gi.config_path = config_file;  /* hotkey editor targets the live config */
 
 #if defined(RECOMP_LAUNCHER)
       /* cwd is anchored to the exe dir (snesrecomp_anchor_to_exe_dir above),
        * and recomp_ui.cmake stages assets to <exe>/assets, so "." resolves
        * assets correctly. */
+#ifdef SMW_COOP_BUILD
       int act = recomp_launcher_run_window("Super Mario World Co-op \xE2\x80\x94 Launcher",
+#else
+      int act = recomp_launcher_run_window("Super Mario World \xE2\x80\x94 Launcher",
+#endif
                                          &ls, &gi, ".", init_rom,
                                          rom_path_buf, sizeof(rom_path_buf));
 #else
+#ifdef SMW_COOP_BUILD
       int act = snes_launcher_run_window("Super Mario World Co-op \xE2\x80\x94 Launcher",
+#else
+      int act = snes_launcher_run_window("Super Mario World \xE2\x80\x94 Launcher",
+#endif
                                          &ls, &gi, "launcher", init_rom,
                                          rom_path_buf, sizeof(rom_path_buf));
 #endif
@@ -983,6 +1048,7 @@ int main(int argc, char** argv) {
       return 1;
     }
   }
+#ifdef SMW_COOP_BUILD
   /* Keep rom.cfg pointed at the untouched stock dump. The deterministic
    * derivative lives beside the executable and is the image actually loaded. */
   static char coop_rom_path_buf[1024];
@@ -1013,13 +1079,27 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  const char *runtime_rom_path = coop_rom_path_buf;
+  host_report_breadcrumb("stock rom resolved: %s", rom_path_buf);
+  host_report_breadcrumb("co-op rom ready: %s", coop_rom_path_buf);
+#else
+  /* Preserve the original 1P behavior: co-locate interactive ROM selections
+   * with the executable, while leaving explicit scripted paths untouched. */
+  if (!start_paused && script_file == NULL && framedump_dir == NULL) {
+    if (RelocateRomToExeDir(rom_path_buf, sizeof(rom_path_buf))) {
+      FILE *rc = fopen("rom.cfg", "w");
+      if (rc) { fprintf(rc, "%s\n", rom_path_buf); fclose(rc); }
+    }
+  }
+  const char *runtime_rom_path = rom_path_buf;
+  host_report_breadcrumb("rom resolved: %s", rom_path_buf);
+#endif
+
   static char *resolved_argv[2];
-  resolved_argv[0] = coop_rom_path_buf;
+  resolved_argv[0] = (char *)runtime_rom_path;
   resolved_argv[1] = NULL;
   argv = resolved_argv;
   argc = 1;
-  host_report_breadcrumb("stock rom resolved: %s", rom_path_buf);
-  host_report_breadcrumb("co-op rom ready: %s", coop_rom_path_buf);
 
   /* Honor the persisted MSU-1 choice on every boot path — launcher, SkipLauncher,
    * positional ROM, SNESRECOMP_NO_LAUNCHER. The launcher exports this when it runs;
@@ -1038,7 +1118,7 @@ int main(int argc, char** argv) {
   /* Let MSU-1 derive its pack base from the ROM name when SNESRECOMP_MSU1=auto
    * (the launcher normally passes the pack folder explicitly, which msu1.c also
    * resolves). Harmless when MSU-1 is disabled. */
-  { extern void msu1_set_rom_path(const char *); msu1_set_rom_path(coop_rom_path_buf); }
+  { extern void msu1_set_rom_path(const char *); msu1_set_rom_path(runtime_rom_path); }
 
   // Initialize debug server
   {

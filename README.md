@@ -76,7 +76,7 @@ The ROM is **never** redistributed — supply your own dump.
 
 ## Simultaneous co-op build
 
-This branch produces the separate `SuperMarioWorldCoopSNESRecomp` build. It
+The repository also produces a separate `SuperMarioWorldCoopSNESRecomp` build. It
 uses the simultaneous co-op gameplay patch while keeping the normal legal ROM
 flow: select an untouched Super Mario World (USA) ROM in the launcher or pass
 it on the command line.
@@ -161,26 +161,23 @@ git clone --recurse-submodules https://github.com/mstan/SuperMarioWorldRecomp
 cd SuperMarioWorldRecomp
 ```
 
-The `snesrecomp/` directory is a [sibling repo](https://github.com/mstan/snesrecomp)
-accessed via a junction/symlink. If you don't already have it checked
-out next to this repo, clone it:
+Regenerate the desired variant from your legally obtained stock ROM, then
+build it. The generated C is intentionally untracked:
 
 ```bash
-git clone https://github.com/mstan/snesrecomp ../snesrecomp
-```
-
-Then build:
-
-```bash
-# From a Developer Command Prompt for VS 2022, or with MSBuild on PATH:
+# Normal 1P/MSU build (the default)
+bash tools/regen.sh --stock
 msbuild smw.sln /p:Configuration=Production /p:Platform=x64 /m
+
+# Simultaneous co-op build
+bash tools/regen.sh --coop
+msbuild smw.sln /p:Configuration=CoopProduction /p:Platform=x64 /m
 ```
 
-The recompiled C in `src/gen/` and the `recomp/funcs.h` declarations are built
-directly — no ROM is required at build time. Run the exe and the runtime
-ROM-picker handles the rest. For this branch, the resulting executable is
-`SuperMarioWorldCoopSNESRecomp.exe`; keep `smw_coop.ips` beside it (the build
-and release scripts copy it automatically).
+The normal configuration remains `smw.exe`; the additive configuration creates
+`SuperMarioWorldCoopSNESRecomp.exe` in its own output directory and copies
+`smw_coop.ips` beside it. CMake builds the normal target by default; configure
+with `-DSMW_BUILD_COOP=ON` to make both targets available in one build tree.
 
 ### Regenerating the recompiled C (contributors)
 
@@ -189,12 +186,12 @@ framework, or otherwise need to re-run the recompiler:
 
 1. Drop a legally-obtained `smw.sfc` at the repo root (`.gitignore`
    excludes it).
-2. Run `bash tools/regen.sh`. This applies `recomp/coop/smw_coop.ips` directly
-   to a throwaway copy of the verified stock ROM (the co-op and MSU patches
-   cannot be layered), drives
-   `snesrecomp/recompiler/` over that patched image, and rewrites
-   `src/gen/*.c`, `recomp/funcs.h`, and the per-bank registry. It builds and
-   requires the fast native analyzer by default; set
+2. Run `bash tools/regen.sh --stock` for the normal build and/or
+   `bash tools/regen.sh --coop` for co-op. Stock emits to `src/gen/` from the
+   existing MSU-capable analysis image. Co-op applies the bundled IPS to a
+   throwaway verified ROM, layers the small CFG fragments in `recomp/coop/`,
+   and emits independently to `src/gen-coop/`. It builds and requires the fast
+   native analyzer by default; set
    `SNESRECOMP_ANALYSIS_BACKEND=python` only to use the slower reference path.
 3. Rebuild as above.
 
@@ -202,23 +199,30 @@ framework, or otherwise need to re-run the recompiler:
 `tools/` and notes in `docs/` for the current shape, but expect them
 to drift.)
 
-## MSU-1 compatibility
+## MSU-1 audio
 
-MSU-1 audio is disabled in the simultaneous co-op build. The co-op hack and
-the repository's audio-only MSU patch both alter expansion ROM data and cannot
-be layered into one byte-exact analysis image. Use the standard build when
-MSU-1 music is preferred over simultaneous co-op.
+The normal 1P build supports CD-quality MSU-1 streaming music using a stock
+SMW (USA) ROM. Regeneration applies Conn's audio-only "SMW MSU-1" patch to a
+throwaway copy and compiles the driver into the executable. At runtime, no
+pack means authentic SPC audio; a matching PCM pack plus MSU-1 enabled in the
+launcher means streamed music. Packs for SMW MSU+ or SMW MSU-1 Plus Ultra are
+not interchangeable with this audio-only patch. Full credit and pack details
+are in [`recomp/msu1/ATTRIBUTION.md`](recomp/msu1/ATTRIBUTION.md).
+
+MSU-1 is disabled only in the simultaneous co-op build. Both patches alter
+expansion ROM data and cannot be layered into one byte-exact analysis image.
 
 ## Repo layout
 
 - `src/` — runtime C (CPU state, runtime helpers, hand-written
   bodies for things the framework doesn't yet recompile).
 - `src/gen/` — recompiler output (do not hand-edit).
+- `src/gen-coop/` — separate co-op recompiler output (do not hand-edit).
 - `recomp/` — per-bank `.cfg` files describing what the framework
   cannot yet derive from the ROM (data regions, calling conventions,
   rare hints).
-- `snesrecomp/` — symlink to a sibling clone of the
-  [snesrecomp framework](https://github.com/mstan/snesrecomp).
+- `recomp/coop/` — co-op CFG overlays, distributed IPS, and attribution.
+- `snesrecomp/` — pinned framework submodule.
 - `tools/` — build, regen, audit, and triage scripts.
 - `docs/` — design / debugging notes (internal-facing, may be stale).
 - `third_party/` — vendored deps with their own licenses.

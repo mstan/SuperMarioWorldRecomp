@@ -21,6 +21,10 @@
       <Configuration>Production</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="CoopProduction|x64">
+      <Configuration>CoopProduction</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
@@ -55,6 +59,12 @@
     <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='CoopProduction|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
@@ -75,8 +85,11 @@
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Production|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='CoopProduction|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='CoopProduction|x64'">
     <TargetName>SuperMarioWorldCoopSNESRecomp</TargetName>
   </PropertyGroup>
   <!-- Release version stamp: make_release.ps1 passes
@@ -108,9 +121,15 @@
     <OutDir>$(SolutionDir)build\bin-$(Platform)-$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)build\obj-$(Platform)-$(Configuration)\</IntDir>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='CoopProduction|x64'">
+    <OutDir>$(SolutionDir)build\bin-$(Platform)-$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)build\obj-$(Platform)-$(Configuration)\</IntDir>
+    <CoopIncludeDir>$(SolutionDir)recomp\coop;</CoopIncludeDir>
+    <CoopDefines>SMW_COOP_BUILD=1;SNESRECOMP_LLE_BOUNCE_DEFAULT=0;</CoopDefines>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;SMW_COOP_BUILD=1;SNESRECOMP_LLE_BOUNCE_DEFAULT=0;SMW_DISABLE_LM=1;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;SMW_DISABLE_LM=1;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
@@ -130,7 +149,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;SMW_COOP_BUILD=1;SNESRECOMP_LLE_BOUNCE_DEFAULT=0;SMW_DISABLE_LM=1;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;SMW_DISABLE_LM=1;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
@@ -152,7 +171,7 @@
     <ClCompile>
       <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)src;$(SolutionDir)snesrecomp\runner\src;$(SolutionDir)snesrecomp\runner\src\snes;$(SolutionDir)recomp;$(SolutionDir)recomp-ui\src;$(SolutionDir)recomp-ui\src\common;$(SolutionDir)recomp-ui\src\third_party\imgui;$(SolutionDir)recomp-ui\src\third_party\imgui\backends</AdditionalIncludeDirectories>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>SMW_COOP_BUILD=1;SNESRECOMP_LLE_BOUNCE_DEFAULT=0;SMW_DISABLE_LM=1;RECOMP_LAUNCHER=1;SDL_MAIN_HANDLED=1;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SMW_DISABLE_LM=1;RECOMP_LAUNCHER=1;SDL_MAIN_HANDLED=1;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <DisableSpecificWarnings>4996</DisableSpecificWarnings>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
@@ -170,7 +189,7 @@
     <ClCompile>
       <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)src;$(SolutionDir)snesrecomp\runner\src;$(SolutionDir)snesrecomp\runner\src\snes;$(SolutionDir)recomp;$(SolutionDir)recomp-ui\src;$(SolutionDir)recomp-ui\src\common;$(SolutionDir)recomp-ui\src\third_party\imgui;$(SolutionDir)recomp-ui\src\third_party\imgui\backends</AdditionalIncludeDirectories>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>SMW_COOP_BUILD=1;SNESRECOMP_LLE_BOUNCE_DEFAULT=0;SMW_DISABLE_LM=1;SNESRECOMP_TRACE=1;RECOMP_LAUNCHER=1;SDL_MAIN_HANDLED=1;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SMW_DISABLE_LM=1;SNESRECOMP_TRACE=1;RECOMP_LAUNCHER=1;SDL_MAIN_HANDLED=1;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <DisableSpecificWarnings>4996</DisableSpecificWarnings>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
       <LanguageStandard>stdcpp17</LanguageStandard>
@@ -181,9 +200,9 @@
       <AdditionalDependencies>opengl32.lib;comdlg32.lib;ole32.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Production|x64'">
+  <ItemDefinitionGroup Condition="('$(Configuration)'=='Production' Or '$(Configuration)'=='CoopProduction') And '$(Platform)'=='x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)src;$(SolutionDir)snesrecomp\runner\src;$(SolutionDir)snesrecomp\runner\src\snes;$(SolutionDir)recomp;$(SolutionDir)recomp-ui\src;$(SolutionDir)recomp-ui\src\common;$(SolutionDir)recomp-ui\src\third_party\imgui;$(SolutionDir)recomp-ui\src\third_party\imgui\backends</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(CoopIncludeDir)$(SolutionDir);$(SolutionDir)src;$(SolutionDir)snesrecomp\runner\src;$(SolutionDir)snesrecomp\runner\src\snes;$(SolutionDir)recomp;$(SolutionDir)recomp-ui\src;$(SolutionDir)recomp-ui\src\common;$(SolutionDir)recomp-ui\src\third_party\imgui;$(SolutionDir)recomp-ui\src\third_party\imgui\backends</AdditionalIncludeDirectories>
       <WarningLevel>Level3</WarningLevel>
       <!-- Production: SNESRECOMP_TRACE is NOT defined (default 0). The
            cpu_trace.h / debug_server.h #else blocks compile every call
@@ -192,7 +211,7 @@
            always-on observability rings (TCP debug server + ~2 GB of
            cpu/vram/oam/frame ring buffers) exist ONLY under TRACE=1, so
            Release|x64 must never be the released artifact. -->
-      <PreprocessorDefinitions>$(SnesRecompVersionDefine)NDEBUG;SMW_COOP_BUILD=1;SNESRECOMP_LLE_BOUNCE_DEFAULT=0;SMW_DISABLE_LM=1;RECOMP_LAUNCHER=1;SDL_MAIN_HANDLED=1;_CRT_SECURE_NO_WARNINGS;SNESRECOMP_REVERSE_DEBUG=0</PreprocessorDefinitions>
+      <PreprocessorDefinitions>$(SnesRecompVersionDefine)$(CoopDefines)NDEBUG;SMW_DISABLE_LM=1;RECOMP_LAUNCHER=1;SDL_MAIN_HANDLED=1;_CRT_SECURE_NO_WARNINGS;SNESRECOMP_REVERSE_DEBUG=0</PreprocessorDefinitions>
       <DisableSpecificWarnings>4996</DisableSpecificWarnings>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
       <LanguageStandard>stdcpp17</LanguageStandard>
@@ -294,12 +313,14 @@
     <ClCompile Include="..\snesrecomp\runner\src\host_report.c" />
     <ClCompile Include="..\snesrecomp\runner\src\cpu_state.c" />
     <ClCompile Include="..\snesrecomp\runner\src\cpu_trace.c">
-      <ExcludedFromBuild Condition="'$(Configuration)'=='Production'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)'=='Production' Or '$(Configuration)'=='CoopProduction'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="..\snesrecomp\runner\src\audio_trace.c" />
     <ClCompile Include="..\snesrecomp\runner\src\ppu_dma_trace.c" />
     <ClCompile Include="config.c" />
-    <ClCompile Include="coop_patch.c" />
+    <ClCompile Include="coop_patch.c">
+      <ExcludedFromBuild Condition="'$(Configuration)'!='CoopProduction'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="glsl_shader.c" />
     <ClCompile Include="main.c" />
     <ClCompile Include="post_mortem.c" />
@@ -310,9 +331,14 @@
     <ClCompile Include="platform\win32\volume_control.c" />
     <ClCompile Include="smw_00.c" />
     <ClCompile Include="gen_stubs.c" />
-    <ClCompile Include="gen\*.c" />
+    <ClCompile Include="gen\*.c">
+      <ExcludedFromBuild Condition="'$(Configuration)'=='CoopProduction'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="gen-coop\*.c">
+      <ExcludedFromBuild Condition="'$(Configuration)'!='CoopProduction'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="..\snesrecomp\runner\src\debug_server.c">
-      <ExcludedFromBuild Condition="'$(Configuration)'=='Production'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)'=='Production' Or '$(Configuration)'=='CoopProduction'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="smw_cpu_infra.c" />
     <ClCompile Include="smw_rtl.c" />
@@ -426,7 +452,7 @@
     </ItemGroup>
     <Copy SourceFiles="@(GameLauncherAssets)" DestinationFolder="$(OutDir)assets\img" SkipUnchangedFiles="true" />
   </Target>
-  <Target Name="CopyCoopPatch" AfterTargets="Build">
+  <Target Name="CopyCoopPatch" AfterTargets="Build" Condition="'$(Configuration)'=='CoopProduction'">
     <Copy SourceFiles="$(SolutionDir)recomp\coop\smw_coop.ips"
           DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
   </Target>

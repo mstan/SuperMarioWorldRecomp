@@ -1,30 +1,20 @@
 #!/usr/bin/env bash
-# Full regen pipeline driver.
+# Full regeneration pipeline for the stock and simultaneous co-op variants.
 #
-# Default behavior: regenerate every configured bank into src/gen, sync funcs.h,
-# then run the framework test suite. Each step gates
-# on success — if any step fails, the script exits non-zero with a
-# clear message about which step broke and what to do about it.
-#
-# Why this exists: generated bank C and funcs.h must move together.
-# Codifying the order in one command means future contributors don't
-# trip over it, and everything that needs to run in lockstep stays in
-# lockstep.
+# Generated bank C is intentionally untracked. The stock build continues to
+# use recomp/ + src/gen; the opt-in co-op build layers recomp/coop/*.cfg onto
+# the stock CFGs and emits into src/gen-coop. The variants never share a ROM
+# analysis image or generated source directory.
 #
 # Flags:
+#   --stock                 regenerate the normal 1P/MSU build (default).
+#   --coop                  regenerate the simultaneous co-op build.
 #   --quick                 default. Skip Phase B fuzz.
-#   --full                  also run Phase B fuzz (recomp + oracle + diff).
+#   --full                  also run Phase B fuzz (stock only).
 #   --no-tests              skip the framework test suite.
-#   --strict-idempotent     after the regen, run it again into a temp
-#                           dir and assert byte-identical output. Catches
-#                           generator nondeterminism. Slower (full regen
-#                           runs twice).
-#   --v2                    accepted for compatibility; the active
-#                           pipeline is always the v2 emitter now.
+#   --strict-idempotent     regenerate into a temp dir and byte-compare.
+#   --v2                    accepted for compatibility; v2 is always active.
 #   -h | --help             this message.
-#
-# Run from the repo root (or anywhere — paths are resolved relative
-# to this script's location).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -33,13 +23,16 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 RUN_FUZZ=0
 RUN_TESTS=1
 STRICT_IDEMPOTENT=0
+VARIANT=stock
 for arg in "$@"; do
   case "$arg" in
-    --quick)            RUN_FUZZ=0 ;;
-    --full)             RUN_FUZZ=1 ;;
-    --no-tests)         RUN_TESTS=0 ;;
+    --stock)             VARIANT=stock ;;
+    --coop)              VARIANT=coop ;;
+    --quick)             RUN_FUZZ=0 ;;
+    --full)              RUN_FUZZ=1 ;;
+    --no-tests)          RUN_TESTS=0 ;;
     --strict-idempotent) STRICT_IDEMPOTENT=1 ;;
-    --v2)               ;;
+    --v2)                ;;
     -h|--help)
       sed -n '2,/^set -euo/p' "$0" | sed -n '/^# /p' | sed 's/^# //'
       exit 0
@@ -51,11 +44,15 @@ for arg in "$@"; do
   esac
 done
 
+if [ "$VARIANT" = coop ] && [ "$RUN_FUZZ" -eq 1 ]; then
+  echo "regen.sh: --full fuzz is currently supported only for --stock" >&2
+  exit 2
+fi
+
 cd "$ROOT"
 
 TESTS="snesrecomp/tests/run_tests.py"
 ROM="smw.sfc"
-
 PYTHON="${PYTHON:-$(command -v python3 || command -v python || true)}"
 if [ -z "$PYTHON" ]; then
   echo "regen.sh: no python3/python interpreter found on PATH" >&2
@@ -75,64 +72,93 @@ if [ "$ANALYSIS_BACKEND" = native ]; then
   "$PYTHON" snesrecomp/tools/build_native_analyzer.py
 fi
 
-# MSU-1: the build is recompiled from an MSU-1-patched ROM (Conn's audio-only
-# SMW MSU-1 patch injects the driver into bank $04 freespace; recomp/bank04.cfg
-# emits it). We apply the bundled IPS to the user's STOCK rom in a throwaway
-# file — the user never patches anything, and at runtime still uses their stock
-# ROM (the launcher applies the same patch beside it). See recomp/msu1/.
-MSU_IPS="recomp/msu1/smw_msu.ips"
 GEN_ROM="$ROM"
-if [ -f "$MSU_IPS" ]; then
-  PATCHED_ROM=".build/smw_msu1.sfc"
-  mkdir -p "$(dirname "$PATCHED_ROM")"
-  step "Applying MSU-1 patch (Conn, audio-only — recomp/msu1/)"
-  "$PYTHON" tools/apply_msu_patch.py --rom "$ROM" --ips "$MSU_IPS" --out "$PATCHED_ROM"
-  GEN_ROM="$PATCHED_ROM"
-fi
+CFG_DIR="recomp"
+OUT_DIR="src/gen"
+FUNCS_HEADER="recomp/funcs.h"
 
-# This branch is the separate simultaneous-co-op build. Compile from exactly
-# the same stock+co-op image that the runtime patcher creates. The MSU patch
-# changes 556 bytes that the co-op IPS intentionally leaves at their stock
-# values, so layering the patches would compile a different, incompatible ROM.
-# (The ordinary non-co-op regeneration path above remains MSU-enabled.)
-COOP_IPS="recomp/coop/smw_coop.ips"
-if [ -f "$COOP_IPS" ]; then
+if [ "$VARIANT" = coop ]; then
+  # The co-op and MSU patches are alternative analysis inputs. Generate from
+  # stock+co-op only, matching the image prepared by the runtime patcher.
+  COOP_IPS="recomp/coop/smw_coop.ips"
   PATCHED_ROM=".build/smw_coop.sfc"
   step "Applying simultaneous co-op patch (recomp/coop/)"
   "$PYTHON" tools/apply_msu_patch.py --rom "$ROM" --ips "$COOP_IPS" \
     --out "$PATCHED_ROM" \
     --expect-sha256 0838e531fe22c077528febe14cb3ff7c492f1f5fa8de354192bdff7137c27f5b
   GEN_ROM="$PATCHED_ROM"
+  CFG_DIR=".build/recomp-coop"
+  OUT_DIR="src/gen-coop"
+  FUNCS_HEADER="recomp/coop/funcs.h"
+
+  step "Assembling stock CFG plus co-op overlays"
+  CFG_ABS="$ROOT/$CFG_DIR"
+  EXPECTED_CFG_ABS="$ROOT/.build/recomp-coop"
+  if [ "$CFG_ABS" != "$EXPECTED_CFG_ABS" ]; then
+    echo "regen.sh: refusing to replace unexpected CFG directory: $CFG_ABS" >&2
+    exit 1
+  fi
+  rm -rf -- "$CFG_ABS"
+  mkdir -p "$CFG_ABS"
+  cp recomp/bank*.cfg "$CFG_ABS/"
+  # The patched ROM replaces stock $00:86DF with Lunar Magic's pointer-call
+  # trampoline. Remove stock cross-bank aliases before the co-op overlay names
+  # the same address; emitting two public aliases for one exact variant would
+  # leave the non-canonical wrapper with no matching variant definition.
+  sed -i '/^name 0086df GameMode14_InLevel_0086DF$/d' "$CFG_ABS"/bank*.cfg
+  for overlay in recomp/coop/bank*.cfg; do
+    dest="$CFG_ABS/$(basename "$overlay")"
+    if [ -f "$dest" ]; then
+      printf '\n' >> "$dest"
+      sed '/^bank[[:space:]]*=/d; /^includes[[:space:]]*=/d; /^comment[[:space:]]*=/d' "$overlay" >> "$dest"
+    else
+      cp "$overlay" "$dest"
+    fi
+  done
+else
+  # The normal build remains the existing MSU-capable 1P image.
+  MSU_IPS="recomp/msu1/smw_msu.ips"
+  if [ -f "$MSU_IPS" ]; then
+    PATCHED_ROM=".build/smw_msu1.sfc"
+    mkdir -p "$(dirname "$PATCHED_ROM")"
+    step "Applying MSU-1 patch (Conn, audio-only - recomp/msu1/)"
+    "$PYTHON" tools/apply_msu_patch.py --rom "$ROM" --ips "$MSU_IPS" --out "$PATCHED_ROM"
+    GEN_ROM="$PATCHED_ROM"
+  fi
 fi
 
-step "Regenerating configured banks"
-# --cfg-roots is the static-coverage policy (mirrors MegamanXRecomp): every
-# declared `func` seeds the analysis closure so the proven surface is
-# materialized as AOT; the interpreter is a failsafe for the unprovable
-# remainder (e.g. the $7F8000 RAM-resident routine), never the plan of record
-# for known code. Verified 2026-07-20: raises SMW to 2246 AOT variants and cuts
-# runtime interp gap sites 333 -> 16 with a clean attract cycle and zero tier2
-# bails / dispatch misses. The --cfg-roots mode-handler regression noted in the
-# 2026-07-17 handoff was already fixed by PR #6's decoder rewrite.
-"$PYTHON" snesrecomp/tools/v2_emit.py --rom "$GEN_ROM" \
-    --cfg-dir recomp --out-dir src/gen --cfg-roots \
-    --source-root src --source-root recomp/widescreen_aot_roots.c \
-    --analysis-backend "$ANALYSIS_BACKEND"
+step "Syncing $VARIANT funcs.h"
+"$PYTHON" snesrecomp/tools/v2_sync_funcs_h.py --cfg-dir "$CFG_DIR" \
+  --out "$FUNCS_HEADER"
+if [ "$VARIANT" = coop ]; then
+  cp "$FUNCS_HEADER" "$CFG_DIR/funcs.h"
+fi
 
-step "Syncing funcs.h"
-"$PYTHON" snesrecomp/tools/v2_sync_funcs_h.py --cfg-dir recomp \
-    --out recomp/funcs.h
+# Feed only handwritten runtime sources into host-root discovery. Scanning the
+# whole src/ tree would let src/gen and src/gen-coop discover each other's
+# generated symbols, coupling the variants and overflowing Windows argv limits.
+SOURCE_ROOT_ARGS=(--source-root recomp/widescreen_aot_roots.c)
+while IFS= read -r source; do
+  SOURCE_ROOT_ARGS+=(--source-root "$source")
+done < <(find src -type f -name '*.c' \
+  ! -path 'src/gen/*' ! -path 'src/gen-coop/*' | sort)
+
+step "Regenerating configured banks ($VARIANT)"
+"$PYTHON" snesrecomp/tools/v2_emit.py --rom "$GEN_ROM" \
+  --cfg-dir "$CFG_DIR" --out-dir "$OUT_DIR" --cfg-roots \
+  "${SOURCE_ROOT_ARGS[@]}" \
+  --analysis-backend "$ANALYSIS_BACKEND"
 
 if [ "$STRICT_IDEMPOTENT" -eq 1 ]; then
   step "Idempotency check: regen into temp dir + byte-compare"
   TMP_GEN="$(mktemp -d)"
   trap 'rm -rf "$TMP_GEN"' EXIT
   "$PYTHON" snesrecomp/tools/v2_emit.py --rom "$GEN_ROM" \
-      --cfg-dir recomp --out-dir "$TMP_GEN" --cfg-roots \
-      --source-root src --source-root recomp/widescreen_aot_roots.c \
-      --analysis-backend "$ANALYSIS_BACKEND"
+    --cfg-dir "$CFG_DIR" --out-dir "$TMP_GEN" --cfg-roots \
+    "${SOURCE_ROOT_ARGS[@]}" \
+    --analysis-backend "$ANALYSIS_BACKEND"
   "$PYTHON" snesrecomp/tools/v2_compare_output.py \
-      --expected src/gen --actual "$TMP_GEN"
+    --expected "$OUT_DIR" --actual "$TMP_GEN"
 fi
 
 if [ "$RUN_TESTS" -eq 1 ]; then
@@ -149,4 +175,4 @@ if [ "$RUN_FUZZ" -eq 1 ]; then
   "$PYTHON" snesrecomp/fuzz/diff.py
 fi
 
-step "Done"
+step "Done ($VARIANT)"

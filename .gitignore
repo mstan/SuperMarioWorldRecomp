@@ -54,6 +54,8 @@ config.local.ini
 
 # Active recompiler output — generated locally per-developer
 src/gen/
+src/gen-coop/
+recomp/coop/funcs.h
 
 # Triage scratch
 _triage/

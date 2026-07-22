@@ -17,6 +17,7 @@
 #
 # Usage:
 #   bash tools/build-linux.sh                 # prod AppImage (default)
+#   bash tools/build-linux.sh --coop          # simultaneous co-op AppImage
 #   bash tools/build-linux.sh --config debug  # debug build (TCP server + rings)
 #   bash tools/build-linux.sh --regen         # regen src/gen first (tools/regen.sh)
 #   bash tools/build-linux.sh --run           # launch the AppImage after building
@@ -32,11 +33,11 @@ set -euo pipefail
 # ============================ PER-GAME CONFIG ===============================
 # The ONLY block that differs between games. Everything below is identical
 # across every snesrecomp title; copy this file and edit just this header.
-APP_NAME="SuperMarioWorldCoop"             # AppImage basename: <APP_NAME>-x86_64.AppImage
-CMAKE_TARGET="SuperMarioWorldCoopSNESRecomp" # add_executable() target in CMakeLists.txt
+APP_NAME="SuperMarioWorld"                 # AppImage basename: <APP_NAME>-x86_64.AppImage
+CMAKE_TARGET="SuperMarioWorldSNESRecomp"   # add_executable() target in CMakeLists.txt
 ROM_EXTS="sfc smc"                         # extensions AppRun auto-finds next to the AppImage
 EXTRA_ARGS=""                              # default argv when no ROM is found (PSX uses this)
-REGEN_CMD="bash tools/regen.sh"            # how to regenerate src/gen (empty to disable)
+REGEN_CMD="bash tools/regen.sh --stock"    # how to regenerate generated C
 # Optional hooks. SMW's gen carries runtime-gated widescreen overrides whose hook
 # functions (overrides/widescreen/*.c) are only compiled by the MSVC .sln, so the
 # Linux/Mac build ships the STANDARD (pristine-gen) variant: restore pristine
@@ -51,6 +52,7 @@ DEBUG_CMAKE_FLAGS=( -DSNESRECOMP_ENABLE_TRACE=ON )
 # ============================================================================
 
 CONFIG="prod"
+VARIANT="stock"
 DO_REGEN=0
 DO_RUN=0
 DO_PACKAGE=1
@@ -61,6 +63,8 @@ OUT="$REPO/release-linux"
 
 while [ $# -gt 0 ]; do
   case "$1" in
+    --stock) VARIANT="stock"; shift;;
+    --coop) VARIANT="coop"; shift;;
     --config) CONFIG="$2"; shift 2;;
     --prod) CONFIG="prod"; shift;;
     --debug) CONFIG="debug"; shift;;
@@ -76,6 +80,15 @@ while [ $# -gt 0 ]; do
 done
 case "$CONFIG" in prod) FLAGS=( "${PROD_CMAKE_FLAGS[@]}" );; debug) FLAGS=( "${DEBUG_CMAKE_FLAGS[@]}" );;
   *) echo "--config must be prod or debug (got '$CONFIG')" >&2; exit 2;; esac
+
+if [ "$VARIANT" = coop ]; then
+  APP_NAME="SuperMarioWorldCoop"
+  CMAKE_TARGET="SuperMarioWorldCoopSNESRecomp"
+  REGEN_CMD="bash tools/regen.sh --coop"
+  PREBUILD_CMD="python3 tools/apply_overrides.py --restore --gen-dir src/gen-coop"
+  POSTBUILD_CMD="python3 tools/apply_overrides.py --check --gen-dir src/gen-coop --manifest overrides/widescreen/overrides.manifest"
+  FLAGS+=( -DSMW_BUILD_COOP=ON )
+fi
 
 # Point cmake at the HOST's Linux SDL2. Several game CMakeLists pin a bundled
 # (Windows) SDL2 dev pack on CMAKE_PREFIX_PATH for the MSVC build; -DSDL2_DIR is
@@ -174,7 +187,9 @@ EOF
 
 $LINUXDEPLOY --appdir "$APPDIR" --executable "$BIN" \
     --desktop-file "$WORK/$SLUG.desktop" --icon-file "$WORK/$SLUG.png"
-cp "$REPO/recomp/coop/smw_coop.ips" "$APPDIR/usr/bin/smw_coop.ips"
+if [ "$VARIANT" = coop ]; then
+  cp "$REPO/recomp/coop/smw_coop.ips" "$APPDIR/usr/bin/smw_coop.ips"
+fi
 
 # Custom AppRun: bundle libs, read the controller natively on a Steam Deck, find
 # the ROM next to the .AppImage, run from the ROM's folder so saves land there.
@@ -187,7 +202,9 @@ export LD_LIBRARY_PATH="\$HERE/usr/lib:\${LD_LIBRARY_PATH}"
 # desktop layout retype it as keyboard (which otherwise sends Esc on B, etc.).
 export SDL_JOYSTICK_HIDAPI_STEAM=1
 export SDL_GAMECONTROLLER_ALLOW_STEAM_VIRTUAL_GAMEPAD=1
-export SNESRECOMP_COOP_IPS="\$HERE/usr/bin/smw_coop.ips"
+if [ -f "\$HERE/usr/bin/smw_coop.ips" ]; then
+  export SNESRECOMP_COOP_IPS="\$HERE/usr/bin/smw_coop.ips"
+fi
 SELF="\${APPIMAGE:-\$0}"
 ROMDIR="\$(dirname "\$(readlink -f "\$SELF")")"
 ROM=""
