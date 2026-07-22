@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Full regen pipeline driver.
 #
-# Default behavior: regen all 9 banks into src/gen, sync funcs.h,
+# Default behavior: regenerate every configured bank into src/gen, sync funcs.h,
 # then run the framework test suite. Each step gates
 # on success — if any step fails, the script exits non-zero with a
 # clear message about which step broke and what to do about it.
@@ -90,7 +90,22 @@ if [ -f "$MSU_IPS" ]; then
   GEN_ROM="$PATCHED_ROM"
 fi
 
-step "Regenerating 9 banks"
+# This branch is the separate simultaneous-co-op build. Compile from exactly
+# the same stock+co-op image that the runtime patcher creates. The MSU patch
+# changes 556 bytes that the co-op IPS intentionally leaves at their stock
+# values, so layering the patches would compile a different, incompatible ROM.
+# (The ordinary non-co-op regeneration path above remains MSU-enabled.)
+COOP_IPS="recomp/coop/smw_coop.ips"
+if [ -f "$COOP_IPS" ]; then
+  PATCHED_ROM=".build/smw_coop.sfc"
+  step "Applying simultaneous co-op patch (recomp/coop/)"
+  "$PYTHON" tools/apply_msu_patch.py --rom "$ROM" --ips "$COOP_IPS" \
+    --out "$PATCHED_ROM" \
+    --expect-sha256 0838e531fe22c077528febe14cb3ff7c492f1f5fa8de354192bdff7137c27f5b
+  GEN_ROM="$PATCHED_ROM"
+fi
+
+step "Regenerating configured banks"
 # --cfg-roots is the static-coverage policy (mirrors MegamanXRecomp): every
 # declared `func` seeds the analysis closure so the proven surface is
 # materialized as AOT; the interpreter is a failsafe for the unprovable

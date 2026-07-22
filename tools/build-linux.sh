@@ -32,8 +32,8 @@ set -euo pipefail
 # ============================ PER-GAME CONFIG ===============================
 # The ONLY block that differs between games. Everything below is identical
 # across every snesrecomp title; copy this file and edit just this header.
-APP_NAME="SuperMarioWorld"                 # AppImage basename: <APP_NAME>-x86_64.AppImage
-CMAKE_TARGET="SuperMarioWorldSNESRecomp"   # add_executable() target in CMakeLists.txt
+APP_NAME="SuperMarioWorldCoop"             # AppImage basename: <APP_NAME>-x86_64.AppImage
+CMAKE_TARGET="SuperMarioWorldCoopSNESRecomp" # add_executable() target in CMakeLists.txt
 ROM_EXTS="sfc smc"                         # extensions AppRun auto-finds next to the AppImage
 EXTRA_ARGS=""                              # default argv when no ROM is found (PSX uses this)
 REGEN_CMD="bash tools/regen.sh"            # how to regenerate src/gen (empty to disable)
@@ -174,6 +174,7 @@ EOF
 
 $LINUXDEPLOY --appdir "$APPDIR" --executable "$BIN" \
     --desktop-file "$WORK/$SLUG.desktop" --icon-file "$WORK/$SLUG.png"
+cp "$REPO/recomp/coop/smw_coop.ips" "$APPDIR/usr/bin/smw_coop.ips"
 
 # Custom AppRun: bundle libs, read the controller natively on a Steam Deck, find
 # the ROM next to the .AppImage, run from the ROM's folder so saves land there.
@@ -186,6 +187,7 @@ export LD_LIBRARY_PATH="\$HERE/usr/lib:\${LD_LIBRARY_PATH}"
 # desktop layout retype it as keyboard (which otherwise sends Esc on B, etc.).
 export SDL_JOYSTICK_HIDAPI_STEAM=1
 export SDL_GAMECONTROLLER_ALLOW_STEAM_VIRTUAL_GAMEPAD=1
+export SNESRECOMP_COOP_IPS="\$HERE/usr/bin/smw_coop.ips"
 SELF="\${APPIMAGE:-\$0}"
 ROMDIR="\$(dirname "\$(readlink -f "\$SELF")")"
 ROM=""

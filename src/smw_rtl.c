@@ -109,7 +109,15 @@ void RunOneFrameOfGame(void) {
      * cause of SMW's per-frame stack drift into DMA-reg space. Matches
      * mmx_rtl.c; see cpu_push_interrupt_frame in cpu_state.h. */
     cpu_push_interrupt_frame(&g_cpu);
+#ifdef SMW_COOP_BUILD
+    /* The co-op hack rewrites interrupt-adjacent control flow and expands the
+     * ROM to banks not present in stock SMW. Keep NMI in the byte-exact tier;
+     * it is a bounded RTI-terminated handler and still shares all recomp bus,
+     * PPU, DMA, and input state. */
+    interp_bridge_run_interrupt(&g_cpu, 0x00816A);
+#else
     I_NMI(&g_cpu);
+#endif
     cpu_trace_px_breadcrumb(&g_cpu, 0x2001, "after_I_NMI");
   }
   cpu_trace_px_breadcrumb(&g_cpu, 0x2002, "before_Internal");

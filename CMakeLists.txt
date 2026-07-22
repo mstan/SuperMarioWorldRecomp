@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(SuperMarioWorldSNESRecomp C)
+project(SuperMarioWorldCoopSNESRecomp C)
 
 # Cross-platform (macOS/Linux) build for SuperMarioWorldRecomp.
 #
@@ -45,10 +45,11 @@ endif()
 # bank02_v2.c references Override_FireballGfx from overrides/widescreen/.
 file(GLOB SMW_OVERRIDE_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/overrides/*/*.c)
 
-add_executable(SuperMarioWorldSNESRecomp
+add_executable(SuperMarioWorldCoopSNESRecomp
     ${SNESRECOMP_RUNNER_SOURCES}
     # game-specific runtime
     src/config.c
+    src/coop_patch.c
     src/glsl_shader.c
     src/main.c
     src/post_mortem.c
@@ -67,7 +68,7 @@ add_executable(SuperMarioWorldSNESRecomp
     ${SMW_OVERRIDE_SOURCES}
 )
 
-target_include_directories(SuperMarioWorldSNESRecomp PRIVATE
+target_include_directories(SuperMarioWorldCoopSNESRecomp PRIVATE
     ${CMAKE_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/recomp
@@ -85,8 +86,10 @@ if(SNESRECOMP_ENABLE_TRACE)
 else()
     set(_SMW_TRACE 0)
 endif()
-target_compile_definitions(SuperMarioWorldSNESRecomp PRIVATE
+target_compile_definitions(SuperMarioWorldCoopSNESRecomp PRIVATE
+    SMW_COOP_BUILD=1
     SMW_DISABLE_LM=1
+    SNESRECOMP_LLE_BOUNCE_DEFAULT=0  # expansion dispatchers stay byte-exact
     SYSTEM_VOLUME_MIXER_AVAILABLE=0   # Win32 WASAPI volume control excluded
     SNESRECOMP_TRACE=${_SMW_TRACE}    # TCP debug server: 0 in prod, 1 in debug
     SNESRECOMP_REVERSE_DEBUG=0        # raw WRAM stores; matches non-debug generated C
@@ -95,11 +98,11 @@ target_compile_definitions(SuperMarioWorldSNESRecomp PRIVATE
 # The recompiled C is machine-generated; quiet its warnings and tolerate the
 # K&R-style implicit declarations clang rejects by default.
 if(NOT MSVC)
-    target_compile_options(SuperMarioWorldSNESRecomp PRIVATE
+    target_compile_options(SuperMarioWorldCoopSNESRecomp PRIVATE
         -w -Wno-implicit-function-declaration)
 endif()
 
-target_link_libraries(SuperMarioWorldSNESRecomp PRIVATE
+target_link_libraries(SuperMarioWorldCoopSNESRecomp PRIVATE
     ${SDL2_LIBRARIES}
     OpenGL::GL
     m                                 # libm: glsl_shader.c uses pow() (implicit on macOS)
@@ -107,11 +110,16 @@ target_link_libraries(SuperMarioWorldSNESRecomp PRIVATE
 
 if(WIN32)
     # Trace/debug-server sockets and post-mortem symbolization.
-    target_link_libraries(SuperMarioWorldSNESRecomp PRIVATE ws2_32 dbghelp)
+    target_link_libraries(SuperMarioWorldCoopSNESRecomp PRIVATE ws2_32 dbghelp)
 endif()
+
+add_custom_command(TARGET SuperMarioWorldCoopSNESRecomp POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_SOURCE_DIR}/recomp/coop/smw_coop.ips
+            $<TARGET_FILE_DIR:SuperMarioWorldCoopSNESRecomp>/smw_coop.ips)
 
 # Dear ImGui pre-boot launcher (GUI) from the shared recomp-ui repo. One call
 # wires sources/includes/RECOMP_LAUNCHER define/CXX/asset-staging (same SMW
 # boxart; recomp-ui's default pad.tga is already the SNES pad).
-recomp_target_launcher_ui(SuperMarioWorldSNESRecomp
+recomp_target_launcher_ui(SuperMarioWorldCoopSNESRecomp
     BOXART ${CMAKE_SOURCE_DIR}/recomp/launcher/boxart.tga)

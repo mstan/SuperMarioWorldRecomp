@@ -15,7 +15,7 @@
 
 #include "cpu_state.h"
 
-/* 1943 functions across all banks (5 decls each). */
+/* 1959 functions across all banks (5 decls each). */
 
 void I_RESET(CpuState *cpu);  /* $00:8000 alias */
 RecompReturn I_RESET_M0X0(CpuState *cpu);
@@ -92,6 +92,11 @@ RecompReturn CompressOamEntExt_M0X0(CpuState *cpu);
 RecompReturn CompressOamEntExt_M0X1(CpuState *cpu);
 RecompReturn CompressOamEntExt_M1X0(CpuState *cpu);
 RecompReturn CompressOamEntExt_M1X1(CpuState *cpu);
+void LunarMagicReturnLong(CpuState *cpu);  /* $00:84CF alias */
+RecompReturn LunarMagicReturnLong_M0X0(CpuState *cpu);
+RecompReturn LunarMagicReturnLong_M0X1(CpuState *cpu);
+RecompReturn LunarMagicReturnLong_M1X0(CpuState *cpu);
+RecompReturn LunarMagicReturnLong_M1X1(CpuState *cpu);
 void LoadStripeImage(CpuState *cpu);  /* $00:85D2 alias */
 RecompReturn LoadStripeImage_M0X0(CpuState *cpu);
 RecompReturn LoadStripeImage_M0X1(CpuState *cpu);
@@ -112,16 +117,21 @@ RecompReturn GameMode14_InLevel_0086C7_M0X0(CpuState *cpu);
 RecompReturn GameMode14_InLevel_0086C7_M0X1(CpuState *cpu);
 RecompReturn GameMode14_InLevel_0086C7_M1X0(CpuState *cpu);
 RecompReturn GameMode14_InLevel_0086C7_M1X1(CpuState *cpu);
-void GameMode14_InLevel_0086DF(CpuState *cpu);  /* $00:86DF alias */
-RecompReturn GameMode14_InLevel_0086DF_M0X0(CpuState *cpu);
-RecompReturn GameMode14_InLevel_0086DF_M0X1(CpuState *cpu);
-RecompReturn GameMode14_InLevel_0086DF_M1X0(CpuState *cpu);
-RecompReturn GameMode14_InLevel_0086DF_M1X1(CpuState *cpu);
+void LunarMagicExecutePtrLong(CpuState *cpu);  /* $00:86DF alias */
+RecompReturn LunarMagicExecutePtrLong_M0X0(CpuState *cpu);
+RecompReturn LunarMagicExecutePtrLong_M0X1(CpuState *cpu);
+RecompReturn LunarMagicExecutePtrLong_M1X0(CpuState *cpu);
+RecompReturn LunarMagicExecutePtrLong_M1X1(CpuState *cpu);
 void UploadLevelTilemapHDMA(CpuState *cpu);  /* $00:871E alias */
 RecompReturn UploadLevelTilemapHDMA_M0X0(CpuState *cpu);
 RecompReturn UploadLevelTilemapHDMA_M0X1(CpuState *cpu);
 RecompReturn UploadLevelTilemapHDMA_M1X0(CpuState *cpu);
 RecompReturn UploadLevelTilemapHDMA_M1X1(CpuState *cpu);
+void CoopVramUploadLoop(CpuState *cpu);  /* $00:8726 alias */
+RecompReturn CoopVramUploadLoop_M0X0(CpuState *cpu);
+RecompReturn CoopVramUploadLoop_M0X1(CpuState *cpu);
+RecompReturn CoopVramUploadLoop_M1X0(CpuState *cpu);
+RecompReturn CoopVramUploadLoop_M1X1(CpuState *cpu);
 void UploadLevelLayer1And2Tilemaps(CpuState *cpu);  /* $00:87AD alias */
 RecompReturn UploadLevelLayer1And2Tilemaps_M0X0(CpuState *cpu);
 RecompReturn UploadLevelLayer1And2Tilemaps_M0X1(CpuState *cpu);
@@ -1352,6 +1362,11 @@ RecompReturn RunPlayerBlockCode_M0X0(CpuState *cpu);
 RecompReturn RunPlayerBlockCode_M0X1(CpuState *cpu);
 RecompReturn RunPlayerBlockCode_M1X0(CpuState *cpu);
 RecompReturn RunPlayerBlockCode_M1X1(CpuState *cpu);
+void RunPlayerBlockCodeAfterCoop(CpuState *cpu);  /* $00:EAE1 alias */
+RecompReturn RunPlayerBlockCodeAfterCoop_M0X0(CpuState *cpu);
+RecompReturn RunPlayerBlockCodeAfterCoop_M0X1(CpuState *cpu);
+RecompReturn RunPlayerBlockCodeAfterCoop_M1X0(CpuState *cpu);
+RecompReturn RunPlayerBlockCodeAfterCoop_M1X1(CpuState *cpu);
 void DamagePlayer_WallWalk(CpuState *cpu);  /* $00:EB42 alias */
 RecompReturn DamagePlayer_WallWalk_M0X0(CpuState *cpu);
 RecompReturn DamagePlayer_WallWalk_M0X1(CpuState *cpu);
@@ -7672,11 +7687,31 @@ RecompReturn LoadSublevel_M0X0(CpuState *cpu);
 RecompReturn LoadSublevel_M0X1(CpuState *cpu);
 RecompReturn LoadSublevel_M1X0(CpuState *cpu);
 RecompReturn LoadSublevel_M1X1(CpuState *cpu);
+void LoadSublevelAfterLunarMagic(CpuState *cpu);  /* $05:803F alias */
+RecompReturn LoadSublevelAfterLunarMagic_M0X0(CpuState *cpu);
+RecompReturn LoadSublevelAfterLunarMagic_M0X1(CpuState *cpu);
+RecompReturn LoadSublevelAfterLunarMagic_M1X0(CpuState *cpu);
+RecompReturn LoadSublevelAfterLunarMagic_M1X1(CpuState *cpu);
 void InitializeLevelLayer1And2Tilemaps(CpuState *cpu);  /* $05:809E alias */
 RecompReturn InitializeLevelLayer1And2Tilemaps_M0X0(CpuState *cpu);
 RecompReturn InitializeLevelLayer1And2Tilemaps_M0X1(CpuState *cpu);
 RecompReturn InitializeLevelLayer1And2Tilemaps_M1X0(CpuState *cpu);
 RecompReturn InitializeLevelLayer1And2Tilemaps_M1X1(CpuState *cpu);
+void InitializeLevelLayer1And2TilemapsAfterA7D9(CpuState *cpu);  /* $05:80C3 alias */
+RecompReturn InitializeLevelLayer1And2TilemapsAfterA7D9_M0X0(CpuState *cpu);
+RecompReturn InitializeLevelLayer1And2TilemapsAfterA7D9_M0X1(CpuState *cpu);
+RecompReturn InitializeLevelLayer1And2TilemapsAfterA7D9_M1X0(CpuState *cpu);
+RecompReturn InitializeLevelLayer1And2TilemapsAfterA7D9_M1X1(CpuState *cpu);
+void InitializeLevelLayer1And2TilemapsAfterA84D(CpuState *cpu);  /* $05:80C7 alias */
+RecompReturn InitializeLevelLayer1And2TilemapsAfterA84D_M0X0(CpuState *cpu);
+RecompReturn InitializeLevelLayer1And2TilemapsAfterA84D_M0X1(CpuState *cpu);
+RecompReturn InitializeLevelLayer1And2TilemapsAfterA84D_M1X0(CpuState *cpu);
+RecompReturn InitializeLevelLayer1And2TilemapsAfterA84D_M1X1(CpuState *cpu);
+void InitializeLevelLayer1And2TilemapsAfterA5CF(CpuState *cpu);  /* $05:80CB alias */
+RecompReturn InitializeLevelLayer1And2TilemapsAfterA5CF_M0X0(CpuState *cpu);
+RecompReturn InitializeLevelLayer1And2TilemapsAfterA5CF_M0X1(CpuState *cpu);
+RecompReturn InitializeLevelLayer1And2TilemapsAfterA5CF_M1X0(CpuState *cpu);
+RecompReturn InitializeLevelLayer1And2TilemapsAfterA5CF_M1X1(CpuState *cpu);
 void BufferBGTilemap(CpuState *cpu);  /* $05:8126 alias */
 RecompReturn BufferBGTilemap_M0X0(CpuState *cpu);
 RecompReturn BufferBGTilemap_M0X1(CpuState *cpu);
@@ -9722,6 +9757,36 @@ RecompReturn GhostHouseObj2E_HorizontalLineOfSpikes_M0X0(CpuState *cpu);
 RecompReturn GhostHouseObj2E_HorizontalLineOfSpikes_M0X1(CpuState *cpu);
 RecompReturn GhostHouseObj2E_HorizontalLineOfSpikes_M1X0(CpuState *cpu);
 RecompReturn GhostHouseObj2E_HorizontalLineOfSpikes_M1X1(CpuState *cpu);
+void CoopWaitForBlank(CpuState *cpu);  /* $10:8008 alias */
+RecompReturn CoopWaitForBlank_M0X0(CpuState *cpu);
+RecompReturn CoopWaitForBlank_M0X1(CpuState *cpu);
+RecompReturn CoopWaitForBlank_M1X0(CpuState *cpu);
+RecompReturn CoopWaitForBlank_M1X1(CpuState *cpu);
+void CoopExpandedRoutine(CpuState *cpu);  /* $10:CBEA alias */
+RecompReturn CoopExpandedRoutine_M0X0(CpuState *cpu);
+RecompReturn CoopExpandedRoutine_M0X1(CpuState *cpu);
+RecompReturn CoopExpandedRoutine_M1X0(CpuState *cpu);
+RecompReturn CoopExpandedRoutine_M1X1(CpuState *cpu);
+void CoopLevelInitConditionalAfterA7D9(CpuState *cpu);  /* $1F:AC93 alias */
+RecompReturn CoopLevelInitConditionalAfterA7D9_M0X0(CpuState *cpu);
+RecompReturn CoopLevelInitConditionalAfterA7D9_M0X1(CpuState *cpu);
+RecompReturn CoopLevelInitConditionalAfterA7D9_M1X0(CpuState *cpu);
+RecompReturn CoopLevelInitConditionalAfterA7D9_M1X1(CpuState *cpu);
+void CoopLevelInitContinueAfterA7D9(CpuState *cpu);  /* $1F:AC9B alias */
+RecompReturn CoopLevelInitContinueAfterA7D9_M0X0(CpuState *cpu);
+RecompReturn CoopLevelInitContinueAfterA7D9_M0X1(CpuState *cpu);
+RecompReturn CoopLevelInitContinueAfterA7D9_M1X0(CpuState *cpu);
+RecompReturn CoopLevelInitContinueAfterA7D9_M1X1(CpuState *cpu);
+void CoopLevelInitConditionalAfterA84D(CpuState *cpu);  /* $1F:B042 alias */
+RecompReturn CoopLevelInitConditionalAfterA84D_M0X0(CpuState *cpu);
+RecompReturn CoopLevelInitConditionalAfterA84D_M0X1(CpuState *cpu);
+RecompReturn CoopLevelInitConditionalAfterA84D_M1X0(CpuState *cpu);
+RecompReturn CoopLevelInitConditionalAfterA84D_M1X1(CpuState *cpu);
+void CoopLevelInitContinueAfterA84D(CpuState *cpu);  /* $1F:B04A alias */
+RecompReturn CoopLevelInitContinueAfterA84D_M0X0(CpuState *cpu);
+RecompReturn CoopLevelInitContinueAfterA84D_M0X1(CpuState *cpu);
+RecompReturn CoopLevelInitContinueAfterA84D_M1X0(CpuState *cpu);
+RecompReturn CoopLevelInitContinueAfterA84D_M1X1(CpuState *cpu);
 void SmwRunDecompressFromWRAM(CpuState *cpu);  /* $7F:8000 alias */
 RecompReturn SmwRunDecompressFromWRAM_M0X0(CpuState *cpu);
 RecompReturn SmwRunDecompressFromWRAM_M0X1(CpuState *cpu);
@@ -9732,6 +9797,21 @@ RecompReturn SmwRunDecompressFromWRAM_Entry2_M0X0(CpuState *cpu);
 RecompReturn SmwRunDecompressFromWRAM_Entry2_M0X1(CpuState *cpu);
 RecompReturn SmwRunDecompressFromWRAM_Entry2_M1X0(CpuState *cpu);
 RecompReturn SmwRunDecompressFromWRAM_Entry2_M1X1(CpuState *cpu);
+void CoopGameModeWrapper(CpuState *cpu);  /* $90:803D alias */
+RecompReturn CoopGameModeWrapper_M0X0(CpuState *cpu);
+RecompReturn CoopGameModeWrapper_M0X1(CpuState *cpu);
+RecompReturn CoopGameModeWrapper_M1X0(CpuState *cpu);
+RecompReturn CoopGameModeWrapper_M1X1(CpuState *cpu);
+void CoopGameModeAfterDispatch(CpuState *cpu);  /* $90:8051 alias */
+RecompReturn CoopGameModeAfterDispatch_M0X0(CpuState *cpu);
+RecompReturn CoopGameModeAfterDispatch_M0X1(CpuState *cpu);
+RecompReturn CoopGameModeAfterDispatch_M1X0(CpuState *cpu);
+RecompReturn CoopGameModeAfterDispatch_M1X1(CpuState *cpu);
+void CoopReturnToHost(CpuState *cpu);  /* $90:8094 alias */
+RecompReturn CoopReturnToHost_M0X0(CpuState *cpu);
+RecompReturn CoopReturnToHost_M0X1(CpuState *cpu);
+RecompReturn CoopReturnToHost_M1X0(CpuState *cpu);
+RecompReturn CoopReturnToHost_M1X1(CpuState *cpu);
 
 /* Hand-written non-recompiled bodies still declared here.
  * These are not produced by the v2 emit pipeline but are

@@ -10,14 +10,11 @@ staged.
 Ships ONE windows zip (and ONLY a zip - never a bare exe; the exe is useless
 without SDL2.dll and the recomp-ui assets/ next to it):
 
-  SuperMarioWorldRecomp-windows-x64-v<Version>.zip
+  SuperMarioWorldCoopSNESRecomp-windows-x64-v<Version>.zip
 
-CONSOLIDATED (was dual standard/widescreen zips): the GUI launcher has a
-Widescreen 16:9 toggle and persists it to config.ini, so a separate widescreen
-zip is redundant - one build serves both. config.ini ships Widescreen = 0
-regardless of the working tree's local value, so by default the game is
-authentic 256-wide and the widescreen overrides are inert (gated on
-g_ws_active). The player flips widescreen in the launcher.
+The simultaneous co-op ROM changes offsets used by the stock-game widescreen
+hooks, so this build exposes only the authentic 256-wide mode. Widescreen
+remains available in the standard one-player build.
 
 This script does NOT build. Build first, e.g.:
   export PATH=/c/msys64/mingw64/bin:$PATH
@@ -25,7 +22,7 @@ This script does NOT build. Build first, e.g.:
 
 Zips land in release-stage\. Publish via gh AFTER the user signs off:
 
-  gh release create v<Version> release-stage\SuperMarioWorldRecomp-windows-x64-v<Version>.zip
+  gh release create v<Version> release-stage\SuperMarioWorldCoopSNESRecomp-windows-x64-v<Version>.zip
 
 Example:
   powershell -File tools\make_release.ps1 -Version 0.9.0 `
@@ -40,7 +37,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $build = Join-Path $root $BuildDir
-$exe = Join-Path $build 'SuperMarioWorldSNESRecomp.exe'
+$exe = Join-Path $build 'SuperMarioWorldCoopSNESRecomp.exe'
 $assets = Join-Path $build 'assets'
 
 if (-not (Test-Path -LiteralPath $exe)) {
@@ -51,7 +48,7 @@ if (-not (Test-Path -LiteralPath $assets)) {
 }
 
 $out = Join-Path $root 'release-stage'
-$stageName = "SuperMarioWorldRecomp-windows-x64-v$Version"
+$stageName = "SuperMarioWorldCoopSNESRecomp-windows-x64-v$Version"
 $stage = Join-Path $out $stageName
 $zip = Join-Path $out "$stageName.zip"
 
@@ -72,6 +69,7 @@ if (Test-Path -LiteralPath $zip) {
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 
 Copy-Item -LiteralPath $exe -Destination $stage
+Copy-Item -LiteralPath (Join-Path $root 'recomp\coop\smw_coop.ips') -Destination $stage
 Copy-Item -LiteralPath (Join-Path $root 'README.md') -Destination $stage
 Copy-Item -LiteralPath $assets -Destination $stage -Recurse
 
