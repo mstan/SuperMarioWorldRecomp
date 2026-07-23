@@ -419,6 +419,10 @@ static bool HandleIniConfig(int section, const char *key, char *value) {
       return ParseBool(value, &g_config.disable_frame_delay);
     } else if (StringEqualsNoCase(key, "SkipLauncher")) {
       return ParseBool(value, &g_config.skip_launcher);
+    } else if (StringEqualsNoCase(key, "NetplayPlayerName")) {
+      snprintf(g_config.netplay_player_name,
+               sizeof(g_config.netplay_player_name), "%s", value);
+      return true;
     }
   } else if (section == 4) {
   }
@@ -487,6 +491,10 @@ void ParseConfigFile(const char *filename) {
   /* HUD-to-the-edges defaults on; inert in Standard view mode.
    * `WidescreenHud = 0` keeps the authentic centered status bar. */
   g_config.widescreen_hud = true;
+
+  /* An empty identity intentionally triggers recomp-ui's first-entry name
+   * prompt. Once chosen it is persisted as [General] NetplayPlayerName. */
+  g_config.netplay_player_name[0] = '\0';
 
   /* MSU-1 streamed audio is opt-in (default off = authentic SPC audio). */
   g_config.msu1_enabled = false;
@@ -633,6 +641,7 @@ void WriteConfigFile(const char *filename) {
     { "GamepadMap", "EnableGamepad1" },
     { "GamepadMap", "EnableGamepad2" },
     { "General",    "SkipLauncher" },
+    { "General",    "NetplayPlayerName" },
     { "GamepadMap", "Deadzone" },
     { "GamepadMap", "DeadzoneP2" },
   };
@@ -648,8 +657,9 @@ void WriteConfigFile(const char *filename) {
   snprintf(kvs[7].val, sizeof(kvs[7].val), "%s", g_config.enable_gamepad[0] ? "true" : "false");
   snprintf(kvs[8].val, sizeof(kvs[8].val), "%s", g_config.enable_gamepad[1] ? "true" : "false");
   snprintf(kvs[9].val, sizeof(kvs[9].val), "%d", g_config.skip_launcher ? 1 : 0);
-  snprintf(kvs[10].val, sizeof(kvs[10].val), "%d", g_config.deadzone[0]);
-  snprintf(kvs[11].val, sizeof(kvs[11].val), "%d", g_config.deadzone[1]);
+  snprintf(kvs[10].val, sizeof(kvs[10].val), "%s", g_config.netplay_player_name);
+  snprintf(kvs[11].val, sizeof(kvs[11].val), "%d", g_config.deadzone[0]);
+  snprintf(kvs[12].val, sizeof(kvs[12].val), "%d", g_config.deadzone[1]);
 
   /* Read the existing file (may be absent on a fresh extract). */
   char *data = NULL;

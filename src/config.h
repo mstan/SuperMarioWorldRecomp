@@ -82,6 +82,10 @@ typedef struct Config {
   // --launcher argument or by setting SkipLauncher = 0 in config.ini.
   bool skip_launcher;
 
+  // Persistent lobby identity. Empty on first boot so recomp-ui asks the
+  // player to choose a display name before exposing host/join actions.
+  char netplay_player_name[64];
+
   // MSU-1 streamed audio. Off by default (authentic SPC audio). When enabled
   // and msu1_dir holds a pack, the launcher exports SNESRECOMP_MSU1 so the
   // runtime streams the .pcm tracks. Persisted to config.ini [Sound].

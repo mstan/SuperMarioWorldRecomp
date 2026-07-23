@@ -120,6 +120,52 @@ configuration or `SNESRECOMP_WIDESCREEN` requests another mode. The experimental
 IPS-specific hooks remain in the source for future work, but extended terrain
 streaming is not yet reliable during normal scrolling.
 
+### Network co-op
+
+The co-op executable supports two-player delay-sync netplay through
+`snesrecomp`'s `recomp-net` integration and recomp-ui. Both players must use the
+same build and a matching verified SMW (USA) ROM.
+
+1. Start `SuperMarioWorldCoopSNESRecomp` and open **Netplay** in the launcher.
+   The first visit asks for a player name and saves it for later launches.
+2. Choose **Host Lobby**. **Online** publishes the room through the configured
+   lobby server; **LAN / Direct IP** advertises it directly on the local
+   network. **Create** immediately opens the waiting room.
+3. The guest joins the matching **Super Mario World Co-op** room. Once both
+   seats are occupied, the host selects **Play**; the guest does not need a
+   separate ready action.
+4. The host controls Mario (network slot 1) and the guest controls Luigi
+   (network slot 2). Each machine uses its Player 1 keyboard/controller by
+   default, so the guest does not need separate Player 2 bindings.
+
+Closing the game or pressing Escape during a network match returns both
+players to the room for a rematch. Use **Leave Lobby** to disconnect instead.
+
+The simulation waits for confirmed inputs before every frame. Turbo, pause,
+and local reset are disabled during a session; save/load synchronization is
+host-authoritative. LAN uses UDP directly. Internet games may require a build
+configured with `-DSNESRECOMP_NET_ICE=ON`, which includes libjuice-based NAT
+traversal, when the peers cannot reach each other directly.
+
+For a launcher-free loopback or CI smoke test, start two instances with the
+same session ID and opposite ports:
+
+```powershell
+# Host
+$env:SNES_NETPLAY='1'; $env:SNES_NET_SLOT='0'
+$env:SNES_NET_SESSION_ID='4242'; $env:SNES_NET_TRANSPORT='lan'
+$env:SNES_NET_BIND='0.0.0.0:7777'; $env:SNES_NET_PEER='127.0.0.1:7778'
+$env:SNES_NET_TEST_TICKS='600'
+.\SuperMarioWorldCoopSNESRecomp.exe .\smw.sfc
+
+# Guest (in another terminal)
+$env:SNES_NETPLAY='1'; $env:SNES_NET_SLOT='1'
+$env:SNES_NET_SESSION_ID='4242'; $env:SNES_NET_TRANSPORT='lan'
+$env:SNES_NET_BIND='0.0.0.0:7778'; $env:SNES_NET_PEER='127.0.0.1:7777'
+$env:SNES_NET_TEST_TICKS='600'
+.\SuperMarioWorldCoopSNESRecomp.exe .\smw.sfc
+```
+
 ### Co-op hack attribution
 
 This build distributes an IPS delta for **Super Mario World - 2 Player
@@ -200,6 +246,20 @@ The normal configuration remains `smw.exe`; the additive configuration creates
 `SuperMarioWorldCoopSNESRecomp.exe` in its own output directory and copies
 `smw_coop.ips` beside it. CMake builds the normal target by default; configure
 with `-DSMW_BUILD_COOP=ON` to make both targets available in one build tree.
+
+The netplay-enabled co-op target uses CMake so it can link recomp-net. A sibling
+engine worktree can be selected without replacing the checked-in submodule:
+
+```powershell
+$engine = 'F:\path\to\snesrecomp-worktree'
+$sdl = '.\packages\sdl2.nuget.2.26.3\build\native'
+$env:SNESRECOMP_ROOT = $engine
+bash tools/regen.sh --coop --no-tests
+cmake -S . -B build-netplay -DSMW_BUILD_COOP=ON `
+  -DSNESRECOMP_ROOT="$engine" -DSMW_SDL2_ROOT="$sdl"
+cmake --build build-netplay --config Release `
+  --target SuperMarioWorldCoopSNESRecomp --parallel
+```
 
 ### Regenerating the recompiled C (contributors)
 

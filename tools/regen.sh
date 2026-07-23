@@ -51,7 +51,8 @@ fi
 
 cd "$ROOT"
 
-TESTS="snesrecomp/tests/run_tests.py"
+SNESRECOMP_ROOT="${SNESRECOMP_ROOT:-snesrecomp}"
+TESTS="$SNESRECOMP_ROOT/tests/run_tests.py"
 ROM="smw.sfc"
 PYTHON="${PYTHON:-$(command -v python3 || command -v python || true)}"
 if [ -z "$PYTHON" ]; then
@@ -69,7 +70,7 @@ esac
 
 if [ "$ANALYSIS_BACKEND" = native ]; then
   step "Building native analyzer"
-  "$PYTHON" snesrecomp/tools/build_native_analyzer.py
+  "$PYTHON" "$SNESRECOMP_ROOT/tools/build_native_analyzer.py"
 fi
 
 GEN_ROM="$ROM"
@@ -82,6 +83,7 @@ if [ "$VARIANT" = coop ]; then
   # stock+co-op only, matching the image prepared by the runtime patcher.
   COOP_IPS="recomp/coop/smw_coop.ips"
   PATCHED_ROM=".build/smw_coop.sfc"
+  mkdir -p "$(dirname "$PATCHED_ROM")"
   step "Applying simultaneous co-op patch (recomp/coop/)"
   "$PYTHON" tools/apply_msu_patch.py --rom "$ROM" --ips "$COOP_IPS" \
     --out "$PATCHED_ROM" \
@@ -128,7 +130,7 @@ else
 fi
 
 step "Syncing $VARIANT funcs.h"
-"$PYTHON" snesrecomp/tools/v2_sync_funcs_h.py --cfg-dir "$CFG_DIR" \
+"$PYTHON" "$SNESRECOMP_ROOT/tools/v2_sync_funcs_h.py" --cfg-dir "$CFG_DIR" \
   --out "$FUNCS_HEADER"
 if [ "$VARIANT" = coop ]; then
   cp "$FUNCS_HEADER" "$CFG_DIR/funcs.h"
@@ -144,7 +146,7 @@ done < <(find src -type f -name '*.c' \
   ! -path 'src/gen/*' ! -path 'src/gen-coop/*' | sort)
 
 step "Regenerating configured banks ($VARIANT)"
-"$PYTHON" snesrecomp/tools/v2_emit.py --rom "$GEN_ROM" \
+"$PYTHON" "$SNESRECOMP_ROOT/tools/v2_emit.py" --rom "$GEN_ROM" \
   --cfg-dir "$CFG_DIR" --out-dir "$OUT_DIR" --cfg-roots \
   "${SOURCE_ROOT_ARGS[@]}" \
   --analysis-backend "$ANALYSIS_BACKEND"
@@ -153,11 +155,11 @@ if [ "$STRICT_IDEMPOTENT" -eq 1 ]; then
   step "Idempotency check: regen into temp dir + byte-compare"
   TMP_GEN="$(mktemp -d)"
   trap 'rm -rf "$TMP_GEN"' EXIT
-  "$PYTHON" snesrecomp/tools/v2_emit.py --rom "$GEN_ROM" \
+  "$PYTHON" "$SNESRECOMP_ROOT/tools/v2_emit.py" --rom "$GEN_ROM" \
     --cfg-dir "$CFG_DIR" --out-dir "$TMP_GEN" --cfg-roots \
     "${SOURCE_ROOT_ARGS[@]}" \
     --analysis-backend "$ANALYSIS_BACKEND"
-  "$PYTHON" snesrecomp/tools/v2_compare_output.py \
+  "$PYTHON" "$SNESRECOMP_ROOT/tools/v2_compare_output.py" \
     --expected "$OUT_DIR" --actual "$TMP_GEN"
 fi
 
@@ -168,11 +170,11 @@ fi
 
 if [ "$RUN_FUZZ" -eq 1 ]; then
   step "Phase B fuzz"
-  "$PYTHON" snesrecomp/fuzz/generate_snippets.py > /dev/null
-  "$PYTHON" snesrecomp/fuzz/run_recomp.py
+  "$PYTHON" "$SNESRECOMP_ROOT/fuzz/generate_snippets.py" > /dev/null
+  "$PYTHON" "$SNESRECOMP_ROOT/fuzz/run_recomp.py"
   taskkill //F //IM smw.exe > /dev/null 2>&1 || true
-  "$PYTHON" snesrecomp/fuzz/run_oracle.py
-  "$PYTHON" snesrecomp/fuzz/diff.py
+  "$PYTHON" "$SNESRECOMP_ROOT/fuzz/run_oracle.py"
+  "$PYTHON" "$SNESRECOMP_ROOT/fuzz/diff.py"
 fi
 
 step "Done ($VARIANT)"

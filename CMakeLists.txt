@@ -8,11 +8,23 @@ option(SMW_BUILD_COOP "Build the simultaneous two-player co-op executable" OFF)
 
 set(CMAKE_C_STANDARD 11)
 
-set(SNESRECOMP_ROOT ${CMAKE_SOURCE_DIR}/snesrecomp)
+set(SNESRECOMP_ROOT "${CMAKE_SOURCE_DIR}/snesrecomp" CACHE PATH
+    "Path to the snesrecomp checkout used by this game")
 include(${SNESRECOMP_ROOT}/runner/runner.cmake)
 include(${CMAKE_SOURCE_DIR}/recomp-ui/recomp_ui.cmake)
 
-find_package(SDL2 REQUIRED)
+set(SMW_SDL2_ROOT "" CACHE PATH
+    "Optional SDL2 development package root (contains include/ and lib/x64/)")
+if(SMW_SDL2_ROOT)
+    set(SDL2_INCLUDE_DIRS "${SMW_SDL2_ROOT}/include")
+    if(WIN32)
+        set(SDL2_LIBRARIES "${SMW_SDL2_ROOT}/lib/x64/SDL2.lib")
+    else()
+        find_package(SDL2 REQUIRED)
+    endif()
+else()
+    find_package(SDL2 REQUIRED)
+endif()
 find_package(OpenGL REQUIRED)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
@@ -146,11 +158,12 @@ function(smw_add_recomp_target target_name generated_sources)
     target_link_libraries(${target_name} PRIVATE
         ${SDL2_LIBRARIES}
         OpenGL::GL
-        m
     )
 
     if(WIN32)
         target_link_libraries(${target_name} PRIVATE ws2_32 dbghelp)
+    else()
+        target_link_libraries(${target_name} PRIVATE m)
     endif()
 
     recomp_target_launcher_ui(${target_name}
@@ -163,13 +176,19 @@ smw_add_recomp_target(SuperMarioWorldSNESRecomp
 if(SMW_BUILD_COOP)
     smw_add_recomp_target(SuperMarioWorldCoopSNESRecomp
         "${SMW_COOP_GEN_SOURCES}")
-    target_sources(SuperMarioWorldCoopSNESRecomp PRIVATE src/coop_patch.c)
+    target_sources(SuperMarioWorldCoopSNESRecomp PRIVATE
+        src/coop_patch.c
+        src/smw_netplay_lobby.c)
     target_include_directories(SuperMarioWorldCoopSNESRecomp BEFORE PRIVATE
         ${CMAKE_SOURCE_DIR}/recomp/coop)
     target_compile_definitions(SuperMarioWorldCoopSNESRecomp PRIVATE
         SMW_COOP_BUILD=1
         SNESRECOMP_LLE_BOUNCE_DEFAULT=0
+        SNES_GAME_VERSION="smw-coop-netplay-1"
     )
+    # recomp-net supplies deterministic two-peer delay-sync, LAN/ICE transport,
+    # and the lobby client consumed by recomp-ui's game-owned callbacks.
+    snesrecomp_enable_recomp_net(SuperMarioWorldCoopSNESRecomp)
     add_custom_command(TARGET SuperMarioWorldCoopSNESRecomp POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${CMAKE_SOURCE_DIR}/recomp/coop/smw_coop.ips
