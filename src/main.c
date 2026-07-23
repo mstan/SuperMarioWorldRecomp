@@ -1109,17 +1109,17 @@ int main(int argc, char** argv) {
        * and recomp_ui.cmake stages assets to <exe>/assets, so "." resolves
        * assets correctly. */
 #ifdef SMW_COOP_BUILD
-      int act = recomp_launcher_run_window("Super Mario World Co-op \xE2\x80\x94 Launcher",
+      int act = recomp_launcher_run_window("Super Mario World Co-op - Launcher",
 #else
-      int act = recomp_launcher_run_window("Super Mario World \xE2\x80\x94 Launcher",
+      int act = recomp_launcher_run_window("Super Mario World - Launcher",
 #endif
                                          &ls, &gi, ".", init_rom,
                                          rom_path_buf, sizeof(rom_path_buf));
 #else
 #ifdef SMW_COOP_BUILD
-      int act = snes_launcher_run_window("Super Mario World Co-op \xE2\x80\x94 Launcher",
+      int act = snes_launcher_run_window("Super Mario World Co-op - Launcher",
 #else
-      int act = snes_launcher_run_window("Super Mario World \xE2\x80\x94 Launcher",
+      int act = snes_launcher_run_window("Super Mario World - Launcher",
 #endif
                                          &ls, &gi, "launcher", init_rom,
                                          rom_path_buf, sizeof(rom_path_buf));
@@ -2022,7 +2022,7 @@ error_reading:;
     gi.resume_netplay_endpoint = resume_endpoint;
 
     act = recomp_launcher_run_window(
-        "Super Mario World Co-op \xE2\x80\x94 Launcher", &ls, &gi, ".",
+        "Super Mario World Co-op - Launcher", &ls, &gi, ".",
         rom_path_buf, resumed_rom, sizeof(resumed_rom));
     net = ls.netplay_launch;
 
