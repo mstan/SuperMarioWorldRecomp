@@ -678,54 +678,28 @@ typedef struct RuntimeUiContext {
 } RuntimeUiContext;
 
 static RuntimeUiContext g_runtime_ui_context;
-static const char *const kFullscreenChoices[] = {
-  "Windowed", "Borderless", "Exclusive"
-};
 /* One vocabulary shared by the pre-boot ImGui launcher and runtime menu. */
 static const char *const kSmwViewModes[] = {
   "Standard (4:3)", "16:9 fixed", "Adaptive"
 };
-static const RecompRuntimeUiItem kRuntimeUiItems[] = {
-  { "fullscreen", "Display", "Fullscreen", "Choose windowed or fullscreen output.",
-    RECOMP_RUNTIME_UI_CHOICE, 0, 2, 1, kFullscreenChoices, 3 },
-  { "window_scale", "Display", "Window scale", "Resize the window in native-size steps.",
-    RECOMP_RUNTIME_UI_INT, 1, kMaxWindowScale, 1, NULL, 0 },
-  { "view_mode", "Display", "View mode", "Use the same view policy as the launcher.",
-    RECOMP_RUNTIME_UI_CHOICE, kWidescreenMode_Standard,
-    kWidescreenMode_Adaptive, 1, kSmwViewModes, countof(kSmwViewModes) },
-  { "widescreen_hud", "Display", "Edge HUD", "Anchor status groups to widescreen edges.",
-    RECOMP_RUNTIME_UI_BOOL, 0, 1, 1, NULL, 0 },
-  { "linear_filter", "Graphics", "Linear filter", "Smooth the final game image.",
-    RECOMP_RUNTIME_UI_BOOL, 0, 1, 1, NULL, 0 },
+static const RecompRuntimeUiItem kRuntimeUiExtraItems[] = {
   { "new_renderer", "Graphics", "New PPU renderer", "Switch the PPU rendering path live.",
-    RECOMP_RUNTIME_UI_BOOL, 0, 1, 1, NULL, 0 },
+    RECOMP_RUNTIME_UI_BOOL, 0, 1, 1, NULL, 0, NULL },
   { "no_sprite_limits", "Graphics", "No sprite limits", "Lift authentic per-scanline sprite limits.",
-    RECOMP_RUNTIME_UI_BOOL, 0, 1, 1, NULL, 0 },
-  { "audio", "Audio", "Audio", "Enable or mute game audio output.",
-    RECOMP_RUNTIME_UI_BOOL, 0, 1, 1, NULL, 0 },
-  { "volume", "Audio", "Volume", "Set the in-game mixer volume.",
-    RECOMP_RUNTIME_UI_INT, 0, 100, 5, NULL, 0 },
-  { "resume", "System", "Resume game", "Close settings and return to the game.",
-    RECOMP_RUNTIME_UI_ACTION, 0, 0, 0, NULL, 0 },
-  { "save_state", "System", "Save state 1", "Save the current game state to slot 1.",
-    RECOMP_RUNTIME_UI_ACTION, 0, 0, 0, NULL, 0 },
-  { "load_state", "System", "Load state 1", "Load game state slot 1.",
-    RECOMP_RUNTIME_UI_ACTION, 0, 0, 0, NULL, 0 },
-  { "reset", "System", "Reset game", "Reset the emulated SNES.",
-    RECOMP_RUNTIME_UI_ACTION, 0, 0, 0, NULL, 0 },
+    RECOMP_RUNTIME_UI_BOOL, 0, 1, 1, NULL, 0, NULL },
 };
 
 static int RuntimeUiGet(void *context, const RecompRuntimeUiItem *item, int *out) {
   (void)context;
-  if (!strcmp(item->key, "fullscreen")) *out = g_config.fullscreen;
-  else if (!strcmp(item->key, "window_scale")) *out = g_current_window_scale;
-  else if (!strcmp(item->key, "view_mode")) *out = g_config.widescreen_mode;
-  else if (!strcmp(item->key, "widescreen_hud")) *out = g_config.widescreen_hud;
-  else if (!strcmp(item->key, "linear_filter")) *out = g_config.linear_filtering;
+  if (!strcmp(item->key, RECOMP_RUNTIME_UI_KEY_FULLSCREEN)) *out = g_config.fullscreen;
+  else if (!strcmp(item->key, RECOMP_RUNTIME_UI_KEY_WINDOW_SCALE)) *out = g_current_window_scale;
+  else if (!strcmp(item->key, RECOMP_RUNTIME_UI_KEY_VIEW_MODE)) *out = g_config.widescreen_mode;
+  else if (!strcmp(item->key, RECOMP_RUNTIME_UI_KEY_WIDESCREEN_HUD)) *out = g_config.widescreen_hud;
+  else if (!strcmp(item->key, RECOMP_RUNTIME_UI_KEY_LINEAR_FILTER)) *out = g_config.linear_filtering;
   else if (!strcmp(item->key, "new_renderer")) *out = g_new_ppu;
   else if (!strcmp(item->key, "no_sprite_limits")) *out = g_config.no_sprite_limits;
-  else if (!strcmp(item->key, "audio")) *out = g_config.enable_audio;
-  else if (!strcmp(item->key, "volume")) *out = g_config.volume;
+  else if (!strcmp(item->key, RECOMP_RUNTIME_UI_KEY_AUDIO)) *out = g_config.enable_audio;
+  else if (!strcmp(item->key, RECOMP_RUNTIME_UI_KEY_VOLUME)) *out = g_config.volume;
   else return 0;
   return 1;
 }
@@ -754,21 +728,21 @@ static void RuntimeUiApplyViewMode(int mode) {
 
 static int RuntimeUiSet(void *context, const RecompRuntimeUiItem *item, int value) {
   (void)context;
-  if (!strcmp(item->key, "fullscreen")) {
+  if (!strcmp(item->key, RECOMP_RUNTIME_UI_KEY_FULLSCREEN)) {
     Uint32 flag = value == 1 ? SDL_WINDOW_FULLSCREEN_DESKTOP
                              : value == 2 ? SDL_WINDOW_FULLSCREEN : 0;
     if (SDL_SetWindowFullscreen(g_window, flag) != 0) return 0;
     g_config.fullscreen = (uint8)value;
     g_win_flags &= ~(SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_FULLSCREEN);
     g_win_flags |= flag;
-  } else if (!strcmp(item->key, "window_scale")) {
+  } else if (!strcmp(item->key, RECOMP_RUNTIME_UI_KEY_WINDOW_SCALE)) {
     ChangeWindowScale(value - g_current_window_scale);
     g_config.window_scale = g_current_window_scale;
-  } else if (!strcmp(item->key, "view_mode")) {
+  } else if (!strcmp(item->key, RECOMP_RUNTIME_UI_KEY_VIEW_MODE)) {
     RuntimeUiApplyViewMode(value);
-  } else if (!strcmp(item->key, "widescreen_hud")) {
+  } else if (!strcmp(item->key, RECOMP_RUNTIME_UI_KEY_WIDESCREEN_HUD)) {
     g_config.widescreen_hud = value != 0;
-  } else if (!strcmp(item->key, "linear_filter")) {
+  } else if (!strcmp(item->key, RECOMP_RUNTIME_UI_KEY_LINEAR_FILTER)) {
     g_config.linear_filtering = value != 0;
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY,
                 g_config.linear_filtering ? "best" : "nearest");
@@ -782,9 +756,9 @@ static int RuntimeUiSet(void *context, const RecompRuntimeUiItem *item, int valu
     else g_ppu_render_flags &= ~kPpuRenderFlags_NewRenderer;
   } else if (!strcmp(item->key, "no_sprite_limits")) {
     g_config.no_sprite_limits = value != 0;
-  } else if (!strcmp(item->key, "audio")) {
+  } else if (!strcmp(item->key, RECOMP_RUNTIME_UI_KEY_AUDIO)) {
     g_config.enable_audio = value != 0;
-  } else if (!strcmp(item->key, "volume")) {
+  } else if (!strcmp(item->key, RECOMP_RUNTIME_UI_KEY_VOLUME)) {
     g_config.volume = (uint8)value;
     g_sdl_audio_mixer_volume = value * SDL_MIX_MAXVOLUME / 100;
   } else {
@@ -800,10 +774,10 @@ static int RuntimeUiSet(void *context, const RecompRuntimeUiItem *item, int valu
 
 static int RuntimeUiAction(void *context, const RecompRuntimeUiItem *item) {
   (void)context;
-  if (!strcmp(item->key, "resume")) recomp_runtime_ui_close(g_runtime_ui);
-  else if (!strcmp(item->key, "save_state")) RtlSaveLoad(kSaveLoad_Save, 0);
-  else if (!strcmp(item->key, "load_state")) RtlSaveLoad(kSaveLoad_Load, 0);
-  else if (!strcmp(item->key, "reset")) RtlReset(1);
+  if (!strcmp(item->key, RECOMP_RUNTIME_UI_KEY_RESUME)) recomp_runtime_ui_close(g_runtime_ui);
+  else if (!strcmp(item->key, RECOMP_RUNTIME_UI_KEY_SAVE_STATE)) RtlSaveLoad(kSaveLoad_Save, 0);
+  else if (!strcmp(item->key, RECOMP_RUNTIME_UI_KEY_LOAD_STATE)) RtlSaveLoad(kSaveLoad_Load, 0);
+  else if (!strcmp(item->key, RECOMP_RUNTIME_UI_KEY_RESET)) RtlReset(1);
   else return 0;
   return 1;
 }
@@ -811,13 +785,14 @@ static int RuntimeUiAction(void *context, const RecompRuntimeUiItem *item) {
 static int RuntimeUiEnabled(void *context, const RecompRuntimeUiItem *item) {
   (void)context;
 #ifdef SMW_COOP_BUILD
-  if (!strcmp(item->key, "view_mode") || !strcmp(item->key, "widescreen_hud"))
+  if (!strcmp(item->key, RECOMP_RUNTIME_UI_KEY_VIEW_MODE) ||
+      !strcmp(item->key, RECOMP_RUNTIME_UI_KEY_WIDESCREEN_HUD))
     return 0;
 #endif
-  if (!strcmp(item->key, "widescreen_hud") &&
+  if (!strcmp(item->key, RECOMP_RUNTIME_UI_KEY_WIDESCREEN_HUD) &&
       g_config.widescreen_mode == kWidescreenMode_Standard)
     return 0;
-  if (!strcmp(item->key, "window_scale") &&
+  if (!strcmp(item->key, RECOMP_RUNTIME_UI_KEY_WINDOW_SCALE) &&
       (SDL_GetWindowFlags(g_window) &
        (SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_FULLSCREEN)))
     return 0;
@@ -873,28 +848,46 @@ static int RuntimeUiHandleController(const SDL_ControllerButtonEvent *event) {
 }
 
 static void RuntimeUiCreate(const char *config_path) {
-  RecompRuntimeUiConfig config;
-  memset(&config, 0, sizeof(config));
+  RecompRuntimeUiStandardConfig standard;
+  memset(&standard, 0, sizeof(standard));
 #ifdef SMW_COOP_BUILD
-  config.title = "Super Mario World Co-op";
+  standard.menu.title = "Super Mario World Co-op";
 #else
-  config.title = "Super Mario World";
+  standard.menu.title = "Super Mario World";
 #endif
-  config.subtitle = "SETTINGS";
-  config.theme = "snes";
-  config.accept_label = "A / Enter";
-  config.back_label = "B / Backspace";
-  config.items = kRuntimeUiItems;
-  config.item_count = countof(kRuntimeUiItems);
+  standard.menu.subtitle = "SETTINGS";
+  standard.menu.theme = "snes";
+  standard.menu.accept_label = "A / Enter";
+  standard.menu.back_label = "B / Backspace";
+  standard.features = RECOMP_RUNTIME_UI_STANDARD_FULLSCREEN |
+      RECOMP_RUNTIME_UI_STANDARD_WINDOW_SCALE |
+      RECOMP_RUNTIME_UI_STANDARD_VIEW_MODE |
+      RECOMP_RUNTIME_UI_STANDARD_WIDESCREEN_HUD |
+      RECOMP_RUNTIME_UI_STANDARD_LINEAR_FILTER |
+      RECOMP_RUNTIME_UI_STANDARD_AUDIO |
+      RECOMP_RUNTIME_UI_STANDARD_VOLUME |
+      RECOMP_RUNTIME_UI_STANDARD_RESUME |
+      RECOMP_RUNTIME_UI_STANDARD_SAVE_STATE |
+      RECOMP_RUNTIME_UI_STANDARD_LOAD_STATE |
+      RECOMP_RUNTIME_UI_STANDARD_RESET;
+  standard.view_modes = RECOMP_RUNTIME_UI_VIEW_MODE_NATIVE |
+      RECOMP_RUNTIME_UI_VIEW_MODE_FIXED_16_9 |
+      RECOMP_RUNTIME_UI_VIEW_MODE_ADAPTIVE;
+  standard.native_view_label = kSmwViewModes[0];
+  standard.fixed_view_label = kSmwViewModes[1];
+  standard.adaptive_view_label = kSmwViewModes[2];
+  standard.window_scale_max = kMaxWindowScale;
+  standard.extra_items = kRuntimeUiExtraItems;
+  standard.extra_item_count = countof(kRuntimeUiExtraItems);
   g_runtime_ui_context.config_path = config_path;
-  config.callbacks.context = &g_runtime_ui_context;
-  config.callbacks.get_value = RuntimeUiGet;
-  config.callbacks.set_value = RuntimeUiSet;
-  config.callbacks.run_action = RuntimeUiAction;
-  config.callbacks.is_enabled = RuntimeUiEnabled;
-  config.callbacks.save = RuntimeUiSave;
-  config.callbacks.visibility_changed = RuntimeUiVisibility;
-  g_runtime_ui = recomp_runtime_ui_create(&config);
+  standard.menu.callbacks.context = &g_runtime_ui_context;
+  standard.menu.callbacks.get_value = RuntimeUiGet;
+  standard.menu.callbacks.set_value = RuntimeUiSet;
+  standard.menu.callbacks.run_action = RuntimeUiAction;
+  standard.menu.callbacks.is_enabled = RuntimeUiEnabled;
+  standard.menu.callbacks.save = RuntimeUiSave;
+  standard.menu.callbacks.visibility_changed = RuntimeUiVisibility;
+  g_runtime_ui = recomp_runtime_ui_create_standard(&standard);
 }
 #endif
 
