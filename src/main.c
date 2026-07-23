@@ -1178,7 +1178,11 @@ int main(int argc, char** argv) {
         if (g_config.msu1_enabled && g_config.msu1_dir[0]) {
           static char msu_env[600];
           snprintf(msu_env, sizeof(msu_env), "SNESRECOMP_MSU1=%s", g_config.msu1_dir);
+#ifdef _WIN32
           _putenv(msu_env);
+#else
+          setenv("SNESRECOMP_MSU1", g_config.msu1_dir, 1);
+#endif
         }
         /* Persist the launcher's choices so they're remembered next boot. */
         WriteConfigFile(config_file);
@@ -1427,6 +1431,22 @@ int main(int argc, char** argv) {
   int window_height = custom_size ? g_config.window_height : g_current_window_scale * g_snes_height;
 
 session_reboot:
+  /* Soft-return rematch: recomp-ui launcher_platform_close() calls SDL_Quit().
+   * Re-init before recreating the window/audio. First boot already inited
+   * above; skip when subsystems are still live. */
+  if (!SDL_WasInit(SDL_INIT_VIDEO) || !SDL_WasInit(SDL_INIT_AUDIO) ||
+      !SDL_WasInit(SDL_INIT_GAMECONTROLLER)) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER) !=
+        0) {
+      host_report_breadcrumb("SDL_Init (session) FAILED: %s", SDL_GetError());
+      printf("Failed to init SDL: %s\n", SDL_GetError());
+      return 1;
+    }
+    host_report_breadcrumb(
+        "SDL session init ok: video=%s audio=%s",
+        SDL_GetCurrentVideoDriver() ? SDL_GetCurrentVideoDriver() : "(none)",
+        SDL_GetCurrentAudioDriver() ? SDL_GetCurrentAudioDriver() : "(none)");
+  }
 #ifdef SMW_COOP_BUILD
   /* A rematch is a cold emulation session inside the same process. Lobby and
    * ROM selection survive, while all device/input/session state is rebuilt. */
@@ -1439,6 +1459,10 @@ session_reboot:
   g_turbo = 0;
   g_netplay_started = 0;
 #endif
+
+  /* Soft-return leaves g_did_reset / g_first_frame_done set. Without this,
+   * rematch skips I_RESET on a fresh SnesInit and LLE stack-dies black. */
+  SmwSessionReset();
 
   if (g_config.output_method == kOutputMethod_OpenGL) {
     g_win_flags |= SDL_WINDOW_OPENGL;
@@ -2007,7 +2031,7 @@ error_reading:;
              ls.netplay_player_name);
     WriteConfigFile(config_file);
 
-    if (act == 0 && net.enabled) {
+    if (act == 0) {
       g_config.output_method = (uint8)ls.output_method;
       g_config.window_scale = (uint8)ls.window_scale;
       g_config.fullscreen = (uint8)ls.fullscreen;
@@ -2024,29 +2048,43 @@ error_reading:;
       g_config.deadzone[1] = (uint8)ls.deadzone[1];
       WriteConfigFile(config_file);
 
-      snes_netplay_config_defaults(&g_netplay_cfg);
-      g_netplay_cfg.enabled = 1;
-      g_netplay_cfg.local_slot = net.local_slot;
-      g_netplay_cfg.input_player =
-          (net.input_player == 0 || net.input_player == 1)
-              ? net.input_player : -1;
-      g_netplay_cfg.session_id = net.session_id ? net.session_id : 1u;
-      g_netplay_cfg.transport = 0;
-      snprintf(g_netplay_cfg.bind_hostport,
-               sizeof(g_netplay_cfg.bind_hostport), "%s", net.bind_hostport);
-      snprintf(g_netplay_cfg.peer_hostport,
-               sizeof(g_netplay_cfg.peer_hostport), "%s", net.peer_hostport);
-      snes_netplay_apply_env(&g_netplay_cfg);
-      if (net.input_delay >= 0 && net.input_delay <= 16)
-        g_netplay_cfg.input_delay = net.input_delay;
-      g_netplay_pending = 1;
-      g_netplay_from_lobby = 1;
+      if (net.enabled) {
+        snes_netplay_config_defaults(&g_netplay_cfg);
+        g_netplay_cfg.enabled = 1;
+        g_netplay_cfg.local_slot = net.local_slot;
+        g_netplay_cfg.input_player =
+            (net.input_player == 0 || net.input_player == 1)
+                ? net.input_player : -1;
+        g_netplay_cfg.session_id = net.session_id ? net.session_id : 1u;
+        g_netplay_cfg.transport = 0;
+        snprintf(g_netplay_cfg.bind_hostport,
+                 sizeof(g_netplay_cfg.bind_hostport), "%s", net.bind_hostport);
+        snprintf(g_netplay_cfg.peer_hostport,
+                 sizeof(g_netplay_cfg.peer_hostport), "%s", net.peer_hostport);
+        snes_netplay_apply_env(&g_netplay_cfg);
+        if (net.input_delay >= 0 && net.input_delay <= 16)
+          g_netplay_cfg.input_delay = net.input_delay;
+        g_netplay_pending = 1;
+        g_netplay_from_lobby = 1;
+        free(kRom);
+        kRom = NULL;
+        host_report_breadcrumb(
+            "launcher: rematch slot=%d session=%u bind=%s peer=%s delay=%d",
+            net.local_slot, (unsigned)net.session_id, net.bind_hostport,
+            net.peer_hostport, net.input_delay);
+        goto session_reboot;
+      }
+
+      /* Offline Play after soft-return — leave the waiting room and cold-boot
+       * without netplay. (Previously only net.enabled rematch rebooted; offline
+       * fell through to process exit.) */
+      g_netplay_cfg.enabled = 0;
+      g_netplay_pending = 0;
+      g_netplay_from_lobby = 0;
+      SmwNetplayLauncherDisconnect();
       free(kRom);
       kRom = NULL;
-      host_report_breadcrumb(
-          "launcher: rematch slot=%d session=%u bind=%s peer=%s delay=%d",
-          net.local_slot, (unsigned)net.session_id, net.bind_hostport,
-          net.peer_hostport, net.input_delay);
+      host_report_breadcrumb("launcher: offline launch after lobby");
       goto session_reboot;
     }
 
@@ -2244,10 +2282,12 @@ static int NetplayBarrierAdmit(bool *running) {
     }
 
     if (snes_netplay_peer_disconnected(SMW_NETPLAY_PEER_TIMEOUT_MS)) {
-      NetplayReportError(
-          "peer_disconnected",
-          "The other player stopped responding.\n\nReturn to the lobby, "
-          "rejoin the room, and try again.");
+      /* Peer quit / lost link — soft-return to lobby, no modal. Connect
+       * timeouts still use NetplayReportError (user needs the firewall hint). */
+      fprintf(stderr,
+              "snes_netplay: peer disconnected — returning to lobby\n");
+      host_report_breadcrumb("netplay: peer_disconnected transport=%s",
+                             snes_netplay_transport_name());
       NetplaySoftExit("peer_disconnect");
       connect_wait_started_ms = 0;
       connect_wait_logged = 0;

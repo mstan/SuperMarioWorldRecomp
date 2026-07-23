@@ -53,6 +53,23 @@ void SmwDrawPpuFrame(void) {
   }
 }
 
+/* Process-lifetime; cleared by SmwSessionReset on lobby rematch. */
+static bool g_did_reset = false;
+static bool g_first_frame_done = false;
+
+void SmwSessionReset(void) {
+  extern int snes_frame_counter;
+  extern uint64_t g_apu_last_sync_master;
+
+  g_did_reset = false;
+  g_first_frame_done = false;
+  /* g_cpu / frame counters survive snes_free — zero so rematch cold-boots
+   * from I_RESET instead of NMI+LLE on a blank chip with a stale SP. */
+  cpu_state_init(&g_cpu, g_ram);
+  snes_frame_counter = 0;
+  g_apu_last_sync_master = 0;
+}
+
 void RunOneFrameOfGame(void) {
   // First-call reset gate. Was previously `if (*(uint16*)$7F8000 == 0) I_RESET()`,
   // which silently relied on WRAM being zero-initialized at power-on. Real hardware
@@ -60,8 +77,6 @@ void RunOneFrameOfGame(void) {
   // would be skipped, leaving $0100 (GameMode) at 0x55 — out-of-bounds for the
   // 42-entry dispatch table at PC 0x009329. Use a host-side bool instead so the
   // gate is independent of WRAM contents.
-  static bool g_did_reset = false;
-  static bool g_first_frame_done = false;
   if (!g_did_reset) {
     cpu_state_init(&g_cpu, g_ram);
     cpu_trace_px_breadcrumb(&g_cpu, 0x1000, "after_cpu_state_init");

@@ -283,13 +283,15 @@ static int Create(void *ctx, const char *name, char *host_endpoint,
                            endpoint, &caps);
 }
 
-static int Join(void *ctx, const char *lobby_id, const char *password) {
+static int Join(void *ctx, const char *lobby_id, const char *password,
+                char *guest_bind) {
   RNetLanLobby state;
   const char *name;
   (void)ctx;
   g_remote_ready_requested = 0;
   memset(&g_lan_launch, 0, sizeof(g_lan_launch));
   if (lobby_id && strncmp(lobby_id, "lan:", 4) == 0) {
+    (void)guest_bind;
     name = snes_lobby_display_name();
     if (rnet_lan_lobby_join(LanLobbyPath(), SMW_NETPLAY_GAME,
                             SNES_GAME_VERSION, password ? password : "",
@@ -303,9 +305,9 @@ static int Join(void *ctx, const char *lobby_id, const char *password) {
   g_hosting_lan = 0;
   g_joined_lan = 0;
   g_remote_ready_requested = 0;
-  /* snesrecomp owns the online guest port policy and always chooses a
-   * concrete free bind; passing NULL avoids advertising peer_ip:0. */
-  return snes_lobby_join(lobby_id, password ? password : "", NULL);
+  /* recomp-ui fills guest_bind (prefer 7778); snes_lobby_join still
+   * normalizes NULL/empty/:0 as a safety net. */
+  return snes_lobby_join(lobby_id, password ? password : "", guest_bind);
 }
 
 static int Leave(void *ctx) {
@@ -359,7 +361,11 @@ static int MemberGet(void *ctx, int index,
   if (!snes_lobby_member_get(index, &member)) return 0;
   out->slot = member.slot;
   out->ready = member.ready;
-  out->is_host = member.slot == 0;
+  {
+    const char *host_id = snes_lobby_host_player_id();
+    out->is_host = host_id && host_id[0] &&
+                   strcmp(member.player_id, host_id) == 0;
+  }
   snprintf(out->display_name, sizeof(out->display_name), "%s",
            member.display_name);
   return 1;
@@ -373,7 +379,8 @@ static int MoveMember(void *ctx, int from_slot, int to_slot) {
       ReadLanState(&state))
     return rnet_lan_lobby_set_host_slot(LanLobbyPath(),
                                         1 - state.host_slot);
-  return -1;
+  if (g_joined_lan) return -1;
+  return snes_lobby_move(from_slot, to_slot);
 }
 
 static int KickMember(void *ctx, int slot) {
@@ -637,7 +644,9 @@ int SmwNetplayLauncherAutoLaunch(const char *role, const char *player_name,
         if (ListGet(NULL, i, &row) &&
             strcmp(row.name, lobby_name) == 0 &&
             strcmp(row.game_name, SMW_NETPLAY_GAME) == 0) {
-          if (Join(NULL, row.lobby_id, "") != 0) {
+          char guest_bind[64];
+          guest_bind[0] = '\0';
+          if (Join(NULL, row.lobby_id, "", guest_bind) != 0) {
             AutoLog(role, "join_failed");
             return -7;
           }
