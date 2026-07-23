@@ -256,7 +256,8 @@ $sdl = '.\packages\sdl2.nuget.2.26.3\build\native'
 $env:SNESRECOMP_ROOT = $engine
 bash tools/regen.sh --coop --no-tests
 cmake -S . -B build-netplay -DSMW_BUILD_COOP=ON `
-  -DSNESRECOMP_ROOT="$engine" -DSMW_SDL2_ROOT="$sdl"
+  -DSNESRECOMP_ROOT="$engine" -DSMW_SDL2_ROOT="$sdl" `
+  -DSMW_NETPLAY_ICE=ON
 cmake --build build-netplay --config Release `
   --target SuperMarioWorldCoopSNESRecomp --parallel
 ```

@@ -5,6 +5,17 @@ project(SuperMarioWorldSNESRecomp C)
 # name. The simultaneous co-op executable is additive and consumes a separate
 # generated source tree produced by `tools/regen.sh --coop`.
 option(SMW_BUILD_COOP "Build the simultaneous two-player co-op executable" OFF)
+option(SMW_NETPLAY_ICE
+    "Enable ICE/NAT traversal for the co-op online lobby build" ON)
+
+# Online lobbies must use ICE for peers outside the local network. Keep this
+# game-facing option on by default so a normal co-op release cannot silently
+# degrade to direct UDP and hang behind NAT. Developers can still configure
+# -DSMW_NETPLAY_ICE=OFF for a deliberately LAN-only build.
+if(SMW_BUILD_COOP)
+    set(SNESRECOMP_NET_ICE ${SMW_NETPLAY_ICE} CACHE BOOL
+        "Enable ICE/libjuice transport in recomp-net" FORCE)
+endif()
 
 set(CMAKE_C_STANDARD 11)
 

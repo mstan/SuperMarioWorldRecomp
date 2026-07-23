@@ -5,10 +5,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <windows.h>
 #else
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -29,6 +31,7 @@ static int g_local_address_count;
 static int g_hosting_lan;
 static int g_joined_lan;
 static int g_remote_ready_requested;
+static char g_runtime_error[64];
 static RecompLauncherCNetplayLaunch g_lan_launch;
 
 static int LobbyDebugEnabled(void) {
@@ -110,81 +113,6 @@ static int UseLanMembers(RNetLanLobby *state) {
   /* Prefer the remote room once it has two seated members. Until then the
    * host-owned record makes the waiting room immediate and deterministic. */
   return state->joiner_name[0] || snes_lobby_member_count() < 2;
-}
-
-static int UdpEndpointAvailable(const char *endpoint) {
-  char host[64];
-  const char *colon;
-  char *end;
-  long port;
-  struct sockaddr_in address;
-#ifdef _WIN32
-  static int winsock_started;
-  SOCKET sock;
-  if (!winsock_started) {
-    WSADATA data;
-    if (WSAStartup(MAKEWORD(2, 2), &data) != 0) return 0;
-    winsock_started = 1;
-  }
-#else
-  int sock;
-#endif
-
-  if (!endpoint || !(colon = strrchr(endpoint, ':')) || colon == endpoint)
-    return 0;
-  if ((size_t)(colon - endpoint) >= sizeof(host)) return 0;
-  memcpy(host, endpoint, (size_t)(colon - endpoint));
-  host[colon - endpoint] = '\0';
-  port = strtol(colon + 1, &end, 10);
-  if (*end || port < 1 || port > 65535) return 0;
-
-  memset(&address, 0, sizeof(address));
-  address.sin_family = AF_INET;
-  address.sin_port = htons((unsigned short)port);
-  if (inet_pton(AF_INET, host, &address.sin_addr) != 1) return 0;
-  sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-#ifdef _WIN32
-  if (sock == INVALID_SOCKET) return 0;
-  if (bind(sock, (const struct sockaddr *)&address, sizeof(address)) != 0) {
-    closesocket(sock);
-    return 0;
-  }
-  closesocket(sock);
-#else
-  if (sock < 0) return 0;
-  if (bind(sock, (const struct sockaddr *)&address, sizeof(address)) != 0) {
-    close(sock);
-    return 0;
-  }
-  close(sock);
-#endif
-  return 1;
-}
-
-static int SelectAvailableEndpoint(char *endpoint) {
-  char *colon;
-  long port;
-  int online;
-  if (!endpoint || !endpoint[0]) return 0;
-  colon = strrchr(endpoint, ':');
-  if (!colon || !colon[1]) return 0;
-  port = strtol(colon + 1, NULL, 10);
-  if (port < 1 || port > 65535) return 0;
-  online = strncmp(endpoint, "0.0.0.0:", 8) == 0;
-  if (!online)
-    return UdpEndpointAvailable(endpoint);
-
-  /* Online hosting may transparently move to a nearby free port. The recomp-ui
-   * callback contract guarantees at least 64 writable bytes in endpoint. */
-  for (int i = 0; i < 32 && port + i <= 65535; i++) {
-    char candidate[64];
-    snprintf(candidate, sizeof(candidate), "0.0.0.0:%ld", port + i);
-    if (UdpEndpointAvailable(candidate)) {
-      snprintf(endpoint, 64, "%s", candidate);
-      return 1;
-    }
-  }
-  return 0;
 }
 
 static SnesLobbyMatchCaps MatchCaps(const RecompLauncherCSettings *settings) {
@@ -357,7 +285,6 @@ static int Create(void *ctx, const char *name, char *host_endpoint,
 
 static int Join(void *ctx, const char *lobby_id, const char *password) {
   RNetLanLobby state;
-  char guest_endpoint[64];
   const char *name;
   (void)ctx;
   g_remote_ready_requested = 0;
@@ -376,9 +303,9 @@ static int Join(void *ctx, const char *lobby_id, const char *password) {
   g_hosting_lan = 0;
   g_joined_lan = 0;
   g_remote_ready_requested = 0;
-  snprintf(guest_endpoint, sizeof(guest_endpoint), "0.0.0.0:7778");
-  if (!SelectAvailableEndpoint(guest_endpoint)) return -4;
-  return snes_lobby_join(lobby_id, password ? password : "", guest_endpoint);
+  /* snesrecomp owns the online guest port policy and always chooses a
+   * concrete free bind; passing NULL avoids advertising peer_ip:0. */
+  return snes_lobby_join(lobby_id, password ? password : "", NULL);
 }
 
 static int Leave(void *ctx) {
@@ -537,8 +464,22 @@ static void ClearLaunchPending(void *ctx) {
   snes_lobby_clear_launch_pending();
 }
 
-static int FillLaunch(void *ctx, RecompLauncherCNetplayLaunch *out) {
+static const char *LastError(void *ctx) {
   const SnesLobbyJoinInfo *join;
+  (void)ctx;
+  if (g_runtime_error[0]) return g_runtime_error;
+  join = snes_lobby_join_info();
+  return join ? join->last_error : "";
+}
+
+static void ClearLastError(void *ctx) {
+  (void)ctx;
+  g_runtime_error[0] = '\0';
+  snes_lobby_clear_last_error();
+}
+
+static int FillLaunch(void *ctx, RecompLauncherCNetplayLaunch *out) {
+  SnesLobbyJoinInfo join;
   const SnesLobbyMatchCaps *caps;
   (void)ctx;
   if (!out) return 0;
@@ -546,28 +487,202 @@ static int FillLaunch(void *ctx, RecompLauncherCNetplayLaunch *out) {
     *out = g_lan_launch;
     return 1;
   }
-  join = snes_lobby_join_info();
-  if (!join || !join->ok) return 0;
+  if (!snes_lobby_try_fill_launch(&join)) return 0;
   caps = snes_lobby_match_caps();
   memset(out, 0, sizeof(*out));
   out->enabled = 1;
-  out->local_slot = join->local_slot;
+  out->local_slot = join.local_slot;
   out->input_player = 0;
-  out->session_id = join->session_id;
+  out->session_id = join.session_id;
   out->input_delay = caps && caps->valid ? caps->input_delay : 2;
   snprintf(out->bind_hostport, sizeof(out->bind_hostport), "%s",
-           join->bind_hostport);
+           join.bind_hostport);
   snprintf(out->peer_hostport, sizeof(out->peer_hostport), "%s",
-           join->peer_hostport);
+           join.peer_hostport);
   return 1;
 }
 
 static RecompLauncherCNetplayCallbacks g_callbacks = {
-    NULL, DefaultUrl, SetUrl, Connect, Connected, Pump, SetPlayerName,
-    PlayerName, RequestList, ListCount, ListGet, LocalIp, ExternalIp, Create,
-    Join, Leave, InLobby, IsHost, MemberCount, MemberGet, MoveMember, LocalReady,
-    AllReady, SetReady, RequestStart, LaunchPending, ClearLaunchPending,
-    FillLaunch, LocalAddressGet, KickMember};
+    .ctx = NULL,
+    .default_url = DefaultUrl,
+    .set_lobby_url = SetUrl,
+    .connect = Connect,
+    .connected = Connected,
+    .pump = Pump,
+    .set_player_name = SetPlayerName,
+    .player_name = PlayerName,
+    .request_list = RequestList,
+    .list_count = ListCount,
+    .list_get = ListGet,
+    .local_ip = LocalIp,
+    .external_ip = ExternalIp,
+    .create = Create,
+    .join = Join,
+    .leave = Leave,
+    .in_lobby = InLobby,
+    .is_host = IsHost,
+    .member_count = MemberCount,
+    .member_get = MemberGet,
+    .move_member = MoveMember,
+    .local_ready = LocalReady,
+    .all_ready = AllReady,
+    .set_ready = SetReady,
+    .request_start = RequestStart,
+    .launch_pending = LaunchPending,
+    .clear_launch_pending = ClearLaunchPending,
+    .fill_launch = FillLaunch,
+    .local_address_get = LocalAddressGet,
+    .kick_member = KickMember,
+    .last_error = LastError,
+    .clear_last_error = ClearLastError,
+};
+
+static uint64_t AutoNowMs(void) {
+#ifdef _WIN32
+  return (uint64_t)GetTickCount64();
+#else
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (uint64_t)ts.tv_sec * 1000u + (uint64_t)ts.tv_nsec / 1000000u;
+#endif
+}
+
+static void AutoSleepMs(unsigned ms) {
+#ifdef _WIN32
+  Sleep(ms);
+#else
+  struct timespec ts;
+  ts.tv_sec = (time_t)(ms / 1000u);
+  ts.tv_nsec = (long)(ms % 1000u) * 1000000L;
+  nanosleep(&ts, NULL);
+#endif
+}
+
+static int AutoTimedOut(uint64_t deadline) {
+  return AutoNowMs() >= deadline;
+}
+
+static void AutoLog(const char *role, const char *stage) {
+  fprintf(stderr, "[netplay selftest] role=%s stage=%s members=%d ready=%d "
+                  "in_lobby=%d error=%s\n",
+          role, stage, snes_lobby_member_count(), snes_lobby_all_ready(),
+          snes_lobby_in_lobby(), LastError(NULL));
+}
+
+int SmwNetplayLauncherAutoLaunch(const char *role, const char *player_name,
+                                 const char *lobby_name,
+                                 unsigned timeout_ms,
+                                 RecompLauncherCNetplayLaunch *out) {
+  RecompLauncherCSettings settings;
+  RecompLauncherCNetplayLobby row;
+  uint64_t deadline;
+  uint64_t next_list = 0;
+  int is_host;
+  int joined = 0;
+  int host_ready_sent = 0;
+  int start_sent = 0;
+  int i;
+
+  if (!role || !lobby_name || !lobby_name[0] || !out) return -1;
+  is_host = strcmp(role, "host") == 0;
+  if (!is_host && strcmp(role, "guest") != 0) return -1;
+  if (timeout_ms < 1000u) timeout_ms = 60000u;
+  deadline = AutoNowMs() + timeout_ms;
+  memset(&settings, 0, sizeof(settings));
+  memset(out, 0, sizeof(*out));
+  SetPlayerName(NULL, player_name && player_name[0] ? player_name
+                                                    : (is_host ? "HostTest"
+                                                               : "GuestTest"));
+  if (Connect(NULL) != 0) {
+    AutoLog(role, "connect_failed");
+    return -2;
+  }
+
+  /* Wait for the server welcome, not merely the completed TCP connect. */
+  while (!snes_lobby_player_id()[0]) {
+    Pump(NULL);
+    if (!Connected(NULL)) {
+      AutoLog(role, "handshake_disconnected");
+      return -3;
+    }
+    if (AutoTimedOut(deadline)) {
+      AutoLog(role, "welcome_timeout");
+      return -4;
+    }
+    AutoSleepMs(10);
+  }
+  AutoLog(role, "connected");
+
+  if (is_host) {
+    char endpoint[64] = "0.0.0.0:7777";
+    if (Create(NULL, lobby_name, endpoint, "", &settings, 0) != 0) {
+      AutoLog(role, "create_failed");
+      return -5;
+    }
+  }
+
+  while (!LaunchPending(NULL)) {
+    Pump(NULL);
+    if (!Connected(NULL)) {
+      AutoLog(role, "lobby_disconnected");
+      return -6;
+    }
+
+    if (!is_host && !joined && AutoNowMs() >= next_list) {
+      RequestList(NULL);
+      next_list = AutoNowMs() + 500u;
+    }
+    if (!is_host && !joined) {
+      for (i = 0; i < snes_lobby_list_count(); ++i) {
+        if (ListGet(NULL, i, &row) &&
+            strcmp(row.name, lobby_name) == 0 &&
+            strcmp(row.game_name, SMW_NETPLAY_GAME) == 0) {
+          if (Join(NULL, row.lobby_id, "") != 0) {
+            AutoLog(role, "join_failed");
+            return -7;
+          }
+          joined = 1;
+          AutoLog(role, "join_sent");
+          break;
+        }
+      }
+    }
+
+    if (is_host && InLobby(NULL) && MemberCount(NULL) >= 2 &&
+        !host_ready_sent) {
+      if (SetReady(NULL, 1) != 0) {
+        AutoLog(role, "ready_failed");
+        return -8;
+      }
+      host_ready_sent = 1;
+      AutoLog(role, "ready_sent");
+    }
+    if (is_host && host_ready_sent && AllReady(NULL) && !start_sent) {
+      if (RequestStart(NULL, &settings) != 0) {
+        AutoLog(role, "start_failed");
+        return -9;
+      }
+      start_sent = 1;
+      AutoLog(role, "start_sent");
+    }
+
+    if (AutoTimedOut(deadline)) {
+      AutoLog(role, "launch_timeout");
+      return -10;
+    }
+    AutoSleepMs(10);
+  }
+  if (!FillLaunch(NULL, out)) {
+    AutoLog(role, "invalid_launch");
+    return -11;
+  }
+  fprintf(stderr,
+          "[netplay selftest] role=%s stage=launch slot=%d session=%u "
+          "bind=%s peer=%s\n",
+          role, out->local_slot, (unsigned)out->session_id,
+          out->bind_hostport, out->peer_hostport);
+  return 0;
+}
 
 const RecompLauncherCNetplayCallbacks *SmwNetplayLauncherCallbacks(void) {
   return &g_callbacks;
@@ -588,6 +703,11 @@ const char *SmwNetplayLauncherResumeEndpoint(void) {
   if (!(g_hosting_lan || g_joined_lan) || !ReadLanState(&state)) return NULL;
   snprintf(endpoint, sizeof(endpoint), "%s", state.endpoint);
   return endpoint;
+}
+
+void SmwNetplayLauncherSetRuntimeError(const char *error_code) {
+  snprintf(g_runtime_error, sizeof(g_runtime_error), "%s",
+           error_code ? error_code : "");
 }
 
 void SmwNetplayLauncherDisconnect(void) {

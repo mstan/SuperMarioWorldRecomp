@@ -74,6 +74,7 @@ static int ResolveNetplayInputPlayer(int local_slot);
 static uint16_t CaptureLocalNetplayButtons(void);
 static int NetplayBarrierAdmit(bool *running);
 static void NetplaySoftExit(const char *origin);
+static void NetplayReportError(const char *error_code, const char *message);
 #endif
 static void HandleVolumeAdjustment(int volume_adjustment);
 static void HandleGamepadAxisInput(GamepadInfo *gi, int axis, Sint16 value);
@@ -155,6 +156,7 @@ static int g_netplay_started;
  * disconnect detection above that cold-start gap; steady-state input still
  * arrives every frame, so an actual departure is reported promptly enough. */
 #define SMW_NETPLAY_PEER_TIMEOUT_MS 8000u
+#define SMW_NETPLAY_CONNECT_TIMEOUT_MS 30000u
 #endif
 
 extern Snes *g_snes;
@@ -918,6 +920,43 @@ int main(int argc, char** argv) {
   snes_netplay_config_defaults(&g_netplay_cfg);
   snes_netplay_apply_env(&g_netplay_cfg);
   if (g_netplay_cfg.enabled) g_netplay_pending = 1;
+  {
+    const char *auto_role = getenv("SMW_NET_AUTO_ROLE");
+    if (auto_role && auto_role[0]) {
+      RecompLauncherCNetplayLaunch net;
+      const char *auto_name = getenv("SMW_NET_AUTO_PLAYER");
+      const char *auto_lobby = getenv("SMW_NET_AUTO_LOBBY");
+      int auto_rc = SmwNetplayLauncherAutoLaunch(
+          auto_role, auto_name, auto_lobby ? auto_lobby : "",
+          60000u, &net);
+      if (auto_rc != 0) {
+        fprintf(stderr,
+                "SNES_NET_TEST_FAIL role=%s stage=lobby rc=%d\n",
+                auto_role, auto_rc);
+        SmwNetplayLauncherDisconnect();
+        return 2;
+      }
+      snes_netplay_config_defaults(&g_netplay_cfg);
+      g_netplay_cfg.enabled = 1;
+      g_netplay_cfg.local_slot = net.local_slot;
+      g_netplay_cfg.input_player =
+          (net.input_player == 0 || net.input_player == 1)
+              ? net.input_player : -1;
+      g_netplay_cfg.session_id = net.session_id ? net.session_id : 1u;
+      g_netplay_cfg.transport = 0;
+      snprintf(g_netplay_cfg.bind_hostport,
+               sizeof(g_netplay_cfg.bind_hostport), "%s",
+               net.bind_hostport);
+      snprintf(g_netplay_cfg.peer_hostport,
+               sizeof(g_netplay_cfg.peer_hostport), "%s",
+               net.peer_hostport);
+      snes_netplay_apply_env(&g_netplay_cfg);
+      if (net.input_delay >= 0 && net.input_delay <= 16)
+        g_netplay_cfg.input_delay = net.input_delay;
+      g_netplay_pending = 1;
+      g_netplay_from_lobby = 1;
+    }
+  }
 #endif
 
 #if defined(SNES_LAUNCHER) || defined(RECOMP_LAUNCHER)
@@ -1582,9 +1621,26 @@ error_reading:;
           ResolveNetplayInputPlayer(g_netplay_cfg.local_slot);
     int nrc = snes_netplay_start(&g_netplay_cfg);
     if (nrc != 0) {
-      fprintf(stderr, "snes_netplay_start failed (%d); continuing offline\n",
-              nrc);
+      char message[512];
+      const char *error_code =
+          nrc == -4 ? "transport_unavailable" : "netplay_start_failed";
+      if (nrc == -4) {
+        snprintf(message, sizeof(message),
+                 "Online netplay could not start because ICE/NAT traversal "
+                 "is unavailable or failed to initialize.\n\n"
+                 "Check the log and firewall settings, then rejoin the lobby "
+                 "and retry.");
+      } else {
+        snprintf(message, sizeof(message),
+                 "Netplay could not start (error %d).\n\n"
+                 "Check the log, then rejoin the lobby and retry.",
+                 nrc);
+      }
+      fprintf(stderr, "snes_netplay_start failed (%d); aborting match\n", nrc);
       host_report_breadcrumb("netplay: start failed rc=%d", nrc);
+      NetplayReportError(error_code, message);
+      NetplaySoftExit("start_failed");
+      running = false;
     } else {
       g_turbo = 0;
       g_netplay_started = 1;
@@ -2119,16 +2175,82 @@ static void NetplaySoftExit(const char *origin) {
   }
 }
 
+static void NetplayReportError(const char *error_code, const char *message) {
+  const char *suppress_dialog = getenv("SNES_NET_SUPPRESS_ERROR_DIALOG");
+  SmwNetplayLauncherSetRuntimeError(error_code);
+  fprintf(stderr, "snes_netplay: %s: %s\n",
+          error_code ? error_code : "error", message ? message : "");
+  host_report_breadcrumb("netplay: error=%s transport=%s",
+                         error_code ? error_code : "error",
+                         snes_netplay_transport_name());
+  if ((!suppress_dialog || suppress_dialog[0] == '\0' ||
+       suppress_dialog[0] == '0') && message) {
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,
+                             "SMW Co-op Netplay Connection Failed",
+                             message, g_window);
+  }
+}
+
 static int NetplayBarrierAdmit(bool *running) {
   static int desync_logged;
+  static uint32 connect_wait_started_ms;
+  static int connect_wait_logged;
   if (!snes_netplay_active()) return 0;
 
   for (;;) {
     uint32_t desync_tick = 0, local_hash = 0, remote_hash = 0;
+    uint32_t now = SDL_GetTicks();
     SDL_Event event;
 
+    if (!snes_netplay_is_running()) {
+      if (connect_wait_started_ms == 0)
+        connect_wait_started_ms = now ? now : 1;
+      if (!connect_wait_logged) {
+        fprintf(stderr,
+                "snes_netplay: waiting for peer transport=%s timeout=%ums\n",
+                snes_netplay_transport_name(),
+                (unsigned)SMW_NETPLAY_CONNECT_TIMEOUT_MS);
+        host_report_breadcrumb("netplay: waiting transport=%s",
+                               snes_netplay_transport_name());
+        connect_wait_logged = 1;
+      }
+      if ((uint32_t)(now - connect_wait_started_ms) >=
+          SMW_NETPLAY_CONNECT_TIMEOUT_MS) {
+        const int is_ice =
+            strcmp(snes_netplay_transport_name(), "ice") == 0;
+        const char *message =
+            is_ice
+                ? "Could not establish an online connection to the other "
+                  "player within 30 seconds.\n\nAllow the game through the "
+                  "Windows firewall, make sure both players are still in the "
+                  "lobby, then rejoin and retry."
+                : "Could not establish a direct connection to the other "
+                  "player within 30 seconds.\n\nCheck the lobby address, "
+                  "firewall, and that both players are still connected, then "
+                  "rejoin and retry.";
+        NetplayReportError(is_ice ? "connect_timeout_ice"
+                                  : "connect_timeout_lan",
+                           message);
+        NetplaySoftExit("connect_timeout");
+        connect_wait_started_ms = 0;
+        connect_wait_logged = 0;
+        desync_logged = 0;
+        if (running) *running = false;
+        return 0;
+      }
+    } else {
+      connect_wait_started_ms = 0;
+      connect_wait_logged = 0;
+    }
+
     if (snes_netplay_peer_disconnected(SMW_NETPLAY_PEER_TIMEOUT_MS)) {
+      NetplayReportError(
+          "peer_disconnected",
+          "The other player stopped responding.\n\nReturn to the lobby, "
+          "rejoin the room, and try again.");
       NetplaySoftExit("peer_disconnect");
+      connect_wait_started_ms = 0;
+      connect_wait_logged = 0;
       desync_logged = 0;
       if (running) *running = false;
       return 0;
