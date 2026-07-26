@@ -24,6 +24,15 @@
 #include "framedump.h"
 #include "config.h"
 #include "widescreen.h"
+#include "parallax.h"
+#include "smw_parallax.h"
+
+/* Set once in main after the config path is resolved; read by
+ * SmwParallax_ConfigPath below. */
+static const char *g_smw_parallax_config_path;
+const char *SmwParallax_ConfigPath(void) {
+  return g_smw_parallax_config_path;
+}
 #ifdef SMW_COOP_BUILD
 #include "coop_patch.h"
 #include "snes_netplay.h"
@@ -412,6 +421,11 @@ void RtlDrawPpuFrame(uint8 *pixel_buffer, size_t pitch, uint32 render_flags) {
       memset(g_my_pixels, 0, row_bytes * g_snes_height);
     }
   }
+  /* LAST of the per-frame PPU policy, immediately before the frame is drawn:
+   * the parallax captures are full-frame RemoveFromGame captures that override
+   * any narrower overlay policy for the same source (the HUD split above), so
+   * they must be declared after everything else has had its say. */
+  SmwParallax_PrepareFrame(g_snes_width, g_snes_height, g_ws_extra);
   g_rtl_game_info->draw_ppu_frame();
   RtlWidescreenPresent(pixel_buffer, pitch, g_my_pixels,
                        g_snes_width, g_snes_height);
@@ -558,8 +572,35 @@ static void SdlRenderer_EndDraw(void) {
   //  uint64 after = SDL_GetPerformanceCounter();
   //  float v = (double)(after - before) / SDL_GetPerformanceFrequency();
   //  printf("%f ms\n", v * 1000);
+  SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 255);
   SDL_RenderClear(g_renderer);
-  SDL_RenderCopy(g_renderer, g_texture, &g_sdl_renderer_rect, NULL);
+  /* Parallax composite. SMW delegates letterboxing to SDL_RenderSetLogicalSize,
+   * which would also scale the composited scene down to 256x224 before
+   * upscaling it — visibly soft, and it throws away the whole point of
+   * projecting at output resolution. So drop logical presentation for this one
+   * pass, composite into the equivalent letterboxed rect in real output
+   * pixels, then restore it (the flat fallback path below and the launcher
+   * overlay both still expect it).
+   *
+   * Returning false is the normal, expected path for every non-level frame;
+   * fall back to the flat blit so a failure is never a black screen. */
+  bool composited = false;
+  if (Parallax_IsActiveThisFrame()) {
+    int out_w = 0, out_h = 0;
+    if (SDL_GetRendererOutputSize(g_renderer, &out_w, &out_h) == 0 &&
+        out_w > 0 && out_h > 0) {
+      SDL_RenderSetLogicalSize(g_renderer, 0, 0);
+      SDL_Rect dest;
+      Parallax_LetterboxViewport(out_w, out_h, g_snes_width, g_snes_height,
+                                 g_config.ignore_aspect_ratio, &dest);
+      composited = Parallax_Composite(g_renderer, &dest, g_my_pixels,
+                                      g_snes_width, g_snes_height);
+      if (!g_config.ignore_aspect_ratio)
+        SDL_RenderSetLogicalSize(g_renderer, g_snes_width, g_snes_height);
+    }
+  }
+  if (!composited)
+    SDL_RenderCopy(g_renderer, g_texture, &g_sdl_renderer_rect, NULL);
   SDL_RenderPresent(g_renderer); // vsyncs to 60 FPS?
 }
 
@@ -886,6 +927,12 @@ int main(int argc, char** argv) {
       ParseConfigFile("config.local.ini");
     }
   }
+  /* Publish the resolved config path so smw_parallax.c's toggle persists to the
+   * same exe-anchored file every other WriteConfigFile call here targets
+   * (config_file is a local, and the hotkey handler is out of its scope). */
+  g_smw_parallax_config_path = config_file;
+  /* After BOTH config passes so config.local.ini's override is honoured. */
+  SmwParallax_Init();
 #ifdef SMW_COOP_BUILD
   /* The simultaneous co-op ROM and the audio-only MSU ROM both replace
    * expansion-bank data. They cannot be layered into one analysis image. */
@@ -2390,6 +2437,9 @@ static void HandleCommand(uint32 j, bool pressed) {
       g_ppu_render_flags ^= kPpuRenderFlags_NewRenderer;
       printf("New renderer = %x\n", g_ppu_render_flags & kPpuRenderFlags_NewRenderer);
       g_new_ppu = (g_ppu_render_flags & kPpuRenderFlags_NewRenderer) != 0;
+      break;
+    case kKeys_ToggleParallax:
+      SmwParallax_Toggle();
       break;
     case kKeys_VolumeUp:
     case kKeys_VolumeDown: HandleVolumeAdjustment(j == kKeys_VolumeUp ? 1 : -1); break;

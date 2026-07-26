@@ -25,6 +25,10 @@ enum {
   kKeys_ToggleRenderer,
   kKeys_VolumeUp,
   kKeys_VolumeDown,
+  /* Appended at the END on purpose: kDefaultKbdControls (config.c) is a
+   * POSITIONAL table parallel to this enum, so inserting in the middle would
+   * silently shift every later default binding. */
+  kKeys_ToggleParallax,
   kKeys_Total,
 };
 
@@ -66,6 +70,10 @@ typedef struct Config {
   // effect with widescreen active. `WidescreenHud = 0` keeps the
   // authentic centered HUD.
   bool widescreen_hud;
+  /* Layered pseudo-3D parallax presenter (snesrecomp/docs/PARALLAX.md).
+   * Default ON while the feature is being evaluated. Requires the SDL
+   * renderer; with OutputMethod=OpenGL the frame presents flat. */
+  bool parallax;
   bool display_perf_title;
 
   // Skip the per-frame SDL_Delay pacing. Off by default (pacing on) so SPC +

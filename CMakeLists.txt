@@ -127,6 +127,7 @@ set(SMW_RUNTIME_SOURCES
     src/smw_00.c
     src/gen_stubs.c
     src/smw_cpu_infra.c
+    src/smw_parallax.c
     src/smw_rtl.c
     src/smw_spc_player.c
     third_party/gl_core/gl_core_3_1.c

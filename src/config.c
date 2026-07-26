@@ -34,6 +34,8 @@ static const uint16 kDefaultKbdControls[kKeys_Total] = {
   A(SDLK_RETURN), C(SDLK_r), S(SDLK_p), _(SDLK_p), _(SDLK_TAB), N, N, _(SDLK_f), _(SDLK_r),
   // VolumeUp VolumeDown
   0, 0,
+  // ToggleParallax
+  A(SDLK_p),
 };
 #undef _
 #undef A
@@ -54,6 +56,7 @@ static const KeyNameId kKeyNameId[] = {
   M(Load), M(Save),
   S(Fullscreen), S(Reset),
   S(Pause), S(PauseDimmed), S(Turbo), S(WindowBigger), S(WindowSmaller), S(VolumeUp), S(VolumeDown), S(DisplayPerf), S(ToggleRenderer),
+  S(ToggleParallax),
 };
 #undef S
 #undef M
@@ -387,6 +390,8 @@ static bool HandleIniConfig(int section, const char *key, char *value) {
       return ParseWidescreenMode(value, &g_config.widescreen_mode);
     } else if (StringEqualsNoCase(key, "WidescreenHud")) {
       return ParseBool(value, &g_config.widescreen_hud);
+    } else if (StringEqualsNoCase(key, "Parallax")) {
+      return ParseBool(value, &g_config.parallax);
     } else if (StringEqualsNoCase(key, "Shader")) {
       g_config.shader = *value ? value : NULL;
       return true;
@@ -491,6 +496,10 @@ void ParseConfigFile(const char *filename) {
   /* HUD-to-the-edges defaults on; inert in Standard view mode.
    * `WidescreenHud = 0` keeps the authentic centered status bar. */
   g_config.widescreen_hud = true;
+  /* Parallax defaults ON for this evaluation build so a freshly-extracted
+   * release shows the effect without editing an ini. `Parallax = 0` in
+   * config.ini (or the Alt+P hotkey) turns it off. */
+  g_config.parallax = true;
 
   /* An empty identity intentionally triggers recomp-ui's first-entry name
    * prompt. Once chosen it is persisted as [General] NetplayPlayerName. */
@@ -644,6 +653,9 @@ void WriteConfigFile(const char *filename) {
     { "General",    "NetplayPlayerName" },
     { "GamepadMap", "Deadzone" },
     { "GamepadMap", "DeadzoneP2" },
+    /* Appended at the END: the value assignments below are index-coupled to
+     * this list, so inserting in the middle would mis-pair every later key. */
+    { "Graphics", "Parallax" },
   };
   const int N = (int)countof(kvs);
   snprintf(kvs[0].val, sizeof(kvs[0].val), "%d", g_config.window_scale ? g_config.window_scale : 3);
@@ -660,6 +672,7 @@ void WriteConfigFile(const char *filename) {
   snprintf(kvs[10].val, sizeof(kvs[10].val), "%s", g_config.netplay_player_name);
   snprintf(kvs[11].val, sizeof(kvs[11].val), "%d", g_config.deadzone[0]);
   snprintf(kvs[12].val, sizeof(kvs[12].val), "%d", g_config.deadzone[1]);
+  snprintf(kvs[13].val, sizeof(kvs[13].val), "%d", g_config.parallax ? 1 : 0);
 
   /* Read the existing file (may be absent on a fresh extract). */
   char *data = NULL;
