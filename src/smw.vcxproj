@@ -171,7 +171,7 @@
     <ClCompile>
       <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)src;$(SolutionDir)snesrecomp\runner\src;$(SolutionDir)snesrecomp\runner\src\snes;$(SolutionDir)recomp;$(SolutionDir)recomp-ui\src;$(SolutionDir)recomp-ui\src\common;$(SolutionDir)recomp-ui\src\third_party\imgui;$(SolutionDir)recomp-ui\src\third_party\imgui\backends</AdditionalIncludeDirectories>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>SMW_DISABLE_LM=1;RECOMP_LAUNCHER=1;SDL_MAIN_HANDLED=1;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SMW_DISABLE_LM=1;RECOMP_LAUNCHER=1;SNESRECOMP_SDL3=0;SDL_MAIN_HANDLED=1;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <DisableSpecificWarnings>4996</DisableSpecificWarnings>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
@@ -189,7 +189,7 @@
     <ClCompile>
       <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)src;$(SolutionDir)snesrecomp\runner\src;$(SolutionDir)snesrecomp\runner\src\snes;$(SolutionDir)recomp;$(SolutionDir)recomp-ui\src;$(SolutionDir)recomp-ui\src\common;$(SolutionDir)recomp-ui\src\third_party\imgui;$(SolutionDir)recomp-ui\src\third_party\imgui\backends</AdditionalIncludeDirectories>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>SMW_DISABLE_LM=1;SNESRECOMP_TRACE=1;RECOMP_LAUNCHER=1;SDL_MAIN_HANDLED=1;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SMW_DISABLE_LM=1;SNESRECOMP_TRACE=1;RECOMP_LAUNCHER=1;SNESRECOMP_SDL3=0;SDL_MAIN_HANDLED=1;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <DisableSpecificWarnings>4996</DisableSpecificWarnings>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
       <LanguageStandard>stdcpp17</LanguageStandard>
@@ -211,7 +211,7 @@
            always-on observability rings (TCP debug server + ~2 GB of
            cpu/vram/oam/frame ring buffers) exist ONLY under TRACE=1, so
            Release|x64 must never be the released artifact. -->
-      <PreprocessorDefinitions>$(SnesRecompVersionDefine)$(CoopDefines)NDEBUG;SMW_DISABLE_LM=1;RECOMP_LAUNCHER=1;SDL_MAIN_HANDLED=1;_CRT_SECURE_NO_WARNINGS;SNESRECOMP_REVERSE_DEBUG=0</PreprocessorDefinitions>
+      <PreprocessorDefinitions>$(SnesRecompVersionDefine)$(CoopDefines)NDEBUG;SMW_DISABLE_LM=1;RECOMP_LAUNCHER=1;SNESRECOMP_SDL3=0;SDL_MAIN_HANDLED=1;_CRT_SECURE_NO_WARNINGS;SNESRECOMP_REVERSE_DEBUG=0</PreprocessorDefinitions>
       <DisableSpecificWarnings>4996</DisableSpecificWarnings>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
       <LanguageStandard>stdcpp17</LanguageStandard>
@@ -252,7 +252,8 @@
     <ClCompile Include="..\snesrecomp\runner\src\framedump.c" />
     <ClCompile Include="..\snesrecomp\runner\src\host_paths.c" />
     <ClCompile Include="..\snesrecomp\runner\src\launcher.c" />
-    <!-- Shared recomp-ui: SDL2 + Dear ImGui launcher. -->
+    <!-- Legacy MSVC harness explicitly uses the SDL2 fallback. The CMake
+         release path defaults to SDL3. -->
     <ClCompile Include="..\recomp-ui\src\common\launcher_ng_capi.c">
       <ExcludedFromBuild Condition="'$(Platform)'=='Win32'">true</ExcludedFromBuild></ClCompile>
     <ClCompile Include="..\recomp-ui\src\common\launcher_model.c">

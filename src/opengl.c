@@ -1,5 +1,5 @@
 #include "third_party/gl_core/gl_core_3_1.h"
-#include <SDL.h>
+#include "desktop/sdl_compat.h"
 #include <stdio.h>
 #include <stdbool.h>
 #include "types.h"
@@ -145,7 +145,7 @@ static void OpenGLRenderer_Destroy(void) {
 }
 
 static void OpenGLRenderer_GetOutputSize(int *width, int *height) {
-  SDL_GL_GetDrawableSize(g_window, width, height);
+  snesrecomp_sdl_get_drawable_size(g_window, width, height);
 }
 
 static void OpenGLRenderer_BeginDraw(int width, int height, uint8 **pixels, int *pitch) {
@@ -166,7 +166,8 @@ static void OpenGLRenderer_BeginDraw(int width, int height, uint8 **pixels, int 
 static void OpenGLRenderer_EndDraw(void) {
   int drawable_width, drawable_height;
 
-  SDL_GL_GetDrawableSize(g_window, &drawable_width, &drawable_height);
+  snesrecomp_sdl_get_drawable_size(
+      g_window, &drawable_width, &drawable_height);
   
   int viewport_width = drawable_width, viewport_height = drawable_height;
 

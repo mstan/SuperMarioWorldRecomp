@@ -9,7 +9,7 @@ assets, configuration, and README. ROMs and ROM-derived generated C are never
 staged.
 
 Ships ONE windows zip (and ONLY a zip - never a bare exe; the exe is useless
-without SDL2.dll and the recomp-ui assets/ next to it):
+without its SDL runtime and the recomp-ui assets/ next to it):
 
   SuperMarioWorldRecomp-windows-x64-v<Version>.zip
   SuperMarioWorldCoopSNESRecomp-windows-x64-v<Version>.zip
@@ -31,7 +31,8 @@ param(
   [Parameter(Mandatory = $true)][string]$Version,
   [ValidateSet('stock', 'coop')][string]$Variant = 'stock',
   [string]$BuildDir = 'build-recompui',
-  [string]$RuntimeBinDir = 'C:\msys64\mingw64\bin'
+  [string]$RuntimeBinDir = 'C:\msys64\mingw64\bin',
+  [ValidateSet('SDL3', 'SDL2')][string]$SdlBackend = 'SDL3'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -91,11 +92,19 @@ if (Test-Path -LiteralPath $kb) {
   Out-File (Join-Path $stage 'config.ini') -Encoding ascii
 
 $runtimeDlls = @(
-  'SDL2.dll',
   'libgcc_s_seh-1.dll',
   'libstdc++-6.dll',
   'libwinpthread-1.dll'
 )
+$sdlDll = "$SdlBackend.dll"
+$sdlSource = Join-Path $build $sdlDll
+if (-not (Test-Path -LiteralPath $sdlSource)) {
+  $sdlSource = Join-Path $RuntimeBinDir $sdlDll
+}
+if (-not (Test-Path -LiteralPath $sdlSource)) {
+  throw "Required $SdlBackend runtime DLL missing from build or runtime bin: $sdlDll"
+}
+Copy-Item -LiteralPath $sdlSource -Destination $stage
 foreach ($name in $runtimeDlls) {
   $source = Join-Path $RuntimeBinDir $name
   if (-not (Test-Path -LiteralPath $source)) {

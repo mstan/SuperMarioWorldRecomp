@@ -14,7 +14,7 @@ Every release ships exactly two assets:
 | `SuperMarioWorldRecomp-windows-x64.zip` | pristine (zero injected overrides) | `Widescreen = 0` |
 | `SuperMarioWorldRecomp-widescreen-windows-x64.zip` | `apply_overrides.py` patched (WS-FLAG / WS-DESPAWN / WS-SPAWN) | `Widescreen = 1` |
 
-Never publish a bare `smw.exe` — it is broken without `SDL2.dll` and
+Never publish a bare `smw.exe` — it is broken without `SDL3.dll` and
 redundant next to the zip.
 
 The widescreen machinery is runtime-gated and default-off, but the
@@ -39,7 +39,7 @@ rebuilds, and stages the widescreen zip.
 
    Zips land in `release\` (gitignored). The script forces the
    `Widescreen` value into each zip's `config.ini` and writes a
-   variant-specific `README.txt`; everything else (`SDL2.dll`,
+   variant-specific `README.txt`; everything else (`SDL3.dll`,
    `keybinds.ini`) is staged from `build\bin-x64-Release\`.
 3. Smoke-test both zips from a scratch directory (extract, run, reach a
    level). The standard zip must look byte-authentic; the widescreen

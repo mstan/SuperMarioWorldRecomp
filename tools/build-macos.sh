@@ -6,7 +6,7 @@
 #
 # Run this ON a Mac (it cannot be built on Linux/Windows). See F:/Recomp/Mac/
 # BUILD-ON-MAC.md for prerequisites. It configures + builds with clang, then
-# bundles a relocatable <APP_NAME>.app (dylibbundler copies SDL2 in and rewrites
+# bundles a relocatable <APP_NAME>.app (dylibbundler copies SDL in and rewrites
 # the install names) and a <APP_NAME>.dmg for distribution.
 #
 # Usage:
@@ -61,6 +61,7 @@ case "$ARCH" in
   arm64|x86_64) OSX_ARCHS="$ARCH";;
   *) echo "--arch must be arm64, x86_64, or universal" >&2; exit 2;;
 esac
+FLAGS+=( -DSNESRECOMP_SDL_BACKEND="${SNESRECOMP_SDL_BACKEND:-SDL3}" )
 
 BUILD="$REPO/build-macos-$CONFIG"
 echo "==================== $APP_NAME ($CONFIG, $ARCH) ===================="
@@ -127,12 +128,12 @@ cat > "$APPDIR/Contents/Info.plist" <<EOF
 </dict></plist>
 EOF
 
-# Copy + relink the SDL2 dylib (and any other non-system deps) into the bundle.
+# Copy + relink the selected SDL dylib (and any other non-system deps).
 if command -v dylibbundler >/dev/null 2>&1; then
   dylibbundler -od -b -x "$APPDIR/Contents/MacOS/$CMAKE_TARGET" \
       -d "$APPDIR/Contents/Frameworks" -p @executable_path/../Frameworks
 else
-  echo "      WARNING: dylibbundler not found — .app will need a system SDL2."
+  echo "      WARNING: dylibbundler not found — .app will need the selected system SDL."
 fi
 # Ad-hoc codesign so Gatekeeper lets it run locally (no Developer ID required).
 codesign --force --deep --sign - "$APPDIR" 2>/dev/null || \

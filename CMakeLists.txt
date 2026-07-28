@@ -22,26 +22,12 @@ set(CMAKE_C_STANDARD 11)
 set(SNESRECOMP_ROOT "${CMAKE_SOURCE_DIR}/snesrecomp" CACHE PATH
     "Path to the snesrecomp checkout used by this game")
 include(${SNESRECOMP_ROOT}/runner/runner.cmake)
-include(${CMAKE_SOURCE_DIR}/recomp-ui/recomp_ui.cmake)
+set(RECOMP_UI_ROOT "${CMAKE_SOURCE_DIR}/recomp-ui" CACHE PATH
+    "Path to the recomp-ui checkout used by this game")
+include(${RECOMP_UI_ROOT}/recomp_ui.cmake)
 
-set(SMW_SDL2_ROOT "" CACHE PATH
-    "Optional SDL2 development package root (contains include/ and lib/x64/)")
-if(SMW_SDL2_ROOT)
-    set(SDL2_INCLUDE_DIRS "${SMW_SDL2_ROOT}/include")
-    if(WIN32)
-        set(SDL2_LIBRARIES "${SMW_SDL2_ROOT}/lib/x64/SDL2.lib")
-    else()
-        find_package(SDL2 REQUIRED)
-    endif()
-else()
-    find_package(SDL2 REQUIRED)
-endif()
 find_package(OpenGL REQUIRED)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
-
-if(WIN32)
-    list(FILTER SDL2_LIBRARIES EXCLUDE REGEX "SDL2main")
-endif()
 
 file(GLOB SMW_STOCK_GEN_SOURCES CONFIGURE_DEPENDS
     ${CMAKE_SOURCE_DIR}/src/gen/*.c)
@@ -149,9 +135,9 @@ function(smw_add_recomp_target target_name generated_sources)
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/recomp
         ${SNESRECOMP_RUNNER_INCLUDE_DIRS}
-        ${SDL2_INCLUDE_DIRS}
     )
     snesrecomp_target_glsl_shader(${target_name})
+    snesrecomp_target_sdl(${target_name})
 
     target_compile_definitions(${target_name} PRIVATE
         SMW_DISABLE_LM=1
@@ -167,8 +153,8 @@ function(smw_add_recomp_target target_name generated_sources)
     endif()
 
     target_link_libraries(${target_name} PRIVATE
-        ${SDL2_LIBRARIES}
         OpenGL::GL
+        ${SNESRECOMP_RUNNER_LIBRARIES}
     )
 
     if(WIN32)
