@@ -120,7 +120,6 @@ file(GLOB SMW_OVERRIDE_SOURCES CONFIGURE_DEPENDS
 set(SMW_RUNTIME_SOURCES
     ${SNESRECOMP_RUNNER_SOURCES}
     src/config.c
-    src/glsl_shader.c
     src/main.c
     src/post_mortem.c
     src/opengl.c
@@ -152,6 +151,7 @@ function(smw_add_recomp_target target_name generated_sources)
         ${SNESRECOMP_RUNNER_INCLUDE_DIRS}
         ${SDL2_INCLUDE_DIRS}
     )
+    snesrecomp_target_glsl_shader(${target_name})
 
     target_compile_definitions(${target_name} PRIVATE
         SMW_DISABLE_LM=1
@@ -173,8 +173,6 @@ function(smw_add_recomp_target target_name generated_sources)
 
     if(WIN32)
         target_link_libraries(${target_name} PRIVATE ws2_32 dbghelp)
-    else()
-        target_link_libraries(${target_name} PRIVATE m)
     endif()
 
     recomp_target_launcher_ui(${target_name}
