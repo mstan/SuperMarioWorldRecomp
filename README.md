@@ -252,15 +252,21 @@ engine worktree can be selected without replacing the checked-in submodule:
 
 ```powershell
 $engine = 'F:\path\to\snesrecomp-worktree'
-$sdl = '.\packages\sdl2.nuget.2.26.3\build\native'
+$ui = 'F:\path\to\recomp-ui-worktree'
+$sdl3 = 'F:\path\to\SDL3'
 $env:SNESRECOMP_ROOT = $engine
 bash tools/regen.sh --coop --no-tests
 cmake -S . -B build-netplay -DSMW_BUILD_COOP=ON `
-  -DSNESRECOMP_ROOT="$engine" -DSMW_SDL2_ROOT="$sdl" `
+  -DSNESRECOMP_ROOT="$engine" -DRECOMP_UI_ROOT="$ui" `
+  -DCMAKE_PREFIX_PATH="$sdl3" `
   -DSMW_NETPLAY_ICE=ON
 cmake --build build-netplay --config Release `
   --target SuperMarioWorldCoopSNESRecomp --parallel
 ```
+
+SDL3 is the default desktop backend. To build the maintained compatibility
+fallback, configure a separate tree with
+`-DSNESRECOMP_SDL_BACKEND=SDL2`.
 
 ### Regenerating the recompiled C (contributors)
 
