@@ -84,8 +84,6 @@ static void HandleInput(int keyCode, int keyMod, bool pressed);
 static void HandleCommand(uint32 j, bool pressed);
 void OpenGLRenderer_Create(struct RendererFuncs *funcs);
 
-bool g_new_ppu = true;
-
 struct SpcPlayer *g_spc_player;
 
 // Sized for the widescreen capacity (256 + 2*kPpuExtraLeftRight). With
@@ -612,7 +610,8 @@ static void UpdateWidescreen(void) {
   // SMW's in-level policy on the next draw; centered margins are the safe
   // presentation for title screens, maps, transitions, and paused frames.
   PpuSetExtraSpaceCentered(g_ppu, (uint8_t)extra);
-  PpuBeginDrawing(g_ppu, g_my_pixels, (size_t)g_snes_width * 4, 0);
+  PpuBeginDrawing(g_ppu, g_my_pixels, (size_t)g_snes_width * 4,
+                  g_ppu_render_flags);
   if (g_renderer && !g_config.ignore_aspect_ratio)
     SDL_RenderSetLogicalSize(g_renderer, g_snes_width, g_snes_height);
 
@@ -1567,7 +1566,8 @@ error_reading:;
     host_report_breadcrumb("audio disabled in config");
   }
 
-  PpuBeginDrawing(g_ppu, g_my_pixels, (size_t)g_snes_width * 4, 0);
+  PpuBeginDrawing(g_ppu, g_my_pixels, (size_t)g_snes_width * 4,
+                  g_ppu_render_flags);
 
   UpdateWidescreen();
 
@@ -2389,7 +2389,6 @@ static void HandleCommand(uint32 j, bool pressed) {
     case kKeys_ToggleRenderer:
       g_ppu_render_flags ^= kPpuRenderFlags_NewRenderer;
       printf("New renderer = %x\n", g_ppu_render_flags & kPpuRenderFlags_NewRenderer);
-      g_new_ppu = (g_ppu_render_flags & kPpuRenderFlags_NewRenderer) != 0;
       break;
     case kKeys_VolumeUp:
     case kKeys_VolumeDown: HandleVolumeAdjustment(j == kKeys_VolumeUp ? 1 : -1); break;
