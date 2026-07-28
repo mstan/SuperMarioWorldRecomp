@@ -416,7 +416,7 @@ void RtlDrawPpuFrame(uint8 *pixel_buffer, size_t pitch, uint32 render_flags) {
 }
 
 static void DrawPpuFrameWithPerf(void) {
-  int render_scale = PpuGetCurrentRenderScale(g_ppu, g_ppu_render_flags);
+  const int render_scale = 1;
   uint8 *pixel_buffer = 0;
   int pitch = 0;
 
@@ -1324,7 +1324,7 @@ int main(int argc, char** argv) {
 
   g_gamepad[0].joystick_id = g_gamepad[1].joystick_id = -1;
   g_snes_width = 256;
-  g_snes_height = 224;// (g_config.extend_y ? 240 : 224);
+  g_snes_height = 224;
 
   // Widescreen is optional. Fixed 16:9 establishes its logical width before
   // the window is created; adaptive starts authentic-width and follows the
@@ -1381,7 +1381,6 @@ int main(int argc, char** argv) {
   // could see at 256px. Keep authentic caps configurable at 4:3, but lift them
   // whenever widescreen is active so sprites do not disappear prematurely.
   g_ppu_render_flags = g_config.new_renderer * kPpuRenderFlags_NewRenderer |
-    g_config.extend_y * kPpuRenderFlags_Height240 |
     (g_config.no_sprite_limits ||
      g_config.widescreen_mode != kWidescreenMode_Standard) *
       kPpuRenderFlags_NoSpriteLimits;
