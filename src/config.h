@@ -54,7 +54,6 @@ typedef struct Config {
   uint8 audio_channels;
   uint16 audio_samples;
   bool autosave;
-  bool extend_y;
   bool no_sprite_limits;
   // Standard 4:3, fixed 16:9, or adaptive widescreen. Adaptive follows the
   // live host aspect at a fixed 224-line height, up to the sprite-safe 446px

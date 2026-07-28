@@ -107,7 +107,6 @@ set(SMW_RUNTIME_SOURCES
     ${SNESRECOMP_RUNNER_SOURCES}
     src/config.c
     src/main.c
-    src/post_mortem.c
     src/opengl.c
     src/smw_00.c
     src/gen_stubs.c
@@ -136,6 +135,7 @@ function(smw_add_recomp_target target_name generated_sources)
         ${CMAKE_SOURCE_DIR}/recomp
         ${SNESRECOMP_RUNNER_INCLUDE_DIRS}
     )
+    snesrecomp_target_post_mortem(${target_name})
     snesrecomp_target_glsl_shader(${target_name})
     snesrecomp_target_sdl(${target_name})
 
@@ -158,7 +158,7 @@ function(smw_add_recomp_target target_name generated_sources)
     )
 
     if(WIN32)
-        target_link_libraries(${target_name} PRIVATE ws2_32 dbghelp)
+        target_link_libraries(${target_name} PRIVATE ws2_32)
     endif()
 
     recomp_target_launcher_ui(${target_name}
