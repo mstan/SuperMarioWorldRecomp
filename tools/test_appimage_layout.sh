@@ -94,13 +94,15 @@ test -f "$state3/rom.cfg" || {
 test "$(head -n1 "$state3/rom.cfg")" = "$state3/pretend.sfc" || {
     echo "FAIL: rom.cfg does not point at the adjacent ROM: $(cat "$state3/rom.cfg")" >&2
     exit 1; }
-# A rom.cfg that already resolves is user state and must not be rewritten.
-printf '%s\n' "$state3/pretend.sfc" > "$state3/rom.cfg"
-printf 'user-owned-marker\n' >> "$state3/rom.cfg"
-rom_before=$(cat "$state3/rom.cfg")
+# AppRun must not REPOINT a cache that already resolves. The game itself owns
+# rom.cfg and may rewrite it with the same resolved path (ALttP does, via
+# RelocateRomToExeDir), so assert the target rather than byte-identity.
+: > "$state3/other.sfc"
+printf '%s\n' "$state3/other.sfc" > "$state3/rom.cfg"
 run_apprun "$state3/SuperMarioWorld.AppImage"
-test "$(cat "$state3/rom.cfg")" = "$rom_before" || {
-    echo "FAIL: resolving rom.cfg clobbered on relaunch" >&2; exit 1; }
+test "$(head -n1 "$state3/rom.cfg")" = "$state3/other.sfc" || {
+    echo "FAIL: AppRun repointed a rom.cfg that already resolved: \
+$(head -n1 "$state3/rom.cfg")" >&2; exit 1; }
 
 # 4. The read-only payload stayed pristine: no state files anywhere in AppDir.
 for leak in config.ini keybinds.ini rom.cfg saves tier2_coverage.json last_run_report.json; do
