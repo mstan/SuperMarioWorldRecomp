@@ -31,6 +31,9 @@
 #endif
 #include "util.h"
 #include "smw_spc_player.h"
+#if SNESRECOMP_ENABLE_MODS
+#include "mod_runtime.h"
+#endif
 
 #include "snes/snes.h"
 #ifdef __SWITCH__
@@ -119,13 +122,29 @@ enum {
   kDefaultSamples = 2048,
 };
 
-/* Release stamp baked in by make_release.ps1 via
- * /p:SnesRecompBuildVersion=<ver> (vcxproj turns the MSBuild property
- * into this define). Local/IDE builds report "dev"; the post-mortem
- * report's build.pe_timestamp still uniquely identifies those. */
+/* Release stamp baked in by the release tooling: the vcxproj turns the
+ * MSBuild property /p:SnesRecompBuildVersion=<ver> into this define, and
+ * the CMake path sets it from -DSNESRECOMP_BUILD_VERSION. Local/IDE
+ * builds report "dev"; the post-mortem report's build.pe_timestamp still
+ * uniquely identifies those. */
 #ifndef SNESRECOMP_BUILD_VERSION
 #define SNESRECOMP_BUILD_VERSION "dev"
 #endif
+
+/* Export an environment variable for this process. `_putenv` is a
+ * Windows-CRT name and does not exist in glibc, so every export goes
+ * through here rather than through an #ifdef at each call site — an
+ * unguarded `_putenv` only breaks the Linux link, which is easy to miss
+ * from a Windows-only build. */
+static void SetEnvVar(const char *name, const char *value) {
+#ifdef _WIN32
+  char buf[700];
+  snprintf(buf, sizeof(buf), "%s=%s", name, value);
+  _putenv(buf);
+#else
+  setenv(name, value, 1);
+#endif
+}
 
 #ifdef SMW_COOP_BUILD
 static const char kWindowTitle[] = "Super Mario World Co-op (Recompiled)";
@@ -1044,6 +1063,19 @@ int main(int argc, char** argv) {
   }
 #endif
 
+  /* Mod catalog lives beside the binary (exe dir / .AppImage folder); the
+   * launcher needs the provider before it opens so the Mods page can list
+   * the widescreen package. Committed once the ROM path is final. */
+  int mods_ready = 0;
+#if SNESRECOMP_ENABLE_MODS
+  mods_ready = snes_mod_runtime_initialize_c(
+      "mods", "super-mario-world-us",
+      "0838e531fe22c077528febe14cb3ff7c492f1f5fa8de354192bdff7137c27f5b");
+  if (!mods_ready)
+    fprintf(stderr, "SNES mods unavailable: %s\n",
+            snes_mod_runtime_last_error_c());
+#endif
+
 #if defined(SNES_LAUNCHER) || defined(RECOMP_LAUNCHER)
   /* GUI launcher: pick/verify ROM + tune settings before boot. Skipped for
    * headless/scripted paths (--paused/--script/--framedump), an explicit
@@ -1160,14 +1192,12 @@ int main(int argc, char** argv) {
 #if defined(RECOMP_LAUNCHER)
       gi.widescreen_supported = 0;
       gi.adaptive_view_supported = 0;
-#ifndef SMW_COOP_BUILD
-      static const char *const kSmwViewModes[] = {
-        "Standard (4:3)", "16:9 fixed", "Adaptive"
-      };
-      gi.aspect_labels = kSmwViewModes;
-      gi.num_aspect_labels = (int)countof(kSmwViewModes);
-      gi.aspect_experimental = 1;
+#if SNESRECOMP_ENABLE_MODS
+      gi.mods = mods_ready ? snes_mod_runtime_launcher_provider_c() : NULL;
 #endif
+      /* No Display aspect selector: the widescreen mod package owns this
+       * setting now, so the Mods page is the single authoritative state.
+       * (Same migration as Mega Man X / X2 / Super Mario Kart.) */
 #else
 #ifdef SMW_COOP_BUILD
       gi.widescreen_supported = 0;
@@ -1262,9 +1292,7 @@ int main(int argc, char** argv) {
         g_config.msu1_enabled = ls.msu1_enabled != 0;
         snprintf(g_config.msu1_dir, sizeof(g_config.msu1_dir), "%s", ls.msu1_dir);
         if (g_config.msu1_enabled && g_config.msu1_dir[0]) {
-          static char msu_env[600];
-          snprintf(msu_env, sizeof(msu_env), "SNESRECOMP_MSU1=%s", g_config.msu1_dir);
-          _putenv(msu_env);
+          SetEnvVar("SNESRECOMP_MSU1", g_config.msu1_dir);
         }
         /* Persist the launcher's choices so they're remembered next boot. */
         WriteConfigFile(config_file);
@@ -1383,13 +1411,7 @@ int main(int argc, char** argv) {
    * doing it here too means a launcher-skipping boot still streams MSU-1 if the
    * user enabled it. An existing env value (set by the launcher or the shell) wins. */
   if (g_config.msu1_enabled && g_config.msu1_dir[0] && !getenv("SNESRECOMP_MSU1")) {
-    static char msu_env[600];
-    snprintf(msu_env, sizeof(msu_env), "SNESRECOMP_MSU1=%s", g_config.msu1_dir);
-#ifdef _WIN32
-    _putenv(msu_env);
-#else
-    setenv("SNESRECOMP_MSU1", g_config.msu1_dir, 1);
-#endif
+    SetEnvVar("SNESRECOMP_MSU1", g_config.msu1_dir);
   }
 
   /* Let MSU-1 derive its pack base from the ROM name when SNESRECOMP_MSU1=auto
@@ -1397,18 +1419,40 @@ int main(int argc, char** argv) {
    * resolves). Harmless when MSU-1 is disabled. */
   { extern void msu1_set_rom_path(const char *); msu1_set_rom_path(runtime_rom_path); }
 
-  // Initialize debug server
+  // Initialize debug server. Production builds (SNESRECOMP_TRACE = 0) get
+  // debug_server.h's static-inline no-op stubs and never compile
+  // debug_server.c, so nothing is listening — but the stub returns 0 for
+  // "success", which made a prod build announce a debug server it does not
+  // have. Only report the port when the real server is compiled in.
   {
-    extern int debug_server_init(int port);
-    extern void debug_server_set_ram(uint8_t *ram, uint32_t ram_size);
     if (debug_server_init(4377) == 0) {
+#if SNESRECOMP_TRACE
       fprintf(stderr, "[main] Debug server ready on port 4377\n");
+#endif
     }
     if (start_paused) {
       debug_server_start_paused();
+#if SNESRECOMP_TRACE
       fprintf(stderr, "[main] Started paused — send 'step N' or 'continue' via TCP\n");
+#endif
     }
   }
+
+#if SNESRECOMP_ENABLE_MODS
+  /* ROM path is final here. Activation runs the reset callback first, so a
+   * disabled feature restores stock 4:3 regardless of what config.ini says,
+   * then applies the enabled package options. Must land BEFORE the width is
+   * derived below (g_ws_extra / g_snes_width) and before window creation.
+   * The SNESRECOMP_WIDESCREEN env knob still overrides afterwards. */
+  if (mods_ready) {
+    if (!snes_mod_runtime_commit_c(runtime_rom_path)) {
+      fprintf(stderr, "SNES mod plan rejected: %s\n",
+              snes_mod_runtime_last_error_c());
+      return 1;
+    }
+    snes_mod_runtime_activate_plugins_c();
+  }
+#endif
 
   g_gamepad[0].joystick_id = g_gamepad[1].joystick_id = -1;
   g_snes_width = 256;
@@ -1563,11 +1607,11 @@ error_reading:;
     return 1;
   }
 
-  // Connect debug server to SNES RAM
-  {
-    extern void debug_server_set_ram(uint8_t *ram, uint32_t ram_size);
-    debug_server_set_ram(snes->ram, 0x20000);
-  }
+  // Connect debug server to SNES RAM. Declared by debug_server.h, which in
+  // a production build resolves this to a no-op stub — do NOT redeclare it
+  // `extern` here, or the call bypasses the stub and only fails at link
+  // time on a non-Windows production build.
+  debug_server_set_ram(snes->ram, 0x20000);
 
 #ifdef ENABLE_ORACLE_BACKEND
   // Start the emulator-oracle backend with the same ROM. Gated on the

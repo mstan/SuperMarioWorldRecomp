@@ -18,6 +18,11 @@ This script does NOT build. Build first, e.g.:
   export PATH=/c/msys64/mingw64/bin:$PATH
   cmake --build build-recompui -j
 
+The archive is written with portable ('/') ZIP entry names and then re-read to
+reject any Windows-only entry name. This is what lets Linux/Steam Deck
+extractors rebuild the nested assets/ (and mods/packages/) hierarchy, so a
+Windows build running under Proton finds its bundled launcher assets.
+
 Zips land in release-stage\. Publish via gh only after review/sign-off.
 
 Example:
@@ -41,12 +46,26 @@ $build = Join-Path $root $BuildDir
 $exeName = if ($Variant -eq 'coop') { 'SuperMarioWorldCoopSNESRecomp.exe' } else { 'SuperMarioWorldSNESRecomp.exe' }
 $exe = Join-Path $build $exeName
 $assets = Join-Path $build 'assets'
+$mods = Join-Path $build 'mods'
 
 if (-not (Test-Path -LiteralPath $exe)) {
   throw "Release executable missing: $exe"
 }
 if (-not (Test-Path -LiteralPath $assets)) {
   throw "recomp-ui launcher assets/ missing: $assets"
+}
+
+# The exe must actually carry the version it is being packaged as. host_report
+# stamps crash breadcrumbs with SNESRECOMP_BUILD_VERSION, so a build configured
+# without it (or with it mangled) would ship reports that cannot be tied to this
+# release. PowerShell silently rewrites an unquoted `-DSNESRECOMP_BUILD_VERSION=
+# 0.10.0` to `0`, which is exactly how that happens in practice — always pass
+# `"-DSNESRECOMP_BUILD_VERSION:STRING=<version>"` quoted.
+$exeText = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($exe))
+if (-not $exeText.Contains($Version)) {
+  throw ("Release executable is not stamped with version '$Version'. " +
+    "Reconfigure with `"-DSNESRECOMP_BUILD_VERSION:STRING=$Version`" " +
+    'and rebuild before packaging.')
 }
 
 $out = Join-Path $root 'release-stage'
@@ -77,6 +96,12 @@ if ($Variant -eq 'coop') {
 }
 Copy-Item -LiteralPath (Join-Path $root 'README.md') -Destination $stage
 Copy-Item -LiteralPath $assets -Destination $stage -Recurse
+# Release-owned mod catalog, when the build stages one. Ships as a nested
+# directory tree, which is exactly what made portable ZIP entry names matter
+# (see the archive writer below).
+if (Test-Path -LiteralPath $mods) {
+  Copy-Item -LiteralPath $mods -Destination $stage -Recurse
+}
 
 # keybinds.ini is auto-generated next to the exe on first run (regenerated if
 # deleted); ship whatever is currently sitting next to the built exe, if any.
@@ -113,7 +138,60 @@ foreach ($name in $runtimeDlls) {
   Copy-Item -LiteralPath $source -Destination $stage
 }
 
-Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+# ZIP entry names always use '/', regardless of the host OS. Compress-Archive
+# preserves Windows backslashes, which POSIX extractors may treat as literal
+# filename characters instead of directory separators. That is what stopped
+# Linux/Steam Deck extractors from creating the nested assets/ and
+# mods/packages/ hierarchies, so a Windows build running under Proton could not
+# discover its bundled launcher assets or mod catalog.
+$stagePrefix = $stageFull.TrimEnd('\') + '\'
+$files = @(Get-ChildItem -LiteralPath $stage -File -Recurse |
+  Sort-Object FullName)
+$archive = [IO.Compression.ZipFile]::Open(
+  $zipFull, [IO.Compression.ZipArchiveMode]::Create)
+try {
+  foreach ($file in $files) {
+    $fileFull = [IO.Path]::GetFullPath($file.FullName)
+    if (-not $fileFull.StartsWith(
+        $stagePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+      throw "Refusing to archive a file outside the release stage: $fileFull"
+    }
+    $entryName = $fileFull.Substring($stagePrefix.Length).Replace('\', '/')
+    if ($entryName.StartsWith('/') -or
+        $entryName -match '(^|/)\.\.(/|$)') {
+      throw "Unsafe ZIP entry name: $entryName"
+    }
+    [IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+      $archive, $fileFull, $entryName,
+      [IO.Compression.CompressionLevel]::Optimal) | Out-Null
+  }
+} finally {
+  $archive.Dispose()
+}
+
+# Read the archive back and reject non-portable entry names outright, so a
+# regression in the writer cannot ship a zip that only extracts on Windows.
+$archive = [IO.Compression.ZipFile]::OpenRead($zipFull)
+try {
+  $badEntries = @($archive.Entries | Where-Object {
+    $_.FullName.Contains('\') -or
+    $_.FullName.StartsWith('/') -or
+    $_.FullName -match '(^|/)\.\.(/|$)'
+  })
+  if ($badEntries.Count -ne 0) {
+    throw "ZIP contains non-portable entry names: $(
+      ($badEntries | ForEach-Object FullName) -join ', ')"
+  }
+  if ($archive.Entries.Count -ne $files.Count) {
+    throw "ZIP entry count mismatch: expected $($files.Count), got $(
+      $archive.Entries.Count)"
+  }
+} finally {
+  $archive.Dispose()
+}
 
 Write-Host "--- $stageName ---"
 Get-ChildItem -LiteralPath $stage | Select-Object Name, Length | Out-Host

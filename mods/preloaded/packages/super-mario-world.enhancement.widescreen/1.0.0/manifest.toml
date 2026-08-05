@@ -1,0 +1,58 @@
+format_version = 1
+id = "super-mario-world.enhancement.widescreen"
+version = "1.0.0"
+name = "Super Mario World Widescreen"
+author = "mstan"
+description = "Renders Super Mario World with a wider field of view using its game-specific spawn, culling, despawn, sprite-allocation, special-object OAM, and fireball work, plus an optional edge-split status bar."
+license = "MIT"
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "super-mario-world-us"
+rom_sha256 = "0838e531fe22c077528febe14cb3ff7c492f1f5fa8de354192bdff7137c27f5b"
+
+[[feature]]
+id = "widescreen"
+name = "Widescreen (16:9)"
+description = "Enable Super Mario World's game-specific widescreen rendering enhancement."
+group = "Display"
+default_enabled = false
+
+[[option]]
+feature = "widescreen"
+id = "mode"
+label = "View mode"
+description = "Adaptive follows the live window aspect at a fixed 224-line height, up to the sprite-safe ceiling. Fixed renders a constant 16:9 width."
+group = "Display"
+type = "choice"
+default = "adaptive"
+
+[[option.choice]]
+value = "adaptive"
+label = "Adaptive"
+
+[[option.choice]]
+value = "16_9"
+label = "16:9 fixed"
+
+[[option]]
+feature = "widescreen"
+id = "hud"
+label = "Status bar"
+description = "Split spreads the status bar to the widescreen edges (lives cluster left, TIME/coins/score right, item box centered). Centered keeps the authentic 4:3 placement."
+group = "Display"
+type = "choice"
+default = "split"
+
+[[option.choice]]
+value = "split"
+label = "Split to edges"
+
+[[option.choice]]
+value = "centered"
+label = "Authentic centered"
+
+[[plugin]]
+feature = "widescreen"
+id = "super-mario-world.widescreen"

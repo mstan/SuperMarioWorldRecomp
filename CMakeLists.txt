@@ -19,6 +19,20 @@ endif()
 
 set(CMAKE_C_STANDARD 11)
 
+# Reported by host_report_init() in crash breadcrumbs/minidumps and used as the
+# netplay game version. The MSVC .sln plumbs this through SnesRecompBuildVersion
+# (src/smw.vcxproj); the CMake path needs its own knob or a release build ships
+# stamped "dev" and user crash reports cannot be tied to an actual release.
+set(SNESRECOMP_BUILD_VERSION "dev" CACHE STRING
+    "Version reported in crash diagnostics and network metadata")
+
+# Widescreen is a mod package, not a Display setting (same migration as Mega
+# Man X / X2 / Super Mario Kart). Must be set BEFORE runner.cmake is included:
+# the engine forces RECOMP_UI_ENABLE_MODS on from this and compiles the package
+# loader + trusted-plugin runtime.
+set(SNESRECOMP_ENABLE_MODS ON CACHE BOOL
+    "Enable Super Mario World's built-in mod catalog and SNES mod packages" FORCE)
+
 set(SNESRECOMP_ROOT "${CMAKE_SOURCE_DIR}/snesrecomp" CACHE PATH
     "Path to the snesrecomp checkout used by this game")
 include(${SNESRECOMP_ROOT}/runner/runner.cmake)
@@ -113,6 +127,8 @@ set(SMW_RUNTIME_SOURCES
     src/smw_cpu_infra.c
     src/smw_rtl.c
     src/smw_spc_player.c
+    # Trusted static plugin backing the widescreen mod package's activation.
+    src/mods/smw_widescreen_plugin.c
     third_party/gl_core/gl_core_3_1.c
     ${SMW_OVERRIDE_SOURCES}
 )
@@ -128,6 +144,8 @@ function(smw_add_recomp_target target_name generated_sources)
         ${SMW_RUNTIME_SOURCES}
         ${generated_sources}
     )
+    set_property(SOURCE src/main.c APPEND PROPERTY COMPILE_DEFINITIONS
+        SNESRECOMP_BUILD_VERSION="${SNESRECOMP_BUILD_VERSION}")
 
     target_include_directories(${target_name} PRIVATE
         ${CMAKE_SOURCE_DIR}
@@ -161,12 +179,29 @@ function(smw_add_recomp_target target_name generated_sources)
         target_link_libraries(${target_name} PRIVATE ws2_32)
     endif()
 
+    # CONSOLE is required by recomp-ui: it selects exactly one validated
+    # assets/consoles/<id>/ manifest, so an SNES game cannot silently stage
+    # N64 cartridge or NES pad art next to the exe.
     recomp_target_launcher_ui(${target_name}
+        CONSOLE snes
         BOXART ${CMAKE_SOURCE_DIR}/recomp/launcher/boxart.tga)
 endfunction()
 
 smw_add_recomp_target(SuperMarioWorldSNESRecomp
     "${SMW_STOCK_GEN_SOURCES}")
+
+# Release-owned mod catalog staged next to the exe. mod_runtime resolves "mods"
+# against the anchored cwd (the exe dir on Windows, the .AppImage's folder on
+# Linux), so the catalog has to sit beside the binary, not inside the source
+# tree. tools/make_release.ps1 and tools/build-linux.sh both pick it up from
+# here, and the Linux packaging step fails outright if it is missing.
+set(SMW_PRELOADED_MODS "${CMAKE_CURRENT_SOURCE_DIR}/mods/preloaded")
+if(EXISTS "${SMW_PRELOADED_MODS}/packages")
+    add_custom_command(TARGET SuperMarioWorldSNESRecomp POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${SMW_PRELOADED_MODS}"
+                "$<TARGET_FILE_DIR:SuperMarioWorldSNESRecomp>/mods")
+endif()
 
 if(SMW_BUILD_COOP)
     smw_add_recomp_target(SuperMarioWorldCoopSNESRecomp
