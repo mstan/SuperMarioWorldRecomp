@@ -327,7 +327,10 @@ if [ -d "\$HERE/usr/bin/lua" ] && [ -w "\$ROMDIR" ]; then
     mkdir -p "\$ROMDIR/lua"
     for example in "\$HERE/usr/bin/lua/"*; do
         target="\$ROMDIR/lua/\$(basename "\$example")"
-        [ -e "\$target" ] || cp "\$example" "\$target"
+        if [ ! -e "\$target" ]; then
+            cp "\$example" "\$target"
+            chmod u+rw "\$target"
+        fi
     done
 fi
 # Seed/refresh the release-owned mod catalog beside the .AppImage. Directory
