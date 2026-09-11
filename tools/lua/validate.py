@@ -131,18 +131,31 @@ def main():
         sx_after = int(values(f"return mainmemory.read_u8(0xe4+{slot})+256*mainmemory.read_u8(0x14e0+{slot})")[0])
         assert sx != sx_after, "spawned sprite did not move"
         checked("spawned Goomba initialized and moved under game simulation", {"slot":slot,"x_before":sx,"x_after":sx_after})
+        assert slot <= 9, "ordinary enemies must be in the stock fireball collision scan"
+        client.eval("demo_hit=false; event.onframeend(function() if mainmemory.read_u8(0x9e+spawn_slot)==0x21 then demo_hit=true end end,'demo.collision')")
         client.eval("shot_slot=smw.fireball(); assert(shot_slot)")
         fx = int(values("return mainmemory.read_u8(0x171f+shot_slot)+256*mainmemory.read_u8(0x1733+shot_slot)")[0])
         client.step(3)
         fx_after = int(values("return mainmemory.read_u8(0x171f+shot_slot)+256*mainmemory.read_u8(0x1733+shot_slot)")[0])
         assert fx != fx_after
         checked("fireball moved under game simulation", {"x_before":fx,"x_after":fx_after})
+        # With both supported fireball slots occupied, do not spill into the
+        # other eight extended slots (their player-fireball OAM offsets are
+        # unaligned). This is the regression for the visible garbage pixels.
+        client.eval("smw.autofire(0); saved_ext={}; for s=0,9 do saved_ext[s]=mainmemory.read_u8(0x170b+s) end; mainmemory.write_u8(0x1713,5); mainmemory.write_u8(0x1714,5)")
+        assert values("return smw.fireball()") == [None]
+        assert values("local unchanged=true; for s=0,7 do unchanged=unchanged and mainmemory.read_u8(0x170b+s)==saved_ext[s] end; return unchanged") == [True]
+        client.eval("for s=0,9 do mainmemory.write_u8(0x170b+s,saved_ext[s]) end")
+        checked("full stock fireball pool never spills into unsupported OAM slots")
         rates = {}
-        for interval in (24,4):
+        for interval in (48,4):
             client.eval(f"smw.autofire(0); for s=0,9 do if mainmemory.read_u8(0x170b+s)==5 then mainmemory.write_u8(0x170b+s,0) end end; smw.shots=0; smw.missed_shots=0; smw.autofire({interval})")
             client.step(96)
             rates[interval] = list(map(int, values("return smw.shots,smw.missed_shots")))
-        assert rates[24][0] == 4 and rates[4][0] > rates[24][0]*2, rates
+            assert values("local valid=true; for s=0,7 do valid=valid and mainmemory.read_u8(0x170b+s)~=5 end; return valid") == [True]
+        assert rates[48][0] == 2 and rates[4][0] > rates[48][0], rates
+        assert values("return demo_hit") == [True], "fireballs did not convert the spawned enemy to a coin"
+        checked("stock fireball collision reaches the allocated enemy slot")
         checked("changing fire cadence changes real projectile creation", rates)
         client.eval("smw.stop()")
         client.command("reset")

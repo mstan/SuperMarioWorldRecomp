@@ -39,7 +39,10 @@ function smw.spawn(id, x, y)
     integer(id, 0, 0xc8, "stock sprite id")
     x = integer(x or (r16(0x94)+64), 0, 65535, "x")
     y = integer(y or r16(0x96), 0, 65535, "y")
-    for s = 11, 0, -1 do
+    -- The stock fireball collision loop checks normal slots 0..9. Slots 10/11
+    -- exist in RAM but are special slots, so don't allocate ordinary enemies
+    -- there: they can render/move while being skipped by projectile collision.
+    for s = 9, 0, -1 do
         if r(0x14c8+s) == 0 then
             -- Mirror ZeroSpriteTables and LoadSpriteTables before status 1
             -- invokes the type-specific INIT. Status 1 alone leaves stale
@@ -61,15 +64,16 @@ function smw.spawn(id, x, y)
             return s
         end
     end
-    error("all 12 normal sprite slots are occupied")
+    error("all 10 ordinary sprite slots are occupied")
 end
 function smw.fireball()
     in_level()
     if r(0x9d) ~= 0 or r(0x71) ~= 0 then return nil end
-    -- Use the engine's ten extended-sprite slots, preserving occupied slots.
-    -- Stock player shooting only allocates slots 8/9; the sprite dispatcher
-    -- can update type-5 projectiles in all ten. No ROM/code patch is needed.
-    for s = 9, 0, -1 do
+    -- Only slots 8/9 have valid player-fireball OAM mappings. The stock draw
+    -- path indexes $02:9FA3: slots 0..7 yield $05,$03,$02,... (unaligned OAM
+    -- offsets), corrupting unrelated sprites. A ten-entry simulation table
+    -- does not imply ten drawable player fireballs. Never steal other slots.
+    for s = 9, 8, -1 do
         if r(0x170b+s) == 0 then
             local right = r(0x76) ~= 0
             local x, y = r16(0x94) + (right and 8 or 0), r16(0x96)+8

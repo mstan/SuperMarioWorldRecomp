@@ -53,12 +53,20 @@ initializes the slot's tables from the ROM and lets the normal game INIT run.
 
 Autofire creates genuine type-5 extended sprites using SMW's own fireball
 state layout; the game handles movement, rendering and collision. This is a
-scripted firing mode, not a patch to the stock Y-button cooldown. It can use
-all ten extended-sprite slots (stock shooting allocates two), never overwrites
-occupied slots, and reports skipped attempts in `smw.missed_shots`. Interval
+scripted firing mode, not a patch to the stock Y-button cooldown. It uses only
+the two supported player-fireball slots (8/9), never overwrites occupied slots,
+and reports skipped attempts in `smw.missed_shots`. Interval
 0 disables it. `smw.fireball()` fires once. Helpers reject the opening message
 and require a playable level; player transitions and sprite-lock frames
 suspend autofire.
+
+The earlier ten-fireball version was incorrect: the stock player-fireball
+renderer maps slots 0..7 to unaligned OAM offsets, producing garbled objects.
+Having ten extended-sprite simulation entries does not mean all ten can draw
+player fireballs. Additional simultaneous fireballs would require deliberate
+renderer/OAM allocation changes. Ordinary spawned enemies now use slots 0..9,
+which the stock fireball collision loop checks, rather than special slots
+10/11. Both restrictions have regression coverage.
 
 Arbitrary Lua is supported, for example:
 
@@ -118,7 +126,7 @@ the successful instance paused for inspection (its test process uses turbo).
 Evidence is written to `build-lua/lua-validation.json` and
 `build-lua/lua-validation-game.log`.
 
-Validated September 10, 2026 with the stock 524288-byte USA ROM:
+Validated September 11, 2026 with the stock 524288-byte USA ROM:
 
 - WRAM signed/endian operations, ROM reads, domain/boundary rejection, Lua
   instruction/memory limit recovery, JSON escaping, TCP fragmentation and
@@ -127,10 +135,14 @@ Validated September 10, 2026 with the stock 524288-byte USA ROM:
   `emu.frameadvance`, input-driven navigation, and VM reset passed.
 - Reached Yoshi's Island 1 (translevel 41); changed Mario's powerup and moved
   him from x=16 to x=32.
-- Goomba in slot 11 transitioned from INIT to active and moved x=96 to x=91
+- Goomba in slot 9 transitioned from INIT to active and moved x=96 to x=91
   after 24 further frames. A fireball moved x=40 to x=49 in three frames.
-- Over 96 frames, interval 24 produced 4 shots; interval 4 produced 16 shots
-  plus 8 attempts skipped because the projectile pool was occupied.
+- With both player-fireball slots occupied, a new shot is skipped without
+  writing a type-5 projectile into any of slots 0..7. Fireballs can hit the
+  spawned enemy and convert it into a coin.
+- Over 96 frames, interval 48 produced 2 shots; interval 4 produced 4 shots
+  plus 20 attempts skipped because the two-slot pool was occupied. The earlier
+  16-shot measurement used the invalid OAM slots and is not a valid result.
 
 The validation is a spike demonstration, not a full-game or full-BizHawk
 compatibility certification.
