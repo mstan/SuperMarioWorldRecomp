@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import socket
 import subprocess
@@ -158,6 +159,56 @@ def main():
         checked("stock fireball collision reaches the allocated enemy slot")
         checked("changing fire cadence changes real projectile creation", rates)
         client.eval("smw.stop()")
+        # Host pool runs the native projectile routine without borrowing live
+        # OAM or extended slots. 100/s must mean 100 actual creations/60 ticks.
+        client.eval("for s=0,9 do mainmemory.write_u8(0x170b+s,0) end; smw.teleport(32,352); mainmemory.write_u8(0x76,1); smw.spawn(0x04,144,320); smw.fire_stream(100)")
+        stream_start = client.command("status")["frame"]
+        client.step(60)
+        stream = values("return smw.stream_status()")[0]
+        metrics = {key:int(value) for key,value in re.findall(r"(\w+)=(\d+)",stream)}
+        assert stream.endswith("error="), stream
+        assert metrics["spawned"] == 100 and metrics["dropped"] == 0, stream
+        assert metrics["peak"] > 2 and metrics["hits"] > 0, stream
+        assert values("local untouched=true; for s=0,9 do untouched=untouched and mainmemory.read_u8(0x170b+s)==0 end; return untouched") == [True]
+        assert client.command("status")["frame"] == stream_start+60
+        checked("100 fireballs/second with native collisions and no live extended-slot writes", metrics)
+        client.eval("smw.fire_stream(0)")
+        client.step(150)
+        drained = values("return smw.stream_status()")[0]
+        drained_metrics = {key:int(value) for key,value in re.findall(r"(\w+)=(\d+)",drained)}
+        assert drained_metrics["spawned"] == 100 and drained_metrics["active"] == 0, drained
+        checked("stopping the stream drains existing projectiles", drained_metrics)
+        client.eval("smw.stop(); held_button=''; event.onframestart(function() joypad.set({Y=held_button=='Y',X=held_button=='X'},1) end,'test.hold'); smw.holdfire(100)")
+        client.step(30)
+        assert "spawned=0 " in values("return smw.stream_status()")[0]
+        held_counts = []
+        for button, expected in (("Y",100),("X",200)):
+            client.eval(f"held_button='{button}'")
+            client.step(60)
+            held = values("return smw.stream_status()")[0]
+            assert f"spawned={expected} " in held and "dropped=0 " in held, held
+            client.eval("held_button=''")
+            client.step(30)
+            released = values("return smw.stream_status()")[0]
+            assert f"spawned={expected} " in released and "rate=0 " in released, released
+            held_counts.append(held)
+        client.eval("smw.holdfire(0); held_button='Y'")
+        client.step(30)
+        assert "spawned=200 " in values("return smw.stream_status()")[0]
+        checked("holding either fire button emits 100/s; release and disable stop emission", held_counts)
+        client.eval("smw.stop(); held_button=''")
+        example = exe.parent / "lua/100_fireballs.lua"
+        client.eval(example.read_text())
+        client.step(30)
+        assert "spawned=0 " in values("return smw.stream_status()")[0]
+        client.eval("held_button='Y'")
+        client.step(60)
+        example_metrics = values("return smw.stream_status()")[0]
+        assert "spawned=100 " in example_metrics and "dropped=0 " in example_metrics, example_metrics
+        client.eval("held_button=''")
+        client.step(30)
+        assert "rate=0 spawned=100 " in values("return smw.stream_status()")[0]
+        checked("bundled standalone 100_fireballs.lua starts/stops on held input", example_metrics)
         client.command("reset")
         assert values("return smw,counter,joypad.get(1).Y") == [None,None,False]
         client.step(2)

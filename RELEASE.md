@@ -27,6 +27,13 @@ The co-op executable is additive and opt-in
 (`-DSMW_BUILD_COOP=ON` / `--coop`); ship it only when the release notes
 call for it.
 
+For releases that include Lua (v0.12.0 onward), configure the stock Windows
+build with `-DSNESRECOMP_ENABLE_LUA=ON` and pass `--lua` to `build-linux.sh`.
+The listener remains runtime opt-in through `SNESRECOMP_LUA_PORT`. Both
+packages must include `lua/100_fireballs.lua`, its README, the client/helpers
+and Lua's license. AppImage first launch seeds missing examples beside itself
+without overwriting user edits. Co-op currently rejects Lua builds.
+
 ## Windows
 
 ```powershell

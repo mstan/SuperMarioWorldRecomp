@@ -37,7 +37,7 @@ set(SNESRECOMP_ROOT "${CMAKE_SOURCE_DIR}/snesrecomp" CACHE PATH
     "Path to the snesrecomp checkout used by this game")
 include(${SNESRECOMP_ROOT}/runner/runner.cmake)
 if(SNESRECOMP_ENABLE_LUA AND NOT TARGET snesrecomp_lua)
-    message(FATAL_ERROR "SNESRECOMP_ENABLE_LUA requires the paired snesrecomp Lua spike checkout")
+    message(FATAL_ERROR "SNESRECOMP_ENABLE_LUA requires snesrecomp with Lua bridge support")
 endif()
 if(SNESRECOMP_ENABLE_LUA AND SMW_BUILD_COOP)
     message(FATAL_ERROR "The Lua TCP spike currently supports the stock single-player target only")
@@ -165,6 +165,9 @@ set(SMW_RUNTIME_SOURCES
 if(NOT EXISTS "${SNESRECOMP_ROOT}/runner/src/mod_audio.c")
     list(APPEND SMW_RUNTIME_SOURCES src/mod_audio.c)
 endif()
+if(SNESRECOMP_ENABLE_LUA)
+    list(APPEND SMW_RUNTIME_SOURCES src/lua_fire_stream.c)
+endif()
 
 if(SNESRECOMP_ENABLE_TRACE)
     set(_SMW_TRACE 1)
@@ -225,6 +228,21 @@ function(smw_add_recomp_target target_name generated_sources)
     recomp_target_launcher_ui(${target_name}
         CONSOLE snes
         BOXART ${CMAKE_SOURCE_DIR}/recomp/launcher/boxart.tga)
+    if(SNESRECOMP_ENABLE_LUA)
+        set(_lua_dir "$<TARGET_FILE_DIR:${target_name}>/lua")
+        add_custom_command(TARGET ${target_name} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/lua ${_lua_dir}
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${CMAKE_SOURCE_DIR}/tools/lua/smw.lua ${_lua_dir}/smw.lua
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${SNESRECOMP_ROOT}/tools/lua_tcp.py ${_lua_dir}/lua_tcp.py)
+        set_property(TARGET ${target_name} APPEND PROPERTY LINK_DEPENDS
+            ${CMAKE_SOURCE_DIR}/lua/100_fireballs.lua
+            ${CMAKE_SOURCE_DIR}/lua/README.md
+            ${CMAKE_SOURCE_DIR}/lua/LICENSE-Lua.txt
+            ${CMAKE_SOURCE_DIR}/tools/lua/smw.lua
+            ${SNESRECOMP_ROOT}/tools/lua_tcp.py)
+    endif()
 endfunction()
 
 smw_add_recomp_target(SuperMarioWorldSNESRecomp

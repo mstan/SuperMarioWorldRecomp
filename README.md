@@ -74,6 +74,14 @@ See [`RELEASE.md`](RELEASE.md) for the latest release notes.
 
 The ROM is **never** redistributed — supply your own dump.
 
+## Optional Lua scripting
+
+The v0.12.0 Windows/Linux packages include an opt-in localhost Lua server and
+a `lua/` folder with a **100-fireballs-per-second** hold-to-fire example.
+See [lua/README.md](lua/README.md) for activation and controls. Nothing runs or
+listens during ordinary play. Source builds enable this with
+`-DSNESRECOMP_ENABLE_LUA=ON`; the framework option defaults OFF.
+
 ## Widescreen
 
 The one-player launcher's **Aspect ratio** setting offers three view modes: **Standard

@@ -96,6 +96,17 @@ if ($Variant -eq 'coop') {
 }
 Copy-Item -LiteralPath (Join-Path $root 'README.md') -Destination $stage
 Copy-Item -LiteralPath $assets -Destination $stage -Recurse
+$luaEnabled = Select-String -LiteralPath (Join-Path $build 'CMakeCache.txt') `
+  -Pattern '^SNESRECOMP_ENABLE_LUA:BOOL=ON$' -Quiet
+if ($luaEnabled) {
+  $luaPayload = Join-Path $build 'lua'
+  foreach ($name in @('100_fireballs.lua', 'README.md', 'LICENSE-Lua.txt', 'lua_tcp.py', 'smw.lua')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $luaPayload $name))) {
+      throw "Lua-enabled release is missing lua/$name"
+    }
+  }
+  Copy-Item -LiteralPath $luaPayload -Destination $stage -Recurse
+}
 # Release-owned mod catalog, when the build stages one. Ships as a nested
 # directory tree, which is exactly what made portable ZIP entry names matter
 # (see the archive writer below).

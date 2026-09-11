@@ -30,6 +30,7 @@
 # Usage:
 #   bash tools/build-linux.sh                  # prod AppImage (default)
 #   bash tools/build-linux.sh --version 0.10.0 # stamp + name a release build
+#   bash tools/build-linux.sh --lua            # include opt-in Lua + examples
 #   bash tools/build-linux.sh --coop           # simultaneous co-op AppImage
 #   bash tools/build-linux.sh --config debug   # debug build (TCP server + rings)
 #   bash tools/build-linux.sh --regen          # regen src/gen first (tools/regen.sh)
@@ -86,6 +87,7 @@ DO_REGEN=0
 DO_RUN=0
 DO_PACKAGE=1
 VERSION=""
+ENABLE_LUA=OFF
 JOBS="$(nproc 2>/dev/null || echo 4)"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$REPO/release-linux"
@@ -98,6 +100,7 @@ while [ $# -gt 0 ]; do
     --prod) CONFIG="prod"; shift;;
     --debug) CONFIG="debug"; shift;;
     --version) VERSION="$2"; shift 2;;
+    --lua) ENABLE_LUA=ON; shift;;
     --regen) DO_REGEN=1; shift;;
     --run) DO_RUN=1; shift;;
     --no-package) DO_PACKAGE=0; shift;;
@@ -128,6 +131,7 @@ if [ -z "$VERSION" ]; then
   [ -n "$VERSION" ] || VERSION="dev"
 fi
 FLAGS+=( -DSNESRECOMP_BUILD_VERSION="$VERSION" )
+FLAGS+=( -DSNESRECOMP_ENABLE_LUA="$ENABLE_LUA" )
 
 # SDL3 is the default; SNESRECOMP_SDL_BACKEND=SDL2 selects the compatibility
 # package. Prefer the host package over any cross-platform dependency prefix.
@@ -263,6 +267,12 @@ $LINUXDEPLOY --appdir "$APPDIR" --executable "$BIN" \
 }
 echo "      staging launcher assets/ -> AppDir/usr/bin/assets"
 cp -r "$(dirname "$BIN")/assets" "$APPDIR/usr/bin/assets"
+if [ "$ENABLE_LUA" = ON ]; then
+  for name in 100_fireballs.lua README.md LICENSE-Lua.txt lua_tcp.py smw.lua; do
+    [ -f "$(dirname "$BIN")/lua/$name" ] || { echo "ERROR: Lua payload missing $name" >&2; exit 1; }
+  done
+  cp -r "$(dirname "$BIN")/lua" "$APPDIR/usr/bin/lua"
+fi
 
 # Extra read-only payload (co-op IPS). Never user state.
 for rel in "${EXTRA_PAYLOAD[@]}"; do
@@ -311,6 +321,14 @@ if [ -f "\$HERE/usr/bin/smw_coop.ips" ]; then
 fi
 SELF="\${APPIMAGE:-\$0}"
 ROMDIR="\$(dirname "\$(readlink -f "\$SELF")")"
+# Seed examples for the user to edit; never overwrite an existing script.
+if [ -d "\$HERE/usr/bin/lua" ] && [ -w "\$ROMDIR" ]; then
+    mkdir -p "\$ROMDIR/lua"
+    for example in "\$HERE/usr/bin/lua/"*; do
+        target="\$ROMDIR/lua/\$(basename "\$example")"
+        [ -e "\$target" ] || cp "\$example" "\$target"
+    done
+fi
 # Seed/refresh the release-owned mod catalog beside the .AppImage. Directory
 # trees get mkdir -p + cp of their CONTENTS (never a file where a dir belongs,
 # never a dir where a file belongs); user files are left alone entirely.

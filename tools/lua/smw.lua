@@ -5,7 +5,9 @@
 local r, w = mainmemory.read_u8, mainmemory.write_u8
 local r16, w16 = mainmemory.read_u16_le, mainmemory.write_u16_le
 event.unregisterbyname("smw.autofire")
+event.unregisterbyname("smw.holdfire")
 event.unregisterbyname("smw.invincible")
+if game and game.command then game.command("fire_stream", "0") end
 smw = {shots = 0, missed_shots = 0, fire_interval = 0}
 
 local function integer(value, lo, hi, label)
@@ -93,6 +95,8 @@ end
 function smw.autofire(interval)
     integer(interval, 0, 600, "interval in frames (0 disables)")
     event.unregisterbyname("smw.autofire")
+    event.unregisterbyname("smw.holdfire")
+    if game and game.command then game.command("fire_stream", "0") end
     smw.fire_interval = interval
     if interval == 0 then return end
     local next_frame = emu.framecount()
@@ -117,5 +121,32 @@ end
 function smw.stop()
     smw.autofire(0)
     event.unregisterbyname("smw.invincible")
+    if game and game.command then game.command("fire_stream_reset") end
+end
+function smw.fire_stream(rate)
+    in_level()
+    integer(rate,0,1000,"fireballs per second")
+    smw.autofire(0)
+    return game.command("fire_stream",tostring(rate))
+end
+function smw.stream_status()
+    return game.command("fire_stream_status")
+end
+function smw.holdfire(rate)
+    in_level()
+    integer(rate,0,1000,"fireballs per second (0 disables)")
+    smw.autofire(0)
+    if rate == 0 then return end
+    local previous = 0
+    event.onframestart(function()
+        local buttons = joypad.get(1)
+        local firing = (buttons.Y or buttons.X) and r(0x100) == 0x14
+            and r(0x109) == 0 and r(0x71) == 0
+        local requested = firing and rate or 0
+        if requested ~= previous then
+            game.command("fire_stream",tostring(requested))
+            previous = requested
+        end
+    end,"smw.holdfire")
 end
 return "SMW helpers loaded"

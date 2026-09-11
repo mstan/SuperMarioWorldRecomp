@@ -6,6 +6,7 @@
 #include "debug_server.h"
 #if SNESRECOMP_ENABLE_LUA
 #include "lua_bridge.h"
+#include "lua_fire_stream.h"
 #endif
 #include "desktop/sdl_compat.h"
 #ifdef _WIN32
@@ -521,6 +522,9 @@ static void DrawPpuFrameWithPerf(void) {
   if (g_display_perf)
     RenderNumber(pixel_buffer + pitch * render_scale, pitch, g_curr_fps, render_scale == 4);
 
+#if SNESRECOMP_ENABLE_LUA
+  smw_fire_stream_draw(g_ppu, pixel_buffer, pitch, g_snes_width, g_snes_height);
+#endif
   g_renderer_funcs.EndDraw();
 }
 
@@ -1676,6 +1680,8 @@ error_reading:;
         fprintf(stderr, "[lua] Could not start requested Lua TCP server\n");
         return 1;
       }
+      smw_fire_stream_init(snes->ram, kRom, kRom_SIZE);
+      lua_bridge_set_game_command_handler(smw_fire_stream_command);
     }
   }
 #endif
@@ -2086,6 +2092,7 @@ error_reading:;
 #endif
       RtlRunFrame(inputs);
 #if SNESRECOMP_ENABLE_LUA
+      smw_fire_stream_tick();
       lua_bridge_frame_end();
 #endif
     }
