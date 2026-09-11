@@ -63,6 +63,12 @@ if [ -n "$mod_manifest" ]; then
     test -f "$state1/mods/$mod_manifest" || {
         echo "FAIL: release mod catalog not seeded beside the AppImage" >&2; exit 1; }
 fi
+if [ -f "$appdir/usr/bin/lua/100_fireballs.lua" ]; then
+    cmp "$appdir/usr/bin/lua/100_fireballs.lua" "$state1/lua/100_fireballs.lua" || {
+        echo "FAIL: Lua example not seeded beside the AppImage" >&2; exit 1; }
+    printf '\n-- user-owned Lua marker\n' >> "$state1/lua/100_fireballs.lua"
+    lua_before=$(cat "$state1/lua/100_fireballs.lua")
+fi
 
 # 2. User state survives a relaunch: an edited config line and a
 #    user-installed third-party mod package.
@@ -71,6 +77,10 @@ cfg_before=$(cat "$state1/config.ini")
 mkdir -p "$state1/mods/packages/user.thirdparty.example/1.0.0"
 printf 'user-owned\n' > "$state1/mods/packages/user.thirdparty.example/1.0.0/manifest.toml"
 run_apprun "$state1/SuperMarioWorld.AppImage"
+if [ -n "${lua_before:-}" ]; then
+    test "$(cat "$state1/lua/100_fireballs.lua")" = "$lua_before" || {
+        echo "FAIL: user Lua edits clobbered by relaunch" >&2; exit 1; }
+fi
 test "$(cat "$state1/config.ini")" = "$cfg_before" || {
     echo "FAIL: user config.ini edit clobbered by relaunch" >&2; exit 1; }
 test "$(cat "$state1/mods/packages/user.thirdparty.example/1.0.0/manifest.toml")" = "user-owned" || {
