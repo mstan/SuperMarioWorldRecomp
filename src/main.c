@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "debug_server.h"
+#if SNESRECOMP_ENABLE_LUA
+#include "lua_bridge.h"
+#endif
 #include "desktop/sdl_compat.h"
 #ifdef _WIN32
 #include <windows.h>
@@ -1662,6 +1665,20 @@ error_reading:;
   // `extern` here, or the call bypasses the stub and only fails at link
   // time on a non-Windows production build.
   debug_server_set_ram(snes->ram, 0x20000);
+#if SNESRECOMP_ENABLE_LUA
+  {
+    const char *port_text = getenv("SNESRECOMP_LUA_PORT");
+    if (port_text && *port_text) {
+      char *end;
+      long port = strtol(port_text, &end, 10);
+      if (*end || port < 1 || port > 65535 ||
+          lua_bridge_init(snes->ram, 0x20000, kRom, kRom_SIZE, (int)port) != 0) {
+        fprintf(stderr, "[lua] Could not start requested Lua TCP server\n");
+        return 1;
+      }
+    }
+  }
+#endif
 
 #ifdef ENABLE_ORACLE_BACKEND
   // Start the emulator-oracle backend with the same ROM. Gated on the
@@ -1978,6 +1995,13 @@ error_reading:;
         SetAudioPaused(audiopaused != 0);
     }
 
+#if SNESRECOMP_ENABLE_LUA
+    lua_bridge_poll();
+    if (lua_bridge_paused()) {
+      SDL_Delay(16);
+      continue;
+    }
+#endif
     if (g_paused) {
       SDL_Delay(16);
       continue;
@@ -2056,8 +2080,14 @@ error_reading:;
                (uint32)g_gamepad[1].axis_buttons << 12;
       inputs |= TickScript();
       inputs |= debug_server_get_controller_inputs();
-      RtlRunFrame(inputs | GetActiveControllers() |
-                  debug_server_get_controller_active_mask());
+      inputs |= GetActiveControllers() | debug_server_get_controller_active_mask();
+#if SNESRECOMP_ENABLE_LUA
+      inputs = lua_bridge_frame_start(inputs);
+#endif
+      RtlRunFrame(inputs);
+#if SNESRECOMP_ENABLE_LUA
+      lua_bridge_frame_end();
+#endif
     }
     stall_t_run = SDL_GetPerformanceCounter();
 
@@ -2366,6 +2396,9 @@ error_reading:;
   SwitchImpl_Exit();
 #endif
 
+#if SNESRECOMP_ENABLE_LUA
+  lua_bridge_shutdown();
+#endif
   SDL_Quit();
   return 0;
 }

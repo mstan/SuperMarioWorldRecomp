@@ -36,6 +36,12 @@ set(SNESRECOMP_ENABLE_MODS ON CACHE BOOL
 set(SNESRECOMP_ROOT "${CMAKE_SOURCE_DIR}/snesrecomp" CACHE PATH
     "Path to the snesrecomp checkout used by this game")
 include(${SNESRECOMP_ROOT}/runner/runner.cmake)
+if(SNESRECOMP_ENABLE_LUA AND NOT TARGET snesrecomp_lua)
+    message(FATAL_ERROR "SNESRECOMP_ENABLE_LUA requires the paired snesrecomp Lua spike checkout")
+endif()
+if(SNESRECOMP_ENABLE_LUA AND SMW_BUILD_COOP)
+    message(FATAL_ERROR "The Lua TCP spike currently supports the stock single-player target only")
+endif()
 set(RECOMP_UI_ROOT "${CMAKE_SOURCE_DIR}/recomp-ui" CACHE PATH
     "Path to the recomp-ui checkout used by this game")
 include(${RECOMP_UI_ROOT}/recomp_ui.cmake)
@@ -130,7 +136,6 @@ set(SMW_RUNTIME_SOURCES
     ${SNESRECOMP_RUNNER_SOURCES}
     src/config.c
     src/foreign_controller.c
-    src/mod_audio.c
     src/mod_external_rom_compat.c
     src/main.c
     src/opengl.c
@@ -154,6 +159,12 @@ set(SMW_RUNTIME_SOURCES
     third_party/gl_core/gl_core_3_1.c
     ${SMW_OVERRIDE_SOURCES}
 )
+
+# Newer framework checkouts provide this shared helper. Retain compatibility
+# with the game's older submodule pin without linking both implementations.
+if(NOT EXISTS "${SNESRECOMP_ROOT}/runner/src/mod_audio.c")
+    list(APPEND SMW_RUNTIME_SOURCES src/mod_audio.c)
+endif()
 
 if(SNESRECOMP_ENABLE_TRACE)
     set(_SMW_TRACE 1)
