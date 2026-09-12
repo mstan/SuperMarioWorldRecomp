@@ -235,12 +235,16 @@ function(smw_add_recomp_target target_name generated_sources)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${CMAKE_SOURCE_DIR}/tools/lua/smw.lua ${_lua_dir}/smw.lua
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${CMAKE_SOURCE_DIR}/tools/lua/lua_console.py ${_lua_dir}/lua_console.py
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${SNESRECOMP_ROOT}/tools/lua_tcp.py ${_lua_dir}/lua_tcp.py)
         set_property(TARGET ${target_name} APPEND PROPERTY LINK_DEPENDS
             ${CMAKE_SOURCE_DIR}/lua/100_fireballs.lua
             ${CMAKE_SOURCE_DIR}/lua/README.md
             ${CMAKE_SOURCE_DIR}/lua/LICENSE-Lua.txt
+            ${CMAKE_SOURCE_DIR}/lua/LICENSE-SuperAstra.txt
             ${CMAKE_SOURCE_DIR}/tools/lua/smw.lua
+            ${CMAKE_SOURCE_DIR}/tools/lua/lua_console.py
             ${SNESRECOMP_ROOT}/tools/lua_tcp.py)
     endif()
 endfunction()

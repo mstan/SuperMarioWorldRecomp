@@ -22,6 +22,12 @@ With Python 3 installed, run in that same directory:
 python lua/lua_tcp.py load lua/100_fireballs.lua
 ```
 
+For a SuperAstra-style companion window instead of terminal commands:
+
+```powershell
+python lua/lua_console.py
+```
+
 ## Linux / Steam Deck
 
 On first launch the AppImage copies its bundled `lua/` examples beside itself
@@ -31,6 +37,7 @@ without replacing existing files. From that directory:
 SNESRECOMP_LUA_PORT=4380 ./SuperMarioWorldRecomp-linux-0.12.0-x86_64.AppImage
 # In a second terminal, after starting the game through the launcher:
 python3 lua/lua_tcp.py load lua/100_fireballs.lua
+python3 lua/lua_console.py
 ```
 
 ## Play and experiment
@@ -44,6 +51,13 @@ the title screen and waits for a playable level.
 python lua/lua_tcp.py eval 'return game.command("fire_stream_status")'
 python lua/lua_tcp.py reset
 ```
+
+`lua_console.py` connects to the same local port. Type Lua into the top box,
+then use **Eval** for one-shot expressions/statements or **Run Script** for
+scripts that call `emu.frameadvance()`. **Local Shortcuts** accepts a few
+plain phrases such as `status`, `fire stream 100`, `hold fire`, `invincible`,
+and `stop effects`. The interface structure and visual styling are adapted
+from SuperAstra under its MIT license; see `LICENSE-SuperAstra.txt`.
 
 `reset` removes the script and extra projectiles. Close the game and launch
 without `SNESRECOMP_LUA_PORT` for normal play with no listener. In PowerShell,
