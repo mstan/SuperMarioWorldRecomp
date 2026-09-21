@@ -47,8 +47,7 @@ cmake -S . -B build-recompui -G Ninja -DCMAKE_BUILD_TYPE=Release `
   -DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe `
   -DSNESRECOMP_ENABLE_TRACE=OFF -DSNESRECOMP_SDL_BACKEND=SDL3 `
   -DSNESRECOMP_ENABLE_LUA=ON `
-  -DSDL3_DIR=F:/Projects/snesrecomp/_tools/SDL3-3.4.12/x86_64-w64-mingw32/lib/cmake/SDL3 `
-  "-DSNESRECOMP_BUILD_VERSION:STRING=0.13.0"
+  "-DSNESRECOMP_BUILD_VERSION:STRING=0.13.2"
 
 # 2. build. Keep -j modest: the generated banks are multi-MB TUs at -O3,
 #    and an over-subscribed build kills the compiler with NO diagnostic
@@ -56,9 +55,39 @@ cmake -S . -B build-recompui -G Ninja -DCMAKE_BUILD_TYPE=Release `
 cmake --build build-recompui --target SuperMarioWorldSNESRecomp -j 4
 
 # 3. package
-powershell -File tools\make_release.ps1 -Version 0.13.0 `
+powershell -File tools\make_release.ps1 -Version 0.13.2 `
   -BuildDir build-recompui -RuntimeBinDir C:\msys64\mingw64\bin
 ```
+
+### Runtime DLLs are derived, not listed
+
+Step 1 deliberately does **not** pin `-DSDL3_DIR`. It used to point at a
+locally built SDL3 3.4.12; in practice the build resolved MSYS2's SDL3
+instead, and nobody noticed, because the two are interchangeable at the
+source level. They are not interchangeable at package level: MSYS2's
+3.4.14 links `libiconv-2.dll` and 3.4.12 does not.
+
+v0.13.1 shipped 3.4.14 without `libiconv-2.dll`, because
+`make_release.ps1` staged a hardcoded list of runtime DLLs. Players saw
+`0xC0000135` if they had no `libiconv-2.dll` at all, and `0xC000007B`
+("The application was unable to start correctly") if their PATH happened
+to carry a **32-bit** one - 32-bit Git for Windows, GTK, PHP and GIMP all
+ship one, the loader binds it, and the process dies before `main()`. The
+gap is invisible on a dev box because MSYS2 and Git for Windows both put a
+64-bit copy on PATH.
+
+`make_release.ps1` no longer enumerates DLLs. It stages the SDL backend
+and then calls `Copy-RuntimeDllClosure` / `Assert-RuntimeDllClosure` from
+`snesrecomp/tools/release/RuntimeDllClosure.ps1`, which walks the real PE
+import graph, pulls in the transitive closure of non-OS dependencies, and
+then re-reads the stage to assert that every import resolves inside the
+package and every staged binary is x64. An unresolvable dependency or a
+wrong-architecture DLL **fails the release** instead of shipping.
+
+So: whichever SDL3 the build resolves, its dependencies ship with it. To
+sanity-check a package by hand, extract it and launch the exe with `PATH`
+scrubbed to `C:\Windows\system32;C:\Windows` - a package that starts
+there will start anywhere.
 
 The zip lands in `release-stage\` (gitignored). `make_release.ps1`
 writes **portable (`/`) ZIP entry names** and then re-reads the archive
