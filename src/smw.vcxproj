@@ -463,4 +463,5 @@
     <Exec WorkingDirectory="$(SolutionDir)" Command="python tools/apply_renderer_hooks.py --gen-dir src/gen" />
     <Exec WorkingDirectory="$(SolutionDir)" Command="python tools/apply_overrides.py --check --gen-dir src/gen --manifest overrides/falcon/overrides.manifest" />
   </Target>
+  <Import Project="$(SolutionDir)snesrecomp\runner\msbuild\shader_presets.targets" />
 </Project>

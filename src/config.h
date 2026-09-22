@@ -45,6 +45,7 @@ typedef struct Config {
   int window_height;
   bool new_renderer;
   bool ignore_aspect_ratio;
+  uint8 display_aspect; /* SnesDisplayAspect; independent of widescreen mods. */
   uint8 fullscreen;
   uint8 window_scale;
   bool enable_audio;

@@ -23,15 +23,31 @@ static void geometry(void) {
   SmwVideoSettings s={true,true,0};
   const int cases[][3]={{800,600,256},{1920,1080,342},{3440,1440,458},{3840,1080,682},{10000,900,2134},{2759,777,682},{600,1000,256}};
   for(unsigned i=0;i<sizeof(cases)/sizeof(*cases);++i) {
-    SmwViewport v=SmwCalculateViewport(&s,cases[i][0],cases[i][1]);
+    SmwViewport v=SmwCalculateViewport(&s,cases[i][0],cases[i][1],kSnesDisplayAspect_Crt4x3);
     assert(v.width==cases[i][2]);
     int x,y,w,h;SmwDestination(v,cases[i][0],cases[i][1],&x,&y,&w,&h);
     assert(w>0 && h>0 && x>=0 && y>=0 && x+w<=cases[i][0] && y+h<=cases[i][1]);
   }
-  assert(SmwCalculateViewport(&s,0,0).width==256);
-  assert(SmwCalculateViewport(&s,2147483647,1).width==SMW_RENDER_MAX_WIDTH);
-  s.aspect=100.0/9;assert(SmwCalculateViewport(&s,640,480).width==2134);
-  s.enabled=false;assert(SmwCalculateViewport(&s,10000,900).width==256);
+  assert(SmwCalculateViewport(&s,0,0,kSnesDisplayAspect_Crt4x3).width==256);
+  assert(SmwCalculateViewport(&s,2147483647,1,kSnesDisplayAspect_Crt4x3).width==SMW_RENDER_MAX_WIDTH);
+  s.aspect=100.0/9;assert(SmwCalculateViewport(&s,640,480,kSnesDisplayAspect_Crt4x3).width==2134);
+  s.enabled=false;assert(SmwCalculateViewport(&s,10000,900,kSnesDisplayAspect_Crt4x3).width==256);
+  const int widths[] = {342,398,456};
+  const double pixel_aspects[] = {7.0/6,1,7.0/8};
+  for (int setting=0;setting<kSnesDisplayAspect_Count;++setting) {
+    SnesDisplayAspect aspect=(SnesDisplayAspect)setting;
+    s.enabled=true;s.aspect=0;
+    SmwViewport fit=SmwCalculateViewport(&s,1920,1080,aspect);
+    assert(fit.width==widths[setting] && fabs(fit.aspect-16.0/9)<1e-9);
+    int x,y,w,h;SmwDestination(fit,1920,1080,&x,&y,&w,&h);
+    assert(x==0 && y==0 && w==1920 && h==1080);
+    assert(fabs((double)w*224/(h*fit.width)-pixel_aspects[setting])<.006);
+    s.aspect=16.0/9;
+    assert(SmwCalculateViewport(&s,800,600,aspect).width==widths[setting]);
+    s.enabled=false;
+    SmwViewport stock=SmwCalculateViewport(&s,1920,1080,aspect);
+    assert(stock.width==256 && fabs(stock.aspect-256.0/224*pixel_aspects[setting])<1e-9);
+  }
   SmwViewport v={2134,939,100.0/9};
   assert(SmwViewOffset(v,0,8192)==0);
   assert(SmwViewOffset(v,4096,8192)==939);

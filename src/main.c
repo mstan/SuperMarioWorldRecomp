@@ -53,6 +53,7 @@
  * extraction of launcher_ng, consumed as a junction/submodule. recomp_ui.cmake
  * defines RECOMP_LAUNCHER. SMW drives it as the SNES profile
  * (launcher_profile_apply("snes", ...)). */
+#include "desktop/launcher_video.h"
 #include "recomp_launcher.h"   /* recomp_launcher_run_window() */
 #include "launcher_profile.h"  /* launcher_profile_apply("snes", &gi) â€” SNES identity */
 #elif defined(SNES_LAUNCHER)
@@ -370,6 +371,9 @@ void ChangeWindowScale(int scale_step) {
        (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_MINIMIZED |
         SDL_WINDOW_MAXIMIZED)) != 0)
     return;
+  int base_width = SnesDisplayAspect_ComputeWindowWidth(
+      g_snes_width, g_snes_height, g_snes_height,
+      SnesDisplayAspect_Clamp(g_config.display_aspect));
   int max_scale = kMaxWindowScale;
   SDL_Rect bounds;
   int bt = -1, bl, bb, br;
@@ -383,13 +387,13 @@ void ChangeWindowScale(int scale_step) {
       bt = 31;
     }
     // Allow a scale level slightly above the max that fits on screen
-    int mw = (bounds.w - bl - br + g_snes_width / 4) / g_snes_width;
+    int mw = (bounds.w - bl - br + base_width / 4) / base_width;
     int mh = (bounds.h - bt - bb + g_snes_height / 4) / g_snes_height;
     max_scale = IntMin(mw, mh);
   }
   int new_scale = IntMax(IntMin(g_current_window_scale + scale_step, max_scale), 1);
   g_current_window_scale = new_scale;
-  int w = new_scale * g_snes_width;
+  int w = new_scale * base_width;
   int h = new_scale * g_snes_height;
 
   //SDL_RenderSetLogicalSize(g_renderer, w, h);
@@ -675,7 +679,8 @@ static void SdlRenderer_EndDraw(void) {
 static void UpdateWidescreen(void) {
   int w = 0, h = 0;
   g_renderer_funcs.GetOutputSize(&w, &h);
-  SmwViewport view = SmwCalculateViewport(&g_smw_video, w, h);
+  SmwViewport view = SmwCalculateViewport(&g_smw_video, w, h,
+      SnesDisplayAspect_Clamp(g_config.display_aspect));
   if (view.width == g_smw_viewport.width && view.aspect == g_smw_viewport.aspect) return;
   g_smw_viewport = view;
   g_snes_width = view.width;
@@ -1109,7 +1114,6 @@ int main(int argc, char** argv) {
 #if defined(RECOMP_LAUNCHER)
       ls.widescreen    = 0;
       ls.adaptive_view = 0;
-      ls.aspect_index  = g_config.widescreen_mode;
 #else
       ls.widescreen    = g_config.widescreen_mode != kWidescreenMode_Standard;
 #endif
@@ -1172,9 +1176,8 @@ int main(int argc, char** argv) {
 #if SNESRECOMP_ENABLE_MODS
       gi.mods = mods_ready ? snes_mod_runtime_launcher_provider_c() : NULL;
 #endif
-      /* No Display aspect selector: the widescreen mod package owns this
-       * setting now, so the Mods page is the single authoritative state.
-       * (Same migration as Mega Man X / X2 / Super Mario Kart.) */
+      SnesLauncherVideo_Configure(&ls, &gi, 1, 1,
+          g_config.display_aspect, g_config.shader);
 #else
 #ifdef SMW_COOP_BUILD
       gi.widescreen_supported = 0;
@@ -1239,9 +1242,10 @@ int main(int argc, char** argv) {
         g_config.ignore_aspect_ratio = ls.ignore_aspect != 0;
         g_config.linear_filtering    = ls.linear_filter != 0;
 #if defined(RECOMP_LAUNCHER)
-        g_config.widescreen_mode     = (uint8)IntMax(
-            kWidescreenMode_Standard,
-            IntMin(ls.aspect_index, kWidescreenMode_Adaptive));
+        g_config.display_aspect = (uint8)SnesDisplayAspect_Clamp(ls.aspect_index);
+        static char shader_path[sizeof(ls.shader_path)];
+        snprintf(shader_path, sizeof(shader_path), "%s", ls.shader_path);
+        g_config.shader = shader_path[0] ? shader_path : NULL;
 #else
         g_config.widescreen_mode     = ls.widescreen ?
             kWidescreenMode_Fixed16x9 : kWidescreenMode_Standard;
@@ -1442,7 +1446,8 @@ int main(int argc, char** argv) {
 #endif
   g_ws_active = false;
   g_ws_extra = 0;
-  g_smw_viewport = SmwCalculateViewport(&g_smw_video, 4, 3);
+  g_smw_viewport = SmwCalculateViewport(&g_smw_video, 0, 0,
+      SnesDisplayAspect_Clamp(g_config.display_aspect));
   g_snes_width = g_smw_viewport.width;
   extern void SmwRendererInstallHooks(void);
   SmwRendererInstallHooks();
@@ -1488,7 +1493,9 @@ int main(int argc, char** argv) {
   keybinds_init(NULL);
 
   bool custom_size = g_config.window_width != 0 && g_config.window_height != 0;
-  int window_width = custom_size ? g_config.window_width : g_current_window_scale * g_snes_width;
+  int window_width = custom_size ? g_config.window_width : g_current_window_scale *
+      SnesDisplayAspect_ComputeWindowWidth(g_snes_width, g_snes_height, g_snes_height,
+          SnesDisplayAspect_Clamp(g_config.display_aspect));
   int window_height = custom_size ? g_config.window_height : g_current_window_scale * g_snes_height;
 
 session_reboot:
@@ -2212,6 +2219,8 @@ error_reading:;
     gi.config_path = config_file;
     gi.netplay_supported = 1;
     gi.netplay = SmwNetplayLauncherCallbacks();
+    SnesLauncherVideo_Configure(&ls, &gi, 1, 1,
+        g_config.display_aspect, g_config.shader);
     gi.resume_netplay_room = 1;
     gi.resume_netplay_endpoint = resume_endpoint;
 
@@ -2231,6 +2240,10 @@ error_reading:;
       g_config.fullscreen = (uint8)ls.fullscreen;
       g_config.ignore_aspect_ratio = ls.ignore_aspect != 0;
       g_config.linear_filtering = ls.linear_filter != 0;
+      g_config.display_aspect = (uint8)SnesDisplayAspect_Clamp(ls.aspect_index);
+      static char rematch_shader_path[sizeof(ls.shader_path)];
+      snprintf(rematch_shader_path, sizeof(rematch_shader_path), "%s", ls.shader_path);
+      g_config.shader = rematch_shader_path[0] ? rematch_shader_path : NULL;
       g_config.widescreen_mode = kWidescreenMode_Standard;
       g_config.widescreen_hud = false;
       g_config.enable_gamepad[0] = ls.player_src[0] == 2;
@@ -2824,6 +2837,8 @@ static const char kDefaultConfigIniContent[] =
   "\n"
   "# Don't keep the aspect ratio\n"
   "IgnoreAspectRatio = 0\n"
+  "# Pixel proportions (also in adaptive widescreen): 4:3, 8:7, or 1:1\n"
+  "DisplayAspect = 4:3\n"
   "\n"
   "# Remove the sprite limits per scan line\n"
   "NoSpriteLimits = 1\n"

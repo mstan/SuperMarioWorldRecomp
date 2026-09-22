@@ -148,6 +148,7 @@ function(smw_add_recomp_target target_name generated_sources)
     )
     snesrecomp_target_post_mortem(${target_name})
     snesrecomp_target_glsl_shader(${target_name})
+    snesrecomp_target_shader_presets(${target_name})
     snesrecomp_target_sdl(${target_name})
 
     target_compile_definitions(${target_name} PRIVATE

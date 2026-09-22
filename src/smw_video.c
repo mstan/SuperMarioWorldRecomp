@@ -15,31 +15,17 @@ int SmwViewOffset(SmwViewport view, int camera, int level_width) {
   return offset;
 }
 
-SmwViewport SmwCalculateViewport(const SmwVideoSettings *s, int w, int h) {
-  double aspect = 4.0 / 3.0;
-  if (s->enabled) {
-    aspect = s->aspect;
-    if (!isfinite(aspect) || aspect <= 0)
-      aspect = w > 0 && h > 0 ? (double)w / h : 4.0 / 3.0;
-    if (aspect < 4.0 / 3.0) aspect = 4.0 / 3.0;
-  }
-  /* 256x224 has 7:6 pixel aspect when displayed at 4:3. */
-  double desired = 192.0 * aspect;
-  int width = desired >= SMW_RENDER_MAX_WIDTH ? SMW_RENDER_MAX_WIDTH :
-              2 * (int)floor(desired / 2.0 + 0.5);
-  if (width < 256) width = 256;
-  if (desired > SMW_RENDER_MAX_WIDTH) aspect = width / 192.0;
-  return (SmwViewport){width, (width - 256) / 2, aspect};
+SmwViewport SmwCalculateViewport(const SmwVideoSettings *s, int w, int h,
+                                 SnesDisplayAspect display_aspect) {
+  double target = s->aspect;
+  if (!isfinite(target) || target <= 0)
+    target = w > 0 && h > 0 ? (double)w / h : 0;
+  SnesDisplayFrame frame = SnesDisplayAspect_ComputeAdaptiveFrame(
+      256, 224, s->enabled ? SMW_RENDER_MAX_WIDTH : 256, target, display_aspect);
+  return (SmwViewport){frame.width, frame.extra, frame.aspect};
 }
-
 void SmwDestination(SmwViewport view, int w, int h, int *x, int *y, int *dw, int *dh) {
-  if (w < 1) w = 1;
-  if (h < 1) h = 1;
-  *dw = w;
-  *dh = (int)floor(w / view.aspect + 0.5);
-  if (*dh > h) { *dh = h; *dw = (int)floor(h * view.aspect + 0.5); }
-  if (*dw < 1) *dw = 1;
-  if (*dh < 1) *dh = 1;
-  *x = (w - *dw) / 2;
-  *y = (h - *dh) / 2;
+  SnesDisplayViewport dst = SnesDisplayAspect_FitViewport(
+      view.aspect, w > 0 ? w : 1, h > 0 ? h : 1);
+  *x = dst.x; *y = dst.y; *dw = dst.width; *dh = dst.height;
 }
