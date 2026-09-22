@@ -1,4 +1,5 @@
 #include "config.h"
+#include "desktop/display_aspect.h"
 #include "types.h"
 #include <stdio.h>
 #include <string.h>
@@ -367,6 +368,8 @@ static bool HandleIniConfig(int section, const char *key, char *value) {
       }
     } else if (StringEqualsNoCase(key, "NewRenderer")) {
       return ParseBool(value, &g_config.new_renderer);
+    } else if (StringEqualsNoCase(key, "DisplayAspect")) {
+      return SnesDisplayAspect_Parse(value, &g_config.display_aspect);
     } else if (StringEqualsNoCase(key, "IgnoreAspectRatio")) {
       return ParseBool(value, &g_config.ignore_aspect_ratio);
     } else if (StringEqualsNoCase(key, "Fullscreen")) {

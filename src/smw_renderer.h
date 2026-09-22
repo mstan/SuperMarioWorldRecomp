@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "snes/ppu.h"
+#include "desktop/display_aspect.h"
 
 /* The guest always scans out 256x224. Host geometry has no OAM width limit. */
 enum { SMW_RENDER_MAX_WIDTH = 16384 };
@@ -14,7 +15,8 @@ typedef struct SmwVideoSettings {
 } SmwVideoSettings;
 extern SmwVideoSettings g_smw_video;
 extern SmwViewport g_smw_viewport;
-SmwViewport SmwCalculateViewport(const SmwVideoSettings *settings, int w, int h);
+SmwViewport SmwCalculateViewport(const SmwVideoSettings *settings, int w, int h,
+                                 SnesDisplayAspect display_aspect);
 int SmwViewOffset(SmwViewport view, int camera, int level_width);
 void SmwDestination(SmwViewport view, int w, int h, int *x, int *y, int *dw, int *dh);
 void SmwRendererBeginFrame(void);
