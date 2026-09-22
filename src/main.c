@@ -1050,7 +1050,13 @@ int main(int argc, char** argv) {
   int mods_ready = 0;
 #if SNESRECOMP_ENABLE_MODS
   mods_ready = snes_mod_runtime_initialize_c(
-      "mods", "super-mario-world-us",
+      /* "mods/preloaded", NOT "mods": the build stages packages at
+       * SNESRECOMP_MOD_CATALOG_DEST = mods/preloaded/packages and the
+       * engine initializes its own provider with the same root. Passing
+       * "mods" makes the provider look for mods/packages, find nothing,
+       * and return SUCCESS (an empty catalog is legal), so the Mods page
+       * renders empty with no error logged anywhere. Shipped in v0.14.0. */
+      "mods/preloaded", "super-mario-world-us",
       "0838e531fe22c077528febe14cb3ff7c492f1f5fa8de354192bdff7137c27f5b");
   if (!mods_ready)
     fprintf(stderr, "SNES mods unavailable: %s\n",
