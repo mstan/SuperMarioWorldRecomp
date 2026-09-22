@@ -25,6 +25,8 @@ set(CMAKE_C_STANDARD 11)
 # stamped "dev" and user crash reports cannot be tied to an actual release.
 set(SNESRECOMP_BUILD_VERSION "dev" CACHE STRING
     "Version reported in crash diagnostics and network metadata")
+option(SNESRECOMP_ENABLE_BENCHMARK_PHASES
+    "Enable coarse benchmark phase timings in finite benchmark mode" OFF)
 
 # Widescreen is a mod package, not a Display setting (same migration as Mega
 # Man X / X2 / Super Mario Kart). Must be set BEFORE runner.cmake is included:
@@ -41,6 +43,16 @@ if(SNESRECOMP_ENABLE_LUA AND NOT TARGET snesrecomp_lua)
 endif()
 if(SNESRECOMP_ENABLE_LUA AND SMW_BUILD_COOP)
     message(FATAL_ERROR "The Lua TCP spike currently supports the stock single-player target only")
+endif()
+set(SNESRECOMP_BENCHMARK_HELPER_SOURCE
+    "${SNESRECOMP_ROOT}/runner/src/benchmark.c")
+set(SNESRECOMP_BENCHMARK_HELPER_HEADER
+    "${SNESRECOMP_ROOT}/runner/src/benchmark.h")
+if(EXISTS "${SNESRECOMP_BENCHMARK_HELPER_SOURCE}" AND
+   EXISTS "${SNESRECOMP_BENCHMARK_HELPER_HEADER}")
+    set(SNESRECOMP_HAS_BENCHMARK_HELPER ON)
+else()
+    set(SNESRECOMP_HAS_BENCHMARK_HELPER OFF)
 endif()
 set(RECOMP_UI_ROOT "${CMAKE_SOURCE_DIR}/recomp-ui" CACHE PATH
     "Path to the recomp-ui checkout used by this game")
@@ -137,8 +149,17 @@ function(smw_add_recomp_target target_name generated_sources)
         ${SMW_RUNTIME_SOURCES}
         ${generated_sources}
     )
+    if(SNESRECOMP_HAS_BENCHMARK_HELPER)
+        target_sources(${target_name} PRIVATE
+            ${SNESRECOMP_BENCHMARK_HELPER_SOURCE})
+        set_property(SOURCE ${SNESRECOMP_BENCHMARK_HELPER_SOURCE}
+            APPEND PROPERTY COMPILE_DEFINITIONS
+            SNESRECOMP_BENCHMARK_PHASES=$<BOOL:${SNESRECOMP_ENABLE_BENCHMARK_PHASES}>)
+    endif()
     set_property(SOURCE src/main.c APPEND PROPERTY COMPILE_DEFINITIONS
-        SNESRECOMP_BUILD_VERSION="${SNESRECOMP_BUILD_VERSION}")
+        SNESRECOMP_BUILD_VERSION="${SNESRECOMP_BUILD_VERSION}"
+        SNESRECOMP_HAS_BENCHMARK_HELPER=$<BOOL:${SNESRECOMP_HAS_BENCHMARK_HELPER}>
+        SNESRECOMP_BENCHMARK_PHASES=$<BOOL:${SNESRECOMP_ENABLE_BENCHMARK_PHASES}>)
 
     target_include_directories(${target_name} PRIVATE
         ${CMAKE_SOURCE_DIR}

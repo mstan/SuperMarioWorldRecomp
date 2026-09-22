@@ -47,6 +47,7 @@
 #endif
 
 #include "launcher.h"
+#include "host_args.h"
 #if defined(SNES_LAUNCHER) || defined(RECOMP_LAUNCHER)
 #if defined(RECOMP_LAUNCHER)
 /* Shared recomp-ui launcher (F:\Projects\recomp-ui) â€” the console-agnostic
@@ -62,6 +63,15 @@
 #endif
 #include "keybinds.h"
 #include "host_report.h"
+#include "audio_trace.h"
+
+#ifndef SNESRECOMP_HAS_BENCHMARK_HELPER
+#define SNESRECOMP_HAS_BENCHMARK_HELPER 0
+#endif
+
+#if SNESRECOMP_HAS_BENCHMARK_HELPER
+#include "benchmark.h"
+#endif
 
 typedef struct GamepadInfo {
   uint32 modifiers;
@@ -193,6 +203,7 @@ static SDL_Window *g_window;
 static uint8 g_paused, g_turbo, g_cursor = true;
 int g_benchmark_frames;
 int g_benchmark_audio;
+int g_benchmark_audio_paced;
 static uint8 g_current_window_scale;
 static uint32 g_input_state;
 /* Gamepad-driven SNES controller bits, kept separate from g_input_state
@@ -206,6 +217,12 @@ static int g_ppu_render_flags = 0;
 static int g_snes_width, g_snes_height;
 static int g_sdl_audio_mixer_volume = SNESRECOMP_SDL_MIX_MAXVOLUME;
 static struct RendererFuncs g_renderer_funcs;
+#if SNESRECOMP_HAS_BENCHMARK_HELPER
+static SnesRecompBenchmark g_benchmark;
+#endif
+#if SNESRECOMP_HAS_BENCHMARK_HELPER && SNESRECOMP_BENCHMARK_PHASES
+static SDL_mutex *g_benchmark_phase_mutex;
+#endif
 
 static GamepadInfo g_gamepad[2];
 #ifdef SMW_COOP_BUILD
@@ -221,6 +238,54 @@ static int g_netplay_started;
 #endif
 
 extern Snes *g_snes;
+
+#if SNESRECOMP_HAS_BENCHMARK_HELPER && SNESRECOMP_BENCHMARK_PHASES
+static void BenchmarkInitPhaseMutex(void) {
+  if (g_benchmark_frames > 0 && !g_benchmark_phase_mutex) {
+    g_benchmark_phase_mutex = SDL_CreateMutex();
+    if (!g_benchmark_phase_mutex) {
+      fprintf(stderr, "Failed to create benchmark phase mutex: %s\n",
+              SDL_GetError());
+      exit(1);
+    }
+  }
+}
+
+static void BenchmarkDestroyPhaseMutex(void) {
+  if (g_benchmark_phase_mutex) {
+    SDL_DestroyMutex(g_benchmark_phase_mutex);
+    g_benchmark_phase_mutex = NULL;
+  }
+}
+
+static uint64_t BenchmarkPhaseBegin(void) {
+  return g_benchmark_frames > 0 ? SnesRecompBenchmarkPhaseBegin() : 0;
+}
+
+static void BenchmarkPhaseEnd(SnesRecompBenchmarkPhase phase,
+                              uint64_t start_ns) {
+  if (!start_ns) return;
+  if (g_benchmark_phase_mutex) SDL_LockMutex(g_benchmark_phase_mutex);
+  SnesRecompBenchmarkPhaseEnd(&g_benchmark, phase, start_ns);
+  if (g_benchmark_phase_mutex) SDL_UnlockMutex(g_benchmark_phase_mutex);
+}
+
+static void BenchmarkPrintPhaseJson(void) {
+  if (g_benchmark_phase_mutex) SDL_LockMutex(g_benchmark_phase_mutex);
+  SnesRecompBenchmarkPrintPhaseJson(stdout, &g_benchmark);
+  if (g_benchmark_phase_mutex) SDL_UnlockMutex(g_benchmark_phase_mutex);
+}
+#else
+#define BenchmarkInitPhaseMutex() ((void)0)
+#define BenchmarkDestroyPhaseMutex() ((void)0)
+#define BenchmarkPhaseBegin() 0
+#define BenchmarkPhaseEnd(phase, start_ns) ((void)(start_ns))
+#if SNESRECOMP_HAS_BENCHMARK_HELPER
+static void BenchmarkPrintPhaseJson(void) {
+  SnesRecompBenchmarkPrintPhaseJson(stdout, &g_benchmark);
+}
+#endif
+#endif
 
 // --- Scripted input ---
 typedef struct {
@@ -459,14 +524,18 @@ static void DrawPpuFrameWithPerf(void) {
   uint8 *pixel_buffer = 0;
   int pitch = 0;
 
+  uint64_t host_phase = BenchmarkPhaseBegin();
   g_renderer_funcs.BeginDraw(g_snes_width * render_scale,
                              g_snes_height * render_scale,
                              &pixel_buffer, &pitch);
+  BenchmarkPhaseEnd(kSnesRecompBenchmarkPhase_HostPresent, host_phase);
   if (g_display_perf || g_config.display_perf_title) {
     static float history[64], average;
     static int history_pos;
     uint64 before = SDL_GetPerformanceCounter();
+    uint64_t ppu_phase = BenchmarkPhaseBegin();
     RtlDrawPpuFrame(pixel_buffer, pitch, g_ppu_render_flags);
+    BenchmarkPhaseEnd(kSnesRecompBenchmarkPhase_PpuDraw, ppu_phase);
     uint64 after = SDL_GetPerformanceCounter();
     float v = (double)SDL_GetPerformanceFrequency() / (after - before);
     average += v - history[history_pos];
@@ -474,8 +543,11 @@ static void DrawPpuFrameWithPerf(void) {
     history_pos = (history_pos + 1) & 63;
     g_curr_fps = average * (1.0f / 64);
   } else {
+    uint64_t ppu_phase = BenchmarkPhaseBegin();
     RtlDrawPpuFrame(pixel_buffer, pitch, g_ppu_render_flags);
+    BenchmarkPhaseEnd(kSnesRecompBenchmarkPhase_PpuDraw, ppu_phase);
   }
+  host_phase = BenchmarkPhaseBegin();
   if (g_display_perf)
     RenderNumber(pixel_buffer + pitch * render_scale, pitch, g_curr_fps, render_scale == 4);
 
@@ -483,6 +555,7 @@ static void DrawPpuFrameWithPerf(void) {
   smw_fire_stream_draw(g_ppu, pixel_buffer, pitch, g_snes_width, g_snes_height);
 #endif
   g_renderer_funcs.EndDraw();
+  BenchmarkPhaseEnd(kSnesRecompBenchmarkPhase_HostPresent, host_phase);
 }
 
 static SDL_mutex *g_audio_mutex;
@@ -490,6 +563,9 @@ static uint8 *g_audiobuffer, *g_audiobuffer_cur, *g_audiobuffer_end;
 static int g_frames_per_block;
 static uint8 g_audio_channels;
 static SDL_AudioDeviceID g_audio_device;
+static uint64_t g_benchmark_audio_output_frames;
+static uint32_t g_benchmark_audio_output_peak;
+static uint64_t g_benchmark_audio_enqueue_failures;
 #if SNESRECOMP_SDL3
 static SDL_AudioStream *g_audio_stream;
 static uint8 *g_audio_stream_buffer;
@@ -504,17 +580,72 @@ void RtlApuUnlock(void) {
   SDL_UnlockMutex(g_audio_mutex);
 }
 
+static uint32_t BenchmarkAbsSample16(const uint8 *p) {
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
+  int16 sample = (int16)(((uint16)p[0] << 8) | (uint16)p[1]);
+#else
+  int16 sample = (int16)((uint16)p[0] | ((uint16)p[1] << 8));
+#endif
+  int value = sample;
+  return (uint32_t)(value < 0 ? -value : value);
+}
+
+static void BenchmarkObserveAudioOutput(const uint8 *stream, int len) {
+  if (!g_benchmark_audio_paced || len <= 0) return;
+  uint32_t peak = g_benchmark_audio_output_peak;
+  for (int i = 0; i + 1 < len; i += 2) {
+    uint32_t abs_sample = BenchmarkAbsSample16(stream + i);
+    if (abs_sample > peak) peak = abs_sample;
+  }
+  uint8 channels = g_audio_channels ? g_audio_channels : 2;
+  g_benchmark_audio_output_frames +=
+      (uint64_t)((len / (int)sizeof(int16)) / channels);
+  g_benchmark_audio_output_peak = peak;
+}
+
+static void BenchmarkGetAudioOutputStats(uint64_t *frames, uint32_t *peak) {
+  if (g_audio_mutex) SDL_LockMutex(g_audio_mutex);
+  if (frames) *frames = g_benchmark_audio_output_frames;
+  if (peak) *peak = g_benchmark_audio_output_peak;
+  if (g_audio_mutex) SDL_UnlockMutex(g_audio_mutex);
+}
+
+static void BenchmarkRecordAudioEnqueueFailure(void) {
+  if (!g_benchmark_audio_paced) return;
+  if (g_audio_mutex) SDL_LockMutex(g_audio_mutex);
+  g_benchmark_audio_enqueue_failures++;
+  if (g_audio_mutex) SDL_UnlockMutex(g_audio_mutex);
+}
+
+static uint64_t BenchmarkGetAudioEnqueueFailures(void) {
+  uint64_t failures;
+  if (g_audio_mutex) SDL_LockMutex(g_audio_mutex);
+  failures = g_benchmark_audio_enqueue_failures;
+  if (g_audio_mutex) SDL_UnlockMutex(g_audio_mutex);
+  return failures;
+}
+
+static const char *BenchmarkModeName(void) {
+  if (g_benchmark_audio_paced) return "audio_paced";
+  if (g_benchmark_audio) return "audio_uncapped";
+  return "throughput";
+}
+
 static void FillAudioBuffer(Uint8 *stream, int len) {
   /* Boot-stage marker: proves the audio thread reached the mixer at
    * least once (the "crashed before the first sound" class of report). */
   static SDL_atomic_t first_cb;
   if (SDL_AtomicCAS(&first_cb, 0, 1))
     host_report_breadcrumb("first audio callback (len=%d)", len);
+  Uint8 *stream_base = stream;
+  int original_len = len;
   if (!snesrecomp_sdl_lock_mutex(g_audio_mutex)) Die("Mutex lock failed!");
   while (len != 0) {
     if (g_audiobuffer_end - g_audiobuffer_cur == 0) {
       SDL_UnlockMutex(g_audio_mutex);
+      uint64_t audio_phase = BenchmarkPhaseBegin();
       RtlRenderAudio((int16 *)g_audiobuffer, g_frames_per_block, g_audio_channels);
+      BenchmarkPhaseEnd(kSnesRecompBenchmarkPhase_AudioRender, audio_phase);
       if (!snesrecomp_sdl_lock_mutex(g_audio_mutex)) Die("Mutex lock failed!");
       g_audiobuffer_cur = g_audiobuffer;
       g_audiobuffer_end = g_audiobuffer + g_frames_per_block * g_audio_channels * sizeof(int16);
@@ -537,6 +668,7 @@ static void FillAudioBuffer(Uint8 *stream, int len) {
     stream += n;
     len -= n;
   }
+  BenchmarkObserveAudioOutput(stream_base, original_len);
   SDL_UnlockMutex(g_audio_mutex);
 }
 
@@ -550,13 +682,17 @@ static void SDLCALL AudioStreamCallback(
   if ((size_t)additional_amount > g_audio_stream_buffer_size) {
     uint8 *resized =
         (uint8 *)realloc(g_audio_stream_buffer, additional_amount);
-    if (!resized) return;
+    if (!resized) {
+      BenchmarkRecordAudioEnqueueFailure();
+      return;
+    }
     g_audio_stream_buffer = resized;
     g_audio_stream_buffer_size = (size_t)additional_amount;
   }
   FillAudioBuffer(g_audio_stream_buffer, additional_amount);
-  SDL_PutAudioStreamData(
-      stream, g_audio_stream_buffer, additional_amount);
+  if (!SDL_PutAudioStreamData(
+          stream, g_audio_stream_buffer, additional_amount))
+    BenchmarkRecordAudioEnqueueFailure();
 }
 #else
 static void SDLCALL AudioCallback(
@@ -876,55 +1012,63 @@ int main(int argc, char** argv) {
 #ifdef __SWITCH__
   SwitchImpl_Init();
 #endif
-  argc--, argv++;
-  /* Path-carrying args are resolved against the LAUNCH cwd; the anchor
-   * below changes what relative paths mean, so absolutize them first. */
-  const char *config_file = NULL;
-  if (argc >= 2 && strcmp(argv[0], "--config") == 0) {
-    static char config_abs[1024];
-    config_file = AbsolutizePathArg(argv[1], config_abs, sizeof(config_abs));
-    argc -= 2, argv += 2;
+  /* The command line is engine-owned; see snesrecomp/runner/src/host_args.h.
+   * The flags below used to be re-implemented here and consumed in a fixed
+   * order, so `--script s --config c` quietly ignored --config. The engine's
+   * parser is order-independent and absolutizes paths before the cwd anchor
+   * changes what a relative path means. */
+  const char *program_path = (argc >= 1) ? argv[0] : NULL;
+  static const char kSmwExtraUsage[] =
+      "\nSuper Mario World only:\n"
+      "  --benchmark <frames>              run N frames headless and exit.\n"
+      "  --benchmark-audio <frames>        the same, with audio.\n"
+      "  --benchmark-audio-paced <frames>  the same, audio paced to realtime.\n";
+  SnesrecompHostArgs args;
+  if (!snesrecomp_host_args_parse(&argc, &argv, &args)) return 2;
+  if (args.help) {
+    snesrecomp_host_args_usage(program_path, kSmwExtraUsage);
+    return 0;
   }
-  int start_paused = 0;
-  if (argc >= 1 && strcmp(argv[0], "--paused") == 0) {
-    start_paused = 1;
-    argc -= 1, argv += 1;
-  }
-  const char *script_file = NULL;
-  if (argc >= 2 && strcmp(argv[0], "--script") == 0) {
-    static char script_abs[1024];
-    script_file = AbsolutizePathArg(argv[1], script_abs, sizeof(script_abs));
-    argc -= 2, argv += 2;
-  }
-  const char *framedump_dir = NULL;
-  if (argc >= 2 && strcmp(argv[0], "--framedump") == 0) {
-    static char framedump_abs[1024];
-    framedump_dir = AbsolutizePathArg(argv[1], framedump_abs, sizeof(framedump_abs));
-    argc -= 2, argv += 2;
-  }
-  if (argc >= 2 &&
-      (strcmp(argv[0], "--benchmark") == 0 ||
-       strcmp(argv[0], "--benchmark-audio") == 0)) {
-    g_benchmark_audio = strcmp(argv[0], "--benchmark-audio") == 0;
-    g_benchmark_frames = atoi(argv[1]);
-    if (g_benchmark_frames <= 0) {
-      fprintf(stderr, "%s requires a positive frame count\n", argv[0]);
+  /* Port-specific flags, taken from what the engine parser left behind. */
+  for (int i = 1; i < argc; ) {
+    const char *a = argv[i];
+    int bench = a && (strcmp(a, "--benchmark") == 0 ||
+                      strcmp(a, "--benchmark-audio") == 0 ||
+                      strcmp(a, "--benchmark-audio-paced") == 0);
+    if (!bench) { i++; continue; }
+    if (i + 1 >= argc || !argv[i + 1]) {
+      fprintf(stderr, "%s requires a positive frame count\n", a);
       return 2;
     }
-    argc -= 2, argv += 2;
+    g_benchmark_audio = strcmp(a, "--benchmark-audio") == 0 ||
+                        strcmp(a, "--benchmark-audio-paced") == 0;
+    g_benchmark_audio_paced = strcmp(a, "--benchmark-audio-paced") == 0;
+    g_benchmark_frames = atoi(argv[i + 1]);
+    if (g_benchmark_frames <= 0) {
+      fprintf(stderr, "%s requires a positive frame count\n", a);
+      return 2;
+    }
+    for (int j = i; j + 2 <= argc; j++) argv[j] = argv[j + 2];
+    argc -= 2;
   }
-  /* Force the GUI launcher even when SkipLauncher = 1 is set in config.ini.
-   * (The other way back is to set SkipLauncher = 0 in config.ini.) */
-  int force_launcher = 0;
-  if (argc >= 1 && strcmp(argv[0], "--launcher") == 0) {
-    force_launcher = 1;
-    argc -= 1, argv += 1;
-  }
-  if (argc >= 1 && argv[0] && argv[0][0] != '-' && argv[0][0] != '\0') {
-    /* Positional ROM path. */
-    static char rom_abs[1024];
-    argv[0] = (char *)AbsolutizePathArg(argv[0], rom_abs, sizeof(rom_abs));
-  }
+  if (!snesrecomp_host_args_reject_unknown(argc, argv, program_path,
+                                           kSmwExtraUsage))
+    return 2;
+  const char *config_file = args.config_file;
+  const int start_paused = args.start_paused;
+  const char *script_file = args.script_file;
+  const char *framedump_dir = args.framedump_dir;
+  const int arg_no_launcher = args.no_launcher;
+  (void)arg_no_launcher;
+  /* Downstream still reads the positional ROM from argv[0]; only the parsing
+   * moved. */
+  static char *rom_argv[2];
+  rom_argv[0] = (char *)(args.rom ? args.rom : "");
+  rom_argv[1] = NULL;
+  argv = rom_argv;
+  argc = args.rom ? 1 : 0;
+  const int force_launcher = args.force_launcher;
+  /* The ROM path is already absolutized by the engine parser. */
 
   /* The config is config.ini next to the executable â€” nothing else,
    * no directory walking. Anchoring cwd to the exe dir also pins
@@ -966,7 +1110,7 @@ int main(int argc, char** argv) {
   if (g_benchmark_frames > 0) {
     if (!g_benchmark_audio) g_config.enable_audio = false;
     g_config.autosave = false;
-    g_config.disable_frame_delay = true;
+    g_config.disable_frame_delay = !g_benchmark_audio_paced;
     g_config.skip_launcher = true;
     g_config.fullscreen = 0;
     g_config.output_method = kOutputMethod_SDL;
@@ -1046,16 +1190,18 @@ int main(int argc, char** argv) {
 
   /* Mod catalog lives beside the binary (exe dir / .AppImage folder); the
    * launcher needs the provider before it opens so the Mods page can list
-   * the widescreen package. Committed once the ROM path is final. */
+   * the widescreen package. Committed once the ROM path is final.
+   *
+   * The root is "mods/preloaded", NOT "mods". The build stages packages at
+   * SNESRECOMP_MOD_CATALOG_DEST = mods/preloaded/packages (runner.cmake) and
+   * the engine's own host_main.c initializes the provider with
+   * "mods/preloaded". Passing "mods" makes the provider look for
+   * mods/packages, find nothing, and return SUCCESS — an empty catalog is
+   * legal — so the Mods page renders empty with no error anywhere. That is
+   * what shipped in v0.14.0. */
   int mods_ready = 0;
 #if SNESRECOMP_ENABLE_MODS
   mods_ready = snes_mod_runtime_initialize_c(
-      /* "mods/preloaded", NOT "mods": the build stages packages at
-       * SNESRECOMP_MOD_CATALOG_DEST = mods/preloaded/packages and the
-       * engine initializes its own provider with the same root. Passing
-       * "mods" makes the provider look for mods/packages, find nothing,
-       * and return SUCCESS (an empty catalog is legal), so the Mods page
-       * renders empty with no error logged anywhere. Shipped in v0.14.0. */
       "mods/preloaded", "super-mario-world-us",
       "0838e531fe22c077528febe14cb3ff7c492f1f5fa8de354192bdff7137c27f5b");
   if (!mods_ready)
@@ -1762,11 +1908,16 @@ error_reading:;
     FrameDump_Init(framedump_dir);
 
   bool running = true;
+  int benchmark_exit_code = 0;
   uint32 lastTick = SDL_GetTicks();
   uint32 curTick = 0;
   uint32 frameCtr = 0;
   uint8 audiopaused = true;
   GamepadInfo *gi;
+#if SNESRECOMP_HAS_BENCHMARK_HELPER
+  if (g_benchmark_frames > 0) SnesRecompBenchmarkBegin(&g_benchmark);
+#endif
+  BenchmarkInitPhaseMutex();
   Uint64 benchmark_start = g_benchmark_frames > 0
       ? SDL_GetPerformanceCounter() : 0;
 
@@ -1960,7 +2111,9 @@ error_reading:;
         continue;
       }
       inputs = snes_netplay_published_inputs() | snes_netplay_active_mask();
+      uint64_t guest_phase = BenchmarkPhaseBegin();
       RtlRunFrame(inputs);
+      BenchmarkPhaseEnd(kSnesRecompBenchmarkPhase_GuestFrame, guest_phase);
       snes_netplay_finish_frame();
       {
         static int test_ticks = -1;
@@ -1988,7 +2141,9 @@ error_reading:;
 #if SNESRECOMP_ENABLE_LUA
       inputs = lua_bridge_frame_start(inputs);
 #endif
+      uint64_t guest_phase = BenchmarkPhaseBegin();
       RtlRunFrame(inputs);
+      BenchmarkPhaseEnd(kSnesRecompBenchmarkPhase_GuestFrame, guest_phase);
 #if SNESRECOMP_ENABLE_LUA
       smw_fire_stream_tick();
       lua_bridge_frame_end();
@@ -2068,7 +2223,9 @@ error_reading:;
        * turbo garble/freeze). Run the guest-state sim every frame; skip only the
        * host present (BeginDraw/memcpy/EndDraw). Harmless to HLE (it never waits
        * on the raster IRQ). */
+      uint64_t ppu_phase = BenchmarkPhaseBegin();
       g_rtl_game_info->draw_ppu_frame();
+      BenchmarkPhaseEnd(kSnesRecompBenchmarkPhase_PpuDraw, ppu_phase);
     }
     stall_t_draw = SDL_GetPerformanceCounter();
 
@@ -2078,18 +2235,83 @@ error_reading:;
       double seconds =
           (double)(benchmark_end - benchmark_start) /
           (double)SDL_GetPerformanceFrequency();
+#if SNESRECOMP_HAS_BENCHMARK_HELPER
+      SnesRecompBenchmarkEnd(&g_benchmark);
+#endif
+      AudioTraceStats audio_stats;
+      uint64_t audio_output_frames = 0;
+      uint64_t audio_enqueue_failures = 0;
+      uint32_t audio_output_peak = 0;
+      uint64_t min_native_samples = (uint64_t)frameCtr * 500u;
+      int audio_health_ok = 1;
+      if (g_benchmark_audio_paced) {
+        memset(&audio_stats, 0, sizeof(audio_stats));
+        audio_trace_get_stats(&audio_stats);
+        BenchmarkGetAudioOutputStats(&audio_output_frames, &audio_output_peak);
+        audio_enqueue_failures = BenchmarkGetAudioEnqueueFailures();
+        audio_health_ok =
+            audio_stats.produced >= min_native_samples &&
+            audio_stats.consumed >= min_native_samples &&
+            audio_stats.dropped_audible == 0 &&
+            audio_enqueue_failures == 0 &&
+            audio_output_peak != 0;
+      }
       printf(
           "SNESRECOMP_BENCHMARK "
           "{\"game\":\"Super Mario World\",\"sdl\":\"%s\","
+          "\"benchmark_mode\":\"%s\","
           "\"frames\":%u,\"seconds\":%.9f,\"fps\":%.3f,"
-          "\"ms_per_frame\":%.6f}\n",
+          "\"ms_per_frame\":%.6f",
 #if SNESRECOMP_SDL3
           "SDL3",
 #else
           "SDL2",
 #endif
-          frameCtr, seconds, frameCtr / seconds,
+          BenchmarkModeName(), frameCtr, seconds, frameCtr / seconds,
           seconds * 1000.0 / frameCtr);
+      if (g_benchmark_audio_paced) {
+        printf(
+            ",\"audio_health\":{"
+            "\"ok\":%s,\"min_native_samples\":%llu,"
+            "\"produced\":%llu,\"consumed\":%llu,"
+            "\"produced_cpu\":%llu,\"produced_audio\":%llu,"
+            "\"dropped\":%llu,\"dropped_audible\":%llu,"
+            "\"output_underflows\":%llu,\"consume_calls\":%llu,"
+            "\"host_output_frames\":%llu,\"host_output_peak\":%u,"
+            "\"enqueue_failures\":%llu}",
+            audio_health_ok ? "true" : "false",
+            (unsigned long long)min_native_samples,
+            (unsigned long long)audio_stats.produced,
+            (unsigned long long)audio_stats.consumed,
+            (unsigned long long)audio_stats.produced_cpu,
+            (unsigned long long)audio_stats.produced_audio,
+            (unsigned long long)audio_stats.dropped,
+            (unsigned long long)audio_stats.dropped_audible,
+            (unsigned long long)audio_stats.output_underflows,
+            (unsigned long long)audio_stats.consume_calls,
+            (unsigned long long)audio_output_frames,
+            (unsigned)audio_output_peak,
+            (unsigned long long)audio_enqueue_failures);
+      }
+#if SNESRECOMP_HAS_BENCHMARK_HELPER
+      printf(",");
+      BenchmarkPrintPhaseJson();
+#endif
+      printf("}\n");
+      fflush(stdout);
+      if (!audio_health_ok) {
+        fprintf(stderr,
+                "benchmark audio-paced validation failed: produced=%llu "
+                "consumed=%llu min=%llu dropped_audible=%llu peak=%u "
+                "enqueue_failures=%llu\n",
+                (unsigned long long)audio_stats.produced,
+                (unsigned long long)audio_stats.consumed,
+                (unsigned long long)min_native_samples,
+                (unsigned long long)audio_stats.dropped_audible,
+                (unsigned)audio_output_peak,
+                (unsigned long long)audio_enqueue_failures);
+        benchmark_exit_code = 3;
+      }
       running = false;
       continue;
     }
@@ -2150,6 +2372,7 @@ error_reading:;
     SDL_DestroyMutex(g_audio_mutex);
     g_audio_mutex = NULL;
   }
+  BenchmarkDestroyPhaseMutex();
   free(g_audiobuffer);
   g_audiobuffer = NULL;
   g_audiobuffer_cur = NULL;
@@ -2311,7 +2534,7 @@ error_reading:;
   lua_bridge_shutdown();
 #endif
   SDL_Quit();
-  return 0;
+  return benchmark_exit_code;
 }
 
 static void RenderDigit(uint8 *dst, size_t pitch, int digit, uint32 color, bool big) {
