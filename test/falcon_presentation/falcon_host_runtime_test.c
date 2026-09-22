@@ -14,6 +14,7 @@ ForeignOwnership snes_foreign_ownership(void) { return FOREIGN_OWNERSHIP_NATIVE;
 ForeignState *snes_foreign_state(void) { return 0; }
 int smw_falcon_audio_is_active(void) { return 0; }
 void smw_falcon_audio_reset(void) {}
+int SmwRendererNativeOffset(void) { return 0; }
 int smw_falcon_audio_activate(const char *dir) { (void)dir; return 0; }
 void PpuClearOverlayCaptures(Ppu *ppu) { (void)ppu; }
 bool PpuBindOverlaySurface(Ppu *ppu, PpuOverlaySource source, uint8_t *p, size_t pitch) { (void)ppu; (void)source; (void)p; (void)pitch; return true; }

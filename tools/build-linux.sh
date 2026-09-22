@@ -258,6 +258,16 @@ EOF
 $LINUXDEPLOY --appdir "$APPDIR" --executable "$BIN" \
     --desktop-file "$WORK/$SLUG.desktop" --icon-file "$ICON"
 
+if [ "$VARIANT" = stock ]; then
+  [ -f "$BUILD/smw-falcon-cache" ] && [ -d "$BUILD/falcon-cache-licenses" ] || {
+    echo "ERROR: Falcon cache helper or licenses missing; rebuild with SMW_BUNDLE_FALCON_CACHE_HELPER=ON" >&2
+    exit 1
+  }
+  cp "$BUILD/smw-falcon-cache" "$APPDIR/usr/bin/"
+  cp -r "$BUILD/falcon-cache-licenses" "$APPDIR/usr/bin/"
+  chmod 0755 "$APPDIR/usr/bin/smw-falcon-cache"
+fi
+
 # The ImGui pre-boot launcher loads fonts + images from assets/ next to the exe
 # (SDL_GetBasePath resolves to usr/bin inside the AppImage). CMake's launcher
 # POST_BUILD staged them beside the build ELF; carry them into the AppDir so the

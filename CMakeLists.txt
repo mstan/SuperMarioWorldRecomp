@@ -61,6 +61,27 @@ include(${RECOMP_UI_ROOT}/recomp_ui.cmake)
 find_package(OpenGL REQUIRED)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
+option(SMW_BUNDLE_FALCON_CACHE_HELPER
+    "Bundle the standalone Falcon owner-ROM asset builder" ON)
+if(SMW_BUNDLE_FALCON_CACHE_HELPER)
+    execute_process(COMMAND ${Python3_EXECUTABLE} -c "import PIL, PyInstaller"
+        RESULT_VARIABLE SMW_HELPER_DEPS OUTPUT_QUIET ERROR_QUIET)
+    if(NOT SMW_HELPER_DEPS EQUAL 0)
+        message(FATAL_ERROR "Install tools/owner_ssb64/requirements-build.txt into Python3_EXECUTABLE to bundle Falcon")
+    endif()
+    file(GLOB SMW_HELPER_SOURCES CONFIGURE_DEPENDS
+        ${CMAKE_SOURCE_DIR}/tools/owner_ssb64/*.py)
+    set(SMW_FALCON_HELPER "${CMAKE_CURRENT_BINARY_DIR}/smw-falcon-cache${CMAKE_EXECUTABLE_SUFFIX}")
+    add_custom_command(OUTPUT ${SMW_FALCON_HELPER}
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/owner_ssb64/build_helper.py
+            --output ${CMAKE_CURRENT_BINARY_DIR}
+            --work ${CMAKE_CURRENT_BINARY_DIR}/falcon-helper-build
+        DEPENDS ${SMW_HELPER_SOURCES}
+            ${CMAKE_SOURCE_DIR}/tools/owner_ssb64/requirements-build.txt
+        VERBATIM)
+    add_custom_target(smw_falcon_cache_helper DEPENDS ${SMW_FALCON_HELPER})
+endif()
+
 file(GLOB SMW_STOCK_GEN_SOURCES CONFIGURE_DEPENDS
     ${CMAKE_SOURCE_DIR}/src/gen/*.c)
 if(NOT SMW_STOCK_GEN_SOURCES)
@@ -226,6 +247,9 @@ endfunction()
 
 smw_add_recomp_target(SuperMarioWorldSNESRecomp
     "${SMW_STOCK_GEN_SOURCES}")
+if(SMW_BUNDLE_FALCON_CACHE_HELPER)
+    add_dependencies(SuperMarioWorldSNESRecomp smw_falcon_cache_helper)
+endif()
 
 # Release-owned mod catalog staged next to the exe. mod_runtime resolves "mods"
 # against the anchored cwd (the exe dir on Windows, the .AppImage's folder on

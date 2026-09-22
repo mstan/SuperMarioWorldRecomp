@@ -64,15 +64,20 @@ See [`RELEASE.md`](RELEASE.md) for the latest release notes.
 
 ## Quick start (pre-built release)
 
-1. Download the latest `SuperMarioWorldRecomp-windows-x64.zip` from
-   [Releases](../../releases) and extract it.
-2. Run `smw.exe`. On first launch a file picker asks for your
+1. Download the Windows ZIP or Linux AppImage from
+   [Releases](../../releases). Extract the ZIP, or make the AppImage executable.
+2. Run `SuperMarioWorldSNESRecomp.exe` or the AppImage. On first launch a file picker asks for your
    **legally-obtained** Super Mario World (USA) ROM (`.sfc` / `.smc`).
    The path is remembered in `rom.cfg` next to the exe.
 3. Edit `keybinds.ini` (auto-generated next to the exe on first run)
    to remap keys, then restart.
 
 The ROM is **never** redistributed — supply your own dump.
+
+To play as Captain Falcon, enable **Captain Falcon** on the launcher's Mods page,
+select your **Super Smash Bros. (USA) v1.0** ROM, and press Play. The included
+helper prepares Falcon's assets in your user cache on first use. No Python
+installation or environment setup is required.
 
 ## Optional Lua scripting
 

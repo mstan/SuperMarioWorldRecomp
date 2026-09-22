@@ -74,6 +74,9 @@ def default_cache_root() -> Path:
     local = os.environ.get("LOCALAPPDATA")
     if local:
         return Path(local) / "SuperMarioWorldRecomp" / "smash64"
+    xdg = os.environ.get("XDG_CACHE_HOME")
+    if xdg and Path(xdg).is_absolute():
+        return Path(xdg) / "SuperMarioWorldRecomp" / "smash64"
     return Path.home() / ".cache" / "SuperMarioWorldRecomp" / "smash64"
 
 

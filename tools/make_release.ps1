@@ -91,6 +91,16 @@ if (Test-Path -LiteralPath $zip) {
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 
 Copy-Item -LiteralPath $exe -Destination $stage
+if ($Variant -eq 'stock') {
+  $falconHelper = Join-Path $build 'smw-falcon-cache.exe'
+  $falconLicenses = Join-Path $build 'falcon-cache-licenses'
+  if (-not (Test-Path -LiteralPath $falconHelper -PathType Leaf) -or
+      -not (Test-Path -LiteralPath $falconLicenses -PathType Container)) {
+    throw 'Falcon cache helper or licenses missing; rebuild with SMW_BUNDLE_FALCON_CACHE_HELPER=ON.'
+  }
+  Copy-Item -LiteralPath $falconHelper -Destination $stage
+  Copy-Item -LiteralPath $falconLicenses -Destination $stage -Recurse
+}
 if ($Variant -eq 'coop') {
   Copy-Item -LiteralPath (Join-Path $root 'recomp\coop\smw_coop.ips') -Destination $stage
 }

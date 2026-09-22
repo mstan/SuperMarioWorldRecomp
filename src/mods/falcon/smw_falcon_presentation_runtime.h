@@ -7,7 +7,7 @@
 #include "snes/ppu.h"
 
 /* Called only after mod_runtime has committed the exact owner-ROM resource. */
-void smw_falcon_presentation_activate(const char *owner_rom_path);
+int smw_falcon_presentation_activate(const char *owner_rom_path);
 void smw_falcon_presentation_reset(void);
 /* Call after the host audio mutex exists and before the first game frame. */
 void smw_falcon_presentation_audio_ready(void);

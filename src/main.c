@@ -510,13 +510,14 @@ void RtlDrawPpuFrame(uint8 *pixel_buffer, size_t pitch, uint32 render_flags) {
   g_rtl_game_info->draw_ppu_frame();
   if (g_smw_video.enabled) {
     SmwRendererDraw(pixel_buffer, pitch, g_my_pixels);
-    SmwRendererDiagnostics(g_my_pixels, pixel_buffer, pitch);
   } else {
     for (int y = 0; y < 224; ++y)
       memcpy(pixel_buffer + y * pitch, g_my_pixels + y * 256 * 4, 256 * 4);
   }
   smw_falcon_presentation_present(pixel_buffer, pitch, g_snes_width,
                                   g_snes_height);
+  if (g_smw_video.enabled)
+    SmwRendererDiagnostics(g_my_pixels, pixel_buffer, pitch);
 }
 
 static void DrawPpuFrameWithPerf(void) {

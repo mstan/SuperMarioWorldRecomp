@@ -21,7 +21,12 @@ in the launcher's Mods page. Its defaults are **Fit to screen** and
 **Screen-based** enemy spawning, with fixed aspect ratios and Original 4:3
 spawning available. CMake's `smw_renderer_hooks` stamp installs the adaptive
 renderer and the separate Falcon hooks identically on Windows and Linux.
-Mod settings persist in `mods/state.toml`; legacy Widescreen INI fields are inactive.
+Mod settings persist in `mods/preloaded/state.toml`; legacy Widescreen INI fields are inactive.
+
+Stock builds bundle the Falcon owner-ROM helper. Install
+`tools/owner_ssb64/requirements-build.txt` into CMake's Python environment before
+building. Packaging requires `smw-falcon-cache[.exe]` and `falcon-cache-licenses/`.
+Never include owner ROMs or generated Falcon caches in either release artifact.
 
 The co-op executable is additive and opt-in
 (`-DSMW_BUILD_COOP=ON` / `--coop`); ship it only when the release notes
@@ -134,6 +139,12 @@ The AppImage lands in `release-linux/`. The script:
    beside the exe/AppImage, run, reach a level. Confirm the launcher
    renders (proves `assets/` resolved) and that Fit to screen fills in-level
    with the anchored HUD and Screen-based spawning enabled.
+   `tools/test_falcon_release.py --exe <exe-or-AppImage> --rom <SMW-ROM>
+   --owner-rom <Smash-ROM> --out <new-evidence-directory>` additionally checks
+   cold-cache activation, movement/attacks, disabled-mod save loading and
+   enabled-mod loading of a native save. For an AppImage add
+   `--catalog build-linux-prod/mods/preloaded/packages`. Review its retained
+   screenshots; the probe uses continuous scripted input without pausing.
 4. Write the release notes (what changed, what's verified, caveats) and
    publish — only after the user has signed off on the artifacts:
 
@@ -152,5 +163,5 @@ The AppImage lands in `release-linux/`. The script:
    the path in `rom.cfg`. On Linux you can instead just drop the ROM
    beside the `.AppImage` and it is picked up automatically.
 3. Saves land in `saves/`; controller mapping in `keybinds.ini`; options
-   in `config.ini` and mod choices in `mods/state.toml` — all next to the exe, or
+   in `config.ini` and mod choices in `mods/preloaded/state.toml` — all next to the exe, or
    next to the `.AppImage` on Linux.

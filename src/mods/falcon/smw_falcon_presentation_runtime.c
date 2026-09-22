@@ -16,6 +16,7 @@
 #include <string.h>
 
 #ifdef _WIN32
+#include <windows.h>
 #include <process.h>
 #define SMW_GETPID _getpid
 #else
@@ -250,9 +251,43 @@ static int load_final_cache(const char *cache) {
     return 1;
 }
 
-static const char *default_cache_root(void) {
+static int default_cache_root(char *out, size_t size) {
+#ifdef _WIN32
     const char *local = getenv("LOCALAPPDATA");
-    return local && *local ? local : NULL;
+    if (!absolute_path(local)) return 0;
+    return snprintf(out, size, "%s/SuperMarioWorldRecomp/smash64", local) < (int)size;
+#else
+    const char *xdg = getenv("XDG_CACHE_HOME");
+    const char *home = getenv("HOME");
+    if (absolute_path(xdg))
+        return snprintf(out, size, "%s/SuperMarioWorldRecomp/smash64", xdg) < (int)size;
+    if (!absolute_path(home)) return 0;
+    return snprintf(out, size, "%s/.cache/SuperMarioWorldRecomp/smash64", home) < (int)size;
+#endif
+}
+
+/* Resolve the physical executable, not cwd or APPIMAGE: the helper lives
+ * inside the application while state lives outside its read-only mount. */
+static int bundled_cache_helper(char *out, size_t size) {
+#ifdef _WIN32
+    wchar_t executable[1024];
+    DWORD n = GetModuleFileNameW(NULL, executable, 1024);
+    if (!n || n >= 1024 ||
+        !WideCharToMultiByte(CP_UTF8, 0, executable, -1, out, (int)size,
+                            NULL, NULL)) return 0;
+    const char *leaf = "smw-falcon-cache.exe";
+#else
+    ssize_t n = readlink("/proc/self/exe", out, size - 1);
+    if (n <= 0 || (size_t)n >= size - 1) return 0;
+    out[n] = '\0';
+    const char *leaf = "smw-falcon-cache";
+#endif
+    char *slash = strrchr(out, '/');
+    char *backslash = strrchr(out, '\\');
+    if (backslash && (!slash || backslash > slash)) slash = backslash;
+    if (!slash || (size_t)(slash + 1 - out) + strlen(leaf) >= size) return 0;
+    strcpy(slash + 1, leaf);
+    return 1;
 }
 
 /* Never route owner-controlled paths through a shell. The helper contract is
@@ -264,7 +299,42 @@ static int run_cache_helper(const char *helper, const char *owner_rom_path,
                            "--cache-root", (char *)root, "--result-file",
                            (char *)result, NULL };
 #ifdef _WIN32
-    return _spawnv(_P_WAIT, helper, (const char *const *)argv) == 0;
+    /* Windows accepts a command line, even for spawnv. Quote every argv item
+     * using the CRT backslash rules; never pass it through a shell. */
+    char command[8192], *out = command;
+    for (unsigned i = 0; argv[i]; ++i) {
+        const char *p = argv[i];
+        if ((size_t)(out - command) + 4 >= sizeof(command)) return 0;
+        if (i) *out++ = ' ';
+        *out++ = '"';
+        while (*p) {
+            unsigned slashes = 0;
+            while (*p == '\\') { ++slashes; ++p; }
+            unsigned escaped = (*p == '"' || !*p) ? slashes * 2 : slashes;
+            if ((size_t)(out - command) + escaped + 4 >= sizeof(command)) return 0;
+            while (escaped--) *out++ = '\\';
+            if (*p == '"') *out++ = '\\';
+            if (*p) *out++ = *p++;
+        }
+        *out++ = '"';
+    }
+    *out = '\0';
+    wchar_t wide_helper[1024], wide_command[8192];
+    if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, helper, -1,
+                             wide_helper, 1024) ||
+        !MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, command, -1,
+                             wide_command, 8192)) return 0;
+    STARTUPINFOW startup = {0};
+    PROCESS_INFORMATION child = {0};
+    startup.cb = sizeof(startup);
+    if (!CreateProcessW(wide_helper, wide_command, NULL, NULL, TRUE,
+                        CREATE_NO_WINDOW, NULL, NULL, &startup, &child)) return 0;
+    WaitForSingleObject(child.hProcess, INFINITE);
+    DWORD code = 1;
+    GetExitCodeProcess(child.hProcess, &code);
+    CloseHandle(child.hThread);
+    CloseHandle(child.hProcess);
+    return code == 0;
 #else
     pid_t child = fork();
     int status;
@@ -281,21 +351,28 @@ static int run_cache_helper(const char *helper, const char *owner_rom_path,
 static int invoke_cache_helper(const char *owner_rom_path) {
     const char *helper = getenv("SNESRECOMP_FALCON_CACHE_HELPER");
     const char *root = getenv("SNESRECOMP_FALCON_CACHE_ROOT");
-    char fallback_root[768], result[1024], cache[1024], name[256];
+    char fallback_root[768], bundled_helper[1024];
+    char result[1024], cache[1024], name[256];
     FILE *file;
     int rc;
     if (!root || !*root) {
-        const char *local = default_cache_root();
-        if (!local) { note("set SNESRECOMP_FALCON_CACHE_ROOT for the external cache"); return 0; }
-        snprintf(fallback_root, sizeof(fallback_root), "%s/SuperMarioWorldRecomp/smash64", local);
+        if (!default_cache_root(fallback_root, sizeof(fallback_root))) {
+            note("user cache directory unavailable"); return 0;
+        }
         root = fallback_root;
+    }
+    if (!helper || !*helper) {
+        if (!bundled_cache_helper(bundled_helper, sizeof(bundled_helper))) {
+            note("bundled cache helper unavailable"); return 0;
+        }
+        helper = bundled_helper;
     }
     if (!absolute_path(helper) || !absolute_path(root) || !absolute_path(owner_rom_path)) {
         note("helper, cache root, or committed owner ROM path is not absolute");
         return 0;
     }
-    snprintf(result, sizeof(result), "%s/.smw-falcon-cache-result-%ld.txt", root,
-             (long)SMW_GETPID());
+    if (snprintf(result, sizeof(result), "%s/.smw-falcon-cache-result-%ld.txt", root,
+                 (long)SMW_GETPID()) >= (int)sizeof(result)) return 0;
     rc = run_cache_helper(helper, owner_rom_path, root, result);
     if (!rc) { note("external final-cache helper failed (see helper output)"); return 0; }
     file = fopen(result, "rb");
@@ -545,14 +622,13 @@ void smw_falcon_presentation_audio_ready(void) {
     s_validated_audio_dir[0] = '\0';
 }
 
-void smw_falcon_presentation_activate(const char *owner_rom_path) {
+int smw_falcon_presentation_activate(const char *owner_rom_path) {
     const char *cache = getenv("SNESRECOMP_FALCON_CACHE");
     smw_falcon_presentation_reset();
     trace("activation requested");
-    if (!owner_rom_path || !absolute_path(owner_rom_path)) { note("committed owner ROM path unavailable"); return; }
-    if (cache && *cache) (void)load_final_cache(cache);
-    else if (!invoke_cache_helper(owner_rom_path))
-        note("set SNESRECOMP_FALCON_CACHE or install SNESRECOMP_FALCON_CACHE_HELPER");
+    if (!owner_rom_path || !absolute_path(owner_rom_path)) { note("committed owner ROM path unavailable"); return 0; }
+    if (cache && *cache) return load_final_cache(cache);
+    return invoke_cache_helper(owner_rom_path);
 }
 
 int smw_falcon_presentation_is_active(void) { return presentation_active(); }

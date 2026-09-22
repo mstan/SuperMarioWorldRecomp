@@ -64,8 +64,8 @@ exist. Its `manifest.json` contains the normalized owner-ROM hash and
 per-cue PCM hashes, never the ROM path or a ROM slice. The four voice cues use
 a deterministic, dependency-free 32-tap Kaiser-windowed sinc resampler; the
 seven focused FGM cues remain sample-identical to the approved local outputs.
-Integration still needs to make the launcher run these stages and validate
-the final cache.
+The game invokes these stages through the bundled helper after Play-time ROM
+verification and validates the resulting cache before activating Falcon.
 
 `build_final_cache.py` is the release-facing entry point. It stages the raw
 reloc cache, decoder intermediates, approved `falcon_runtime.bin`, and all
@@ -82,12 +82,12 @@ The final directory contains exactly `falcon_runtime.bin`, `audio/*.wav`, and
 `manifest.json`; it never contains the ROM, a ROM path, raw relocs, or decoder
 intermediates. A valid cache is immutable rather than replaced in place, so a
 crash or concurrent first run cannot make an already working cache disappear.
-The final visual baker requires Pillow at build time; the raw cache verifier,
-owner-ROM gate, and audio stage remain dependency-free. The launcher should
-report that prerequisite rather than accepting an incomplete cache.
-The launcher should call this only after its own owner-ROM validation, pass a
-user cache root (not the installation directory), and enable the mod only
-when the final baked cache manifest verifies. The cache product root is
+Source builds install `requirements-build.txt` into the Python environment used
+by CMake. `build_helper.py` freezes the recipe and Pillow into a standalone
+executable and stages redistribution licenses. Players need no Python install.
+`SMW_BUNDLE_FALCON_CACHE_HELPER=OFF` is available for development builds; stock
+release packaging requires the helper. The game calls it only after owner-ROM
+validation and uses a writable user cache root. The cache product root is
 `SuperMarioWorldRecomp/smash64`; final manifests intentionally contain only
 the normalized ROM SHA-1 and derived artifact hashes, never a ROM path, ROM
 bytes, raw relocation files, or intermediates.

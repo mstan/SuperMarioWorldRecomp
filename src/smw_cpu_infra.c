@@ -2,6 +2,7 @@
 #include "smw_rtl.h"
 #include "smw_renderer.h"
 #include "foreign_controller.h"
+#include "mods/smw_falcon_plugin.h"
 #include "snes/saveload.h"
 #include "overrides/falcon/falcon_smw_adapter.h"
 
@@ -98,12 +99,7 @@ static void SmwStateLoadExtra(SaveLoadInfo *sli, uint32 version) {
 
 static void SmwOnStateLoaded(uint32 version) {
   (void)version;
-  if (!s_smw_foreign_chunk_loaded) {
-    /* Old, missing, or corrupt extensions must not combine restored guest
-     * state with a live controller from the prior timeline. */
-    snes_foreign_select(NULL);
-    snes_foreign_set_ownership(FOREIGN_OWNERSHIP_NATIVE);
-  }
+  smw_falcon_restore_selection(s_smw_foreign_chunk_loaded);
   SmwFalconOnStateLoaded();
   SmwRendererStateLoaded(version);
   s_smw_foreign_chunk_loaded = 0;
