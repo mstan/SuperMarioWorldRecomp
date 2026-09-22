@@ -107,14 +107,15 @@ if ($luaEnabled) {
   }
   Copy-Item -LiteralPath $luaPayload -Destination $stage -Recurse
 }
-# Release-owned mod catalog, when the build stages one. Ships as a nested
-# directory tree, which is exactly what made portable ZIP entry names matter
-# (see the archive writer below).
-if (Test-Path -LiteralPath (Join-Path $mods 'packages')) {
-  $stageMods = Join-Path $stage 'mods'
-  New-Item -ItemType Directory -Path $stageMods -Force | Out-Null
-  Copy-Item -LiteralPath (Join-Path $mods 'packages') -Destination $stageMods -Recurse
+# The framework owns mods/preloaded/packages. Require the built-in catalog
+# rather than silently omitting it after a framework layout change.
+$widescreenManifest = Join-Path $mods 'preloaded\packages\super-mario-world.enhancement.widescreen\1.0.0\manifest.toml'
+if (-not (Test-Path -LiteralPath $widescreenManifest -PathType Leaf)) {
+  throw "Built-in widescreen catalog missing: $widescreenManifest"
 }
+$stageMods = Join-Path $stage 'mods'
+New-Item -ItemType Directory -Path $stageMods -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $mods 'preloaded') -Destination $stageMods -Recurse
 
 # keybinds.ini is auto-generated next to the exe on first run (regenerated if
 # deleted); ship whatever is currently sitting next to the built exe, if any.

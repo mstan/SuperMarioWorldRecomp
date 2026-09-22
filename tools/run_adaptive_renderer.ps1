@@ -18,7 +18,7 @@ if ($CheckOnly) {
 [void](New-Item -ItemType Directory -Path $rendererData -Force)
 $rendererMods = Join-Path $rendererData 'mods'
 [void](New-Item -ItemType Directory -Path $rendererMods -Force)
-Copy-Item -LiteralPath (Join-Path $rendererRoot 'mods\preloaded\packages') -Destination $rendererMods -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $rendererRoot 'mods\preloaded') -Destination $rendererMods -Recurse -Force
 $rendererConfig = Join-Path $rendererData 'config.ini'
 if (-not (Test-Path -LiteralPath $rendererConfig)) {
     @"

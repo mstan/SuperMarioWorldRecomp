@@ -69,7 +69,7 @@ EXTRA_PAYLOAD=()                             # repo-relative files -> usr/bin/
 # a mod package (not a Display setting), so an AppImage without it would ship
 # with no way to turn widescreen on at all.
 REQUIRED_MOD_MANIFESTS=(
-  "packages/super-mario-world.enhancement.widescreen/1.0.0/manifest.toml"
+  "preloaded/packages/super-mario-world.enhancement.widescreen/1.0.0/manifest.toml"
 )
 PROD_CMAKE_FLAGS=( -DSNESRECOMP_ENABLE_TRACE=OFF )
 DEBUG_CMAKE_FLAGS=( -DSNESRECOMP_ENABLE_TRACE=ON )
@@ -296,7 +296,7 @@ done
 if [ -d "$BUILT_MODS" ]; then
   echo "      staging mod catalog   -> AppDir/usr/bin/mods"
   mkdir -p "$APPDIR/usr/bin/mods"
-  cp -r "$BUILT_MODS/packages" "$APPDIR/usr/bin/mods/packages"
+  cp -r "$BUILT_MODS/preloaded" "$APPDIR/usr/bin/mods/preloaded"
 fi
 
 # Custom AppRun. State policy: everything user-visible lives NEXT TO the
