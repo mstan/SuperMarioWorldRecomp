@@ -251,6 +251,23 @@ This boundary covers the shared pipe/door request routine. Door, vertical-room,
 mount/object transport, waiting-bubble, conflicting room/clear, and other exit
 paths still need their own live acceptance evidence and remaining adapters.
 
+### Shared checkpoint
+
+The `00:F2CD` hook receives only a valid midway-tape contact, before the original
+tile removal, sparkle, sound, and collector upgrade. It records a core
+checkpoint event; frame-end resolution upgrades every small actor, preserves
+stronger equipment and reserves, and remembers the upgrade for waiting actors.
+An actor still in its death animation keeps the small death pose and receives
+the big form on recovery. The event applies once per frame regardless of roster
+size. The native checkpoint key is `TranslevelNo + 1`, with zero for no checkpoint.
+
+Immediate retries bypass stock `04:8F35` overworld checkpoint publication. Before
+retrying, the adapter transfers a live `MidwayFlag` into bit `$40` of that
+translevel's `OWLevelTileSettings`. The original `05:D796` loader then selects
+the midpoint entrance. A new primary level entry resynchronizes the core key
+from the selected level's own flag, avoiding a stale checkpoint from another
+level. The restart policy still makes every actor small and retains reserves.
+
 The regular launcher exposes both input seats. `[GamepadMap] KeyboardPlayers`
 persists its keyboard assignments (bits 0 and 1 are the current two host seats);
 reloading hotkeys preserves those assignments. Recorded input accepts `p1.` and
@@ -490,6 +507,27 @@ the interior hook must appear in the generated blocks or the build fails.
   is not acceptance evidence. Corrected runs recorded no dispatch misses or
   unresolved-abandon messages. Hook coverage is now 12 compiled sites and
   three interpreter sites.
+- The shared offline `tools/coop_fixture.py` parser checks guard/native/core
+  checksums and field-layout identity before creating copied fixtures. Both
+  pipe and `make_coop_checkpoint_fixture.py` use it. No live state is patched.
+- `native-coop-checkpoint-waiting` stages small Mario in a recovery wait while
+  small Luigi approaches YI2's tape through normal Right input. At simulation
+  frame 436 both upgrade; Mario retains the upgrade flag while waiting and
+  returns big at frame 582 with 120 protection ticks. Reserves remain mushroom
+  and flower, lives remain five. In `native-coop-checkpoint-mario`, Mario's
+  tape contact upgrades himself and preserves fire Luigi throughout.
+- `native-coop-checkpoint-state` saves after the upgrade while Mario still
+  waits. All 484 repeated actor records match after restore, including return
+  size/protection and reserve ownership. `native-coop-checkpoint-retry` starts
+  from the recovered checkpoint state with the timer staged to expire. It
+  charges exactly one shared life (five to four), publishes the midpoint flag,
+  and restarts both small at the original YI2 midpoint entrance (center X 2328),
+  with separate reserves intact. Frame 880 shows the restarted team. The timer
+  was changed only in an offline copied state, not during execution.
+- `tools/check_coop_checkpoint_trace.py` checks checkpoint upgrades, preserved
+  stronger power, pending recovery upgrades, exact state replay, and midpoint
+  retry invariants. No dispatch misses or unresolved-abandon messages occurred
+  in these runs. Hook coverage is now 13 compiled and three interpreter sites.
 
 ### Compiler table-boundary correction found by co-op validation
 

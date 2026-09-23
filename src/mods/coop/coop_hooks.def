@@ -14,3 +14,4 @@ COOP_HOOK(0x00E9A1) /* Screen clamp; keep actual terrain/autoscroll crushing */
 COOP_HOOK_INSIDE(0x00A21B,0x00A1DA) /* Shared pause, inside GM14Level */
 COOP_HOOK_INSIDE(0x00A28A,0x00A1DA) /* GM14 gameplay after pause/messages */
 COOP_HOOK(0x00D273) /* Collect pipe/door room requests before one team commit */
+COOP_HOOK(0x00F2CD) /* Valid midway tape contact before native removal/effects */
