@@ -337,6 +337,7 @@
     <ClCompile Include="mods\coop\coop_machine.c" />
     <ClCompile Include="mods\coop\coop_runtime.c" />
     <ClCompile Include="mods\coop\coop_simulation.c" />
+    <ClCompile Include="mods\coop\coop_presentation.c" />
 
     <ClCompile Include="opengl.c" />
     <ClCompile Include="platform\win32\volume_control.c" />

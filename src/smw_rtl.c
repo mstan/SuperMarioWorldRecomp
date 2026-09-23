@@ -11,6 +11,7 @@
 #include "cpu_trace.h"
 #include "snes/interp_bridge.h"   /* faithful LLE of the $806B main loop */
 #include "mods/falcon/smw_falcon_presentation_runtime.h"
+#include "mods/coop/coop_presentation.h"
 
 static SnesrecompExecutionMode smw_execution_mode(void) {
   /* LLE is the correctness floor. The hand-written frame driver remains an
@@ -19,6 +20,7 @@ static SnesrecompExecutionMode smw_execution_mode(void) {
 }
 
 void SmwDrawPpuFrame(void) {
+  SmwCoopPresentationPrepare();
   SmwRendererBeginFrame();
   SimpleHdma hdma_chans[3];
 
@@ -66,6 +68,7 @@ void SmwDrawPpuFrame(void) {
 #include "mods/coop/coop_simulation.h"
 
 void RunOneFrameOfGame(void) {
+  SmwCoopPresentationLatch();
   SmwRendererSpawnFrame();
   SmwRendererLatchFrame();
   // First-call reset gate. Was previously `if (*(uint16*)$7F8000 == 0) I_RESET()`,

@@ -39,6 +39,8 @@ static int native_x;
 static bool level_scene;
 static Ppu raster;
 static uint16_t objects[SMW_RENDER_MAX_WIDTH];
+static uint16_t object_colors[SMW_RENDER_MAX_WIDTH];
+static uint64_t object_order[SMW_RENDER_MAX_WIDTH];
 static uint32_t native_control[256*224];
 int SmwRendererNativeOffset(void) { return g_smw_video.enabled ? native_x : 0; }
 static bool world_layer(unsigned layer) {
@@ -275,16 +277,22 @@ static bool window_condition(unsigned mode, bool inside) {
   return mode == 3 || (mode == 1 && !inside) || (mode == 2 && inside);
 }
 
+static unsigned pixel_colour(const uint16_t *palette,uint16_t pixel,int x) {
+  unsigned layer=(pixel>>8)&15;
+  if(g_ppu->extraObjectCount && (layer==4 || layer==6) && (object_colors[x]&0x8000))
+    return object_colors[x]&0x7fff;
+  return palette[pixel&255];
+}
 static uint32_t colour(const Ppu *p, const uint16_t *palette, const uint8_t *brightness, uint16_t main,
-                       uint16_t sub, bool inside) {
-  unsigned rgb = palette[main & 255], layer = (main >> 8) & 15;
+                       uint16_t sub, bool inside, int x) {
+  unsigned rgb = pixel_colour(palette,main,x), layer = (main >> 8) & 15;
   bool clipped = window_condition(p->cgwsel >> 6, inside);
   bool math = !window_condition((p->cgwsel >> 4) & 3, inside) &&
               ((p->cgadsub & 63) & (1u << layer));
   unsigned other = p->fixedColor;
   bool half = math && (p->cgadsub & 64) && !clipped;
   if (math && (p->cgwsel & 2)) {
-    if ((sub & 255) != 0) other = palette[sub & 255];
+    if ((sub & 255) != 0) other = pixel_colour(palette,sub,x);
     else half = false;
   }
   uint32_t result = 0;
@@ -398,11 +406,18 @@ static void sprite_piece(const Ppu *p,const RasterLine *l,int y,unsigned slot,
     int cx=attr&0x4000?size-1-col:col;
     unsigned tile=(((((attr&255)>>4)+row/8)&15)<<4)|(((attr&15)+cx/8)&15);
     unsigned pixel=tile_pixel(l->vram,base+tile*16,cx&7,row&7,4);
-    if(pixel) objects[dest]=(priority<<12)|(layer<<8)|palette|pixel;
+    if(pixel) {
+      objects[dest]=(priority<<12)|(layer<<8)|palette|pixel;
+      if(g_ppu->extraObjectCount)object_order[dest]=(uint64_t)slot<<32;
+    }
   }
 }
 static void sprites(const Ppu *p, const RasterLine *l, int y) {
   memset(objects,0,g_smw_viewport.width*sizeof(*objects));
+  if(g_ppu->extraObjectCount) {
+    memset(object_colors,0,g_smw_viewport.width*sizeof(*object_colors));
+    memset(object_order,0xff,g_smw_viewport.width*sizeof(*object_order));
+  }
   for (int slot=127;slot>=0;--slot) {
     unsigned pos=l->oam[slot*2],attr=l->oam[slot*2+1];
     unsigned hi=(l->high[slot/4]>>((slot%4)*2))&3;
@@ -420,6 +435,8 @@ static void sprites(const Ppu *p, const RasterLine *l, int y) {
     else if (x+sprite_sizes[p->obsel>>5][(hi>>1)&1]<=0 || x>=256) continue;
     sprite_piece(p,l,y,slot,pos,attr,hi,x);
   }
+  if(g_ppu->extraObjectCount)PpuComposeExtraObjects(g_ppu->extraObjects,g_ppu->extraObjectCount,
+      y,-native_x,(size_t)g_smw_viewport.width,0,objects,object_colors,object_order);
 }
 static uint32_t compose(const Ppu *p, const RasterLine *l, const uint8_t *brightness,
                         const uint16_t *bg, uint16_t object, int x) {
@@ -434,7 +451,7 @@ static uint32_t compose(const Ppu *p, const RasterLine *l, const uint8_t *bright
        (!(p->screenWindowed[sub]&16) || !window(p,4,x)) &&
        object>screens[sub]) screens[sub]=object;
   }
-  return colour(p,l->palette,brightness,screens[0],screens[1],window(p,5,x));
+  return colour(p,l->palette,brightness,screens[0],screens[1],window(p,5,x),x+native_x);
 }
 void SmwRendererDraw(uint8_t *pixels,size_t pitch,const uint8_t *stock) {
   int width=g_smw_viewport.width;

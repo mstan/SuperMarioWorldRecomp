@@ -171,6 +171,13 @@ static void guest_ownership(void) {
     free(a);free(b);free(owned);
 }
 
+static void repair_native_crc(uint8_t *p,size_t n) {
+    uint32_t crc=UINT32_MAX;
+    for(size_t i=0;i<n-4;++i) {
+        crc^=p[i];for(unsigned bit=0;bit<8;++bit)crc=(crc>>1)^((0u-(crc&1u))&0xedb88320u);
+    }
+    crc=~crc;for(unsigned i=0;i<4;++i)p[n-4+i]=(uint8_t)(crc>>(8*i));
+}
 static void native_states(size_t players) {
     CoopMachine a={0},b={0};assert(coop_machine_init(&a,players));
     a.room=123;a.previous_mode=0x14;a.room_initialized=true;
@@ -180,10 +187,19 @@ static void native_states(size_t players) {
     a.actors[players-1].input_seat=100;
     CoopActor swap=a.actors[0];a.actors[0]=a.actors[players-1];a.actors[players-1]=swap;
     for(size_t i=0;i<players;++i)memset(a.actors[i].guest.bytes,(int)(i+4),COOP_GUEST_BYTES);
+    /* Pending/visible pictures are distinct across the guest's NMI boundary. */
+    a.actors[0].pending.count=1;
+    CoopVisualPiece *piece=&a.actors[0].pending.pieces[0];
+    piece->x=-7;piece->y=211;piece->width=piece->height=16;
+    piece->priority=2;piece->slot=68;piece->pixels[15]=0x83e0;
+    a.actors[0].visible=a.actors[0].pending;
+    a.actors[0].visible.pieces[0].x=87;
     size_t n=coop_machine_save_size(&a);uint8_t *data=malloc(n),*again=malloc(n);assert(data&&again);
     assert(coop_machine_save(&a,data,n));assert(coop_machine_load(&b,data,n));
     assert(b.actor_count==players && b.room==123 && b.room_initialized);
     assert(coop_machine_actor(&b,2000)->input_seat==100);
+    assert(b.actors[0].pending.pieces[0].x==-7 && b.actors[0].visible.pieces[0].x==87);
+    assert(b.actors[0].visible.pieces[0].pixels[15]==0x83e0);
     assert(coop_machine_save(&b,again,n));assert(!memcmp(data,again,n));
     CoopActor *original=b.actors;
     for(size_t i=0;i<n;++i) {
@@ -192,6 +208,13 @@ static void native_states(size_t players) {
     for(size_t i=0;i<n;++i)assert(!coop_machine_load(&b,data,i));
     assert(b.actors==original);
     /* These are structurally well-formed blobs with correct checksums. */
+    size_t visual=64+coop_session_save_size(&a.session)+16+COOP_GUEST_BYTES;
+    data[visual+8]=17;repair_native_crc(data,n); /* unsupported piece width */
+    assert(!coop_machine_load(&b,data,n) && b.actors==original);
+    memcpy(data,again,n);
+    size_t actor=64+coop_session_save_size(&a.session);
+    data[actor+8]=COOP_BODY_PIECES+1;repair_native_crc(data,n);
+    assert(!coop_machine_load(&b,data,n) && b.actors==original);
     a.actors[1].player=a.actors[0].player;
     assert(coop_machine_save(&a,data,n));assert(!coop_machine_load(&b,data,n));
     assert(b.actors==original);

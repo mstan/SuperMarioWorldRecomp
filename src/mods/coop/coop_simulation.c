@@ -1,5 +1,6 @@
 #include "coop_simulation.h"
 #include "coop_runtime.h"
+#include "coop_presentation.h"
 #include "common_rtl.h"
 #include "snes/interp_bridge.h"
 #include "snes/snes.h"
@@ -41,6 +42,7 @@ static void initialize_room(CoopMachine *m) {
             g_ram[0x19]=(uint8_t)p->power;g_ram[0xdc2]=(uint8_t)p->reserve;
         }
         capture(m,a);
+        a->pending.count=a->visible.count=0;
     }
     m->room_initialized=true;
     coop_guest_bind(&primary_actor(m)->guest,g_ram);
@@ -73,6 +75,44 @@ static void tick_secondary_timers(void) {
         if(g_ram[0x14a9])--g_ram[0x14a9];
         if(g_ram[0x14aa])--g_ram[0x14aa];
     }
+}
+static void draw_secondary_players(CpuState *cpu,CoopMachine *m) {
+    CpuState caller=*cpu;
+    uint8_t scratch[16],oam[0x2a0];
+    memcpy(scratch,g_ram,sizeof(scratch));memcpy(oam,g_ram+0x200,sizeof(oam));
+    uint8_t turn=g_ram[0xdb3];
+    CoopActor *primary=primary_actor(m);capture(m,primary);
+    ++player_call_depth;
+    for(size_t i=0;i<m->actor_count;++i) {
+        CoopActor *a=&m->actors[i];CoopPlayer *p=coop_player(&m->session,a->player);
+        if(a==primary)continue;
+        a->pending.count=0;
+        if(p->life!=COOP_PLAYING && p->life!=COOP_DYING)continue;
+        coop_guest_bind(&a->guest,g_ram);
+        memcpy(g_ram,scratch,sizeof(scratch));
+        for(unsigned slot=0;slot<128;++slot)g_ram[0x201+slot*4]=0xf0;
+        g_ram[0xdb3]=(uint8_t)(p->character==1);
+        restore_registers(cpu,&caller);
+        /* Enter the body/cape stage after Yoshi and shared star music work.
+         * Its bank-save/RTL epilogue requires the original one-byte DB frame. */
+        cpu_push_jsl_return_frame(cpu);
+        cpu_write8(cpu,0,cpu->S,cpu->DB);--cpu->S;cpu->DB=0;cpu->PB=0;
+        unsigned star=g_ram[0x1490];
+        uint32_t entry=0x00e314;
+        if(g_ram[0x149b])entry=0x00e308;
+        else if(star) {
+            if(g_ram[0x78]!=0xff && !(g_ram[0x14]&3))--g_ram[0x1490];
+            entry=star>0x1e?0x00e30c:0x00e308;
+            cpu->A=(cpu->A&0xff00)|g_ram[0x13];
+        }
+        if(!interp_bridge_run(cpu,entry) || cpu->S!=caller.S)
+            Die("Native co-op player draw failed its guest return contract");
+        SmwCoopCaptureVisual(&a->pending);capture(m,a);
+    }
+    --player_call_depth;
+    restore_registers(cpu,&caller);
+    memcpy(g_ram,scratch,sizeof(scratch));memcpy(g_ram+0x200,oam,sizeof(oam));
+    g_ram[0xdb3]=turn;coop_guest_bind(&primary->guest,g_ram);
 }
 static void run_player_routines(CpuState *cpu,CoopMachine *m) {
     CpuState caller=*cpu;
@@ -109,6 +149,7 @@ static void run_player_routines(CpuState *cpu,CoopMachine *m) {
 uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
     if(!level_frame || player_call_depth)return 0;
     CoopMachine *m=SmwCoopMachine();if(!m)return 0;
+    if((pc&0x7fffff)==0x00e2bd)draw_secondary_players(cpu,m);
     if((pc&0x7fffff)==0x00c569) {
         run_player_routines(cpu,m);
         return 0x00c592; /* original RTS, with the original return frame */
