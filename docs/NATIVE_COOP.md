@@ -810,8 +810,57 @@ held frame before the script's neutral release frame; delayed snapshots retain
 their explicit delay. This makes held-object snapshots reproducible.
 
 Remaining work includes all loose-object contact candidates when players
-overlap, goal gift conversion per carrier, every carried-object/entrance type,
+overlap, every carried-object/entrance type,
 balloon conflicts, mounted keyholes, mounts, projectiles and full campaign validation.
+
+### Carried goal rewards
+
+The original `00:FB00` gift table reads the currently bound player's power,
+reserve and riding state. At a co-op clear, each invocation now binds the
+carried object's explicit owner, cancels that actor's star as the original
+clear does, and executes the unchanged native conversion once. The completed
+registers and scratch return to the original world conversion loop; the
+previous actor context is restored. This applies to the roster, with no
+Mario/Luigi selection built into reward conversion.
+
+The gift's `07:F722` initialization retires the carried object's identity. Its
+native status is briefly still `$0B` during initialization, before `00:FB00`
+sets `$0C`; that interval must not claim the replacement as another carried
+object. A scoped conversion guard prevents this false claim. The replacement
+is a new, unowned world reward that either eligible actor can collect, and the
+former carrier's hand reference and both carrying flags are cleared. Snapshot
+schema 3 already represents all of this state.
+
+The first two-shell test exposed the old failure: converting Mario's object
+while Luigi was the goal winner attempted to assign both objects to Luigi and
+hit the exclusive-ownership check. The corrected adapter completes the scene.
+Focused validation (2026-09-23):
+
+- `native-coop-goal-carry.csv` / `native-coop-goal-carry-floor.csv`: **1,194
+  identical actor records**. Both original pickup routines acquire a shell;
+  Luigi crosses the naturally loaded tape. Big Mario has a flower reserve and
+  gets the native mushroom gift. Big Luigi has a mushroom reserve, so the
+  native duplicate-item rule makes his gift a 1-up. The viewed running frame
+  capture shows the two different rewards above their former carriers.
+- `native-coop-goal-carry-swapped.csv`: swapping reserves swaps those gifts,
+  with Luigi still owning the exit. The saved native sprite slots are `$0C`,
+  contain the expected distinct types, have new unowned IDs, and retain no
+  carried references or flags. The original 1,194-record victory completes.
+- `native-coop-goal-carry-replay.csv`: restoring the actual converted-gift
+  snapshot repeats **1,100 identical actor records** through native victory,
+  without resurrecting either shell. All successful runs have stack `$01FF`
+  and no dispatch misses. Release build passes; hook coverage is now 31
+  compiled boundaries and three interpreted boundaries.
+
+`tools/make_coop_goal_carry_fixture.py` stages loose shells and reserves in an
+offline copy of a naturally loaded YI2 goal. Other nearby enemies are removed
+from that fixture; a four-frame native sprite contact cooldown lets the
+scripted grab arrive before neutral input would kick the shells. This isolates
+the conversion case. Hold `y+p2.y+p2.right` for 45 frames, save, and allow the
+native victory to finish. `--swap` exchanges reserves.
+`tools/check_coop_goal_carry.py` checks both the running trace and actual saved
+registry; `--replay` checks two loads of that converted state. Mounted reward
+selection still requires the independent mount adapter and its own evidence.
 
 ### Keyhole validation
 
