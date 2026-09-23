@@ -221,12 +221,22 @@ static void native_states(size_t players) {
     piece->priority=2;piece->slot=68;piece->pixels[15]=0x83e0;
     a.actors[0].visible=a.actors[0].pending;
     a.actors[0].visible.pieces[0].x=87;
+    a.level=0x106;
+    CoopEntity *held=coop_machine_spawn_entity(&a,COOP_ENTITY_NORMAL,3,0x80);assert(held);
+    held->owner=2000;held->flags=COOP_ENTITY_HELD;
+    coop_player(&a.session,2000)->held_object=held->id;
+    CoopEntityId held_id=held->id;
+    CoopEntity *mount=coop_machine_spawn_entity(&a,COOP_ENTITY_NORMAL,8,0x35);assert(mount);
+    mount->owner=0;mount->flags=COOP_ENTITY_RIDDEN;mount->target=2000;
+    coop_player(&a.session,0)->mount=mount->id;
     size_t n=coop_machine_save_size(&a);uint8_t *data=malloc(n),*again=malloc(n);assert(data&&again);
     assert(coop_machine_save(&a,data,n));assert(coop_machine_load(&b,data,n));
     assert(b.actor_count==players && b.room==123 && b.room_initialized);
     assert(coop_machine_actor(&b,2000)->input_seat==100);
     assert(b.actors[0].pending.pieces[0].x==-7 && b.actors[0].visible.pieces[0].x==87);
     assert(b.actors[0].visible.pieces[0].pixels[15]==0x83e0);
+    assert(b.level==0x106 && b.entity_count==2);
+    assert(coop_machine_entity(&b,held_id)->owner==2000);
     assert(coop_machine_save(&b,again,n));assert(!memcmp(data,again,n));
     CoopActor *original=b.actors;
     for(size_t i=0;i<n;++i) {
@@ -234,6 +244,14 @@ static void native_states(size_t players) {
     }
     for(size_t i=0;i<n;++i)assert(!coop_machine_load(&b,data,i));
     assert(b.actors==original);
+    /* Reusable ROM slots cannot transfer an old owner's identity. */
+    CoopEntity *replacement=coop_machine_spawn_entity(&b,COOP_ENTITY_NORMAL,3,0x3e);
+    assert(replacement && replacement->id!=held_id && replacement->owner==COOP_NO_PLAYER);
+    assert(coop_player(&b.session,2000)->held_object==COOP_NO_ENTITY);
+    assert(!coop_machine_entity(&b,held_id) && b.entity_count==2);
+    assert(coop_machine_entity_slot(&b,COOP_ENTITY_NORMAL,8)->target==2000);
+    assert(!coop_machine_spawn_entity(&b,COOP_ENTITY_NORMAL,12,1));
+    assert(!coop_machine_spawn_entity(&b,COOP_ENTITY_EXTENDED,10,1));
     /* These are structurally well-formed blobs with correct checksums. */
     size_t visual=64+coop_session_save_size(&a.session)+16+COOP_GUEST_BYTES;
     data[visual+8]=17;repair_native_crc(data,n); /* unsupported piece width */
@@ -241,6 +259,13 @@ static void native_states(size_t players) {
     memcpy(data,again,n);
     size_t actor=64+coop_session_save_size(&a.session);
     data[actor+8]=COOP_BODY_PIECES+1;repair_native_crc(data,n);
+    assert(!coop_machine_load(&b,data,n) && b.actors==original);
+    memcpy(data,again,n);
+    size_t entities=n-4-2*28;
+    data[entities+28]=data[entities];repair_native_crc(data,n); /* duplicate identity */
+    assert(!coop_machine_load(&b,data,n) && b.actors==original);
+    memcpy(data,again,n);
+    data[entities+16]=0;data[entities+17]=0;repair_native_crc(data,n); /* incorrect holder */
     assert(!coop_machine_load(&b,data,n) && b.actors==original);
     a.actors[1].player=a.actors[0].player;
     assert(coop_machine_save(&a,data,n));assert(!coop_machine_load(&b,data,n));

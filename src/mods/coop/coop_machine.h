@@ -24,6 +24,18 @@ typedef struct CoopActor {
     CoopVisual pending,visible; /* guest draws, then NMI presents next frame */
 } CoopActor;
 
+/* Stable native identities are separate from reusable guest sprite slots.
+ * Slot limits describe the original engine, never the participation limit. */
+typedef enum CoopEntityKind { COOP_ENTITY_NORMAL, COOP_ENTITY_EXTENDED } CoopEntityKind;
+enum { COOP_ENTITY_HELD=1, COOP_ENTITY_RIDDEN=2, COOP_ENTITY_PROJECTILE=4,
+       COOP_ENTITY_ATTACHED=8 };
+typedef struct CoopEntity {
+    CoopEntityId id;
+    uint32_t kind,slot,type;
+    CoopPlayerId owner,target;
+    uint32_t flags;
+} CoopEntity;
+
 typedef struct CoopMachine {
     CoopSession session;
     CoopActor *actors;
@@ -31,11 +43,18 @@ typedef struct CoopMachine {
     uint32_t room; /* diagnostic SpriteDataPtr; empty rooms may share it */
     uint32_t previous_mode;
     bool room_initialized;
+    CoopEntity *entities;
+    size_t entity_count,entity_capacity;
+    uint32_t next_entity,level;
 } CoopMachine;
 
 bool coop_machine_init(CoopMachine *m, size_t players);
 void coop_machine_destroy(CoopMachine *m);
 CoopActor *coop_machine_actor(CoopMachine *m, CoopPlayerId player);
+CoopEntity *coop_machine_entity(CoopMachine *m,CoopEntityId id);
+CoopEntity *coop_machine_entity_slot(CoopMachine *m,unsigned kind,unsigned slot);
+CoopEntity *coop_machine_spawn_entity(CoopMachine *m,unsigned kind,unsigned slot,unsigned type);
+void coop_machine_forget_entity(CoopMachine *m,CoopEntityId id);
 size_t coop_machine_save_size(const CoopMachine *m);
 bool coop_machine_save(const CoopMachine *m, void *data, size_t capacity);
 /* Transactional: failure leaves both policy and native images untouched. */

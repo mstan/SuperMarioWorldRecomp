@@ -245,13 +245,16 @@ fade already contain the committed guest loader inputs and all canonical
 actors. The machine's `room` field and CSV `level_data` record `SpriteDataPtr`
 at `$CE..$D0`. This is diagnostic only: empty rooms can share a sprite list.
 It is not a unique room identity. Transitions are detected through native mode
-changes; `LoadingLevelNumber` is reused by the ROM after loading. A persistent
-numeric room identity still needs to be captured at the loader boundary when
-ownership/transport adapters require it. The CSV includes this pointer, selected
+changes; `LoadingLevelNumber` is reused by the ROM after loading. The ownership
+adapter now captures the complete nine-bit level number from `$0E..$0F` at
+`05:D8B7`, before the loader multiplies it into a table index. Machine `level`
+and CSV `level` retain that identity (unknown for an imported older state until
+its next entrance). The CSV includes this identity, the sprite pointer, selected
 entrant, sublevel count, mode, and each reserve for validation.
 
 This boundary covers the shared pipe/door request routine. Door, vertical-room,
-mount/object transport, waiting-bubble, conflicting room/clear, and other exit
+mount transport, additional carried-object entrance types, waiting-bubble,
+conflicting room/clear, and other exit
 paths still need their own live acceptance evidence and remaining adapters.
 
 ### Shared checkpoint
@@ -316,7 +319,7 @@ primary/stable actor. The stock sprite-slot bound is separate from roster size.
 
 Goal collection state is temporary within one host frame; committed scene
 state is already in the guest and native actor snapshot. No snapshot schema
-change or custom UI is needed. Keyhole arbitration, mounted/carried-object
+change or custom UI is needed. Keyhole arbitration, mount
 rewards, bonus-room participation, and full campaign coverage still require
 their own adapters and validation.
 
@@ -360,19 +363,20 @@ With no extra objects, the existing native path and snapshot layout stay intact.
 This is actor rendering; it does not add menus or a co-op UI overlay.
 
 Each actor stores both its pending guest draw and its visible draw latched at
-NMI. The native `CNR1` container now uses schema version 2 to serialize both,
+NMI. The native `CNR1` container introduced schema version 2 to serialize both,
 including coordinates, piece attributes and pixels. Preflight bounds-checks
 counts and attributes before replacing the session. Development snapshots from
-schema 1 are rejected; separate campaign SRAM remains compatible. Full mount,
-ownership and event state remains part of the unfinished integration work.
+schema 1 are rejected; separate campaign SRAM remains compatible. Schema 3 now
+adds explicit entity ownership, described below. Mount and projectile behavior
+remain part of the unfinished integration work.
 
 ### World contacts, camera and recovery
 
-The normal-sprite scheduler (`01:8127`) runs each entity once, binding the nearest
-active actor while the original routine executes. Exact distance ties use stable
+The normal-sprite scheduler (`01:8127`) runs each entity once, binding its owner
+for a carried/attached object, otherwise the nearest active actor. Exact distance ties use stable
 player IDs with primary-player priority. This supplies the actor context for the
 original AI and contact code; simultaneous contact collection, committed attack
-targets, carried-object ownership and special sprite policies remain unfinished.
+targets and special sprite policies remain unfinished.
 The per-actor carry/platform occupancy fields are cleared at `01:808C` with the
 original cadence. That entry is explicitly interpreter-only in the dispatch
 table, and the hook verifier checks that fact instead of accepting absent code.
@@ -556,7 +560,7 @@ the interior hook must appear in the generated blocks or the build fails.
   The source state is unchanged; the live run uses ordinary Down input and the
   original collision, pipe animation, fade and loader.
 - `native-coop-pipe-mario.csv` and `native-coop-pipe-luigi-fixed.csv` each verify
-  either actor can take the team from Layer 1 data `$07C532` to `$07C57F` (YI2's
+  either actor can take the team from sprite data `$07C532` to `$07C57F` (YI2's
   underground room), with exactly one sublevel increment, five lives, balanced
   stack 511, and independent equipment/reserves retained. The Luigi run has
   582 destination actor records and is byte-identical with scheduler bounce
@@ -683,6 +687,115 @@ Native switch scene extension:
   retains his reserve. Luigi's fifty-star reward is preserved. All 1,126 actor
   records pass the exit/cadence/life checks, including the native TIME 000
   matching-digit life; no death life is charged.
+
+### Carried-object ownership and transport
+
+`CoopMachine` owns a dynamic entity registry. Stable entity IDs are distinct
+from reusable native sprite slots, with explicit owner, target, kind, type and
+ownership flags. Reinitializing a slot at `07:F722` retires its old identity and
+clears old carrier/mount references. The normal and extended slot bounds are
+stock engine capacities (12 and 10), independent of the session roster count.
+The registry is also the foundation for later mount/projectile adapters; those
+behaviors are not implied by the existence of their record flags.
+
+Every normal sprite runs once through the scoped call, including sprites bound
+to the primary actor. A native pickup changing status to `$0B` records that
+actor as owner. An object already being carried always binds its owner, even
+when another actor is nearer. Native release, throw, death, removal and
+conversion retire carried ownership. Throw-block allocation uses the bound
+actor at native sprite initialization. A balloon uses attached ownership,
+without consuming the actor's exclusive hand-held object reference; complete
+balloon interaction rules still need validation.
+
+Occupancy bookkeeping mirrors `01:808C`: `$1470` (`CarryingFlag`) receives
+`$148F` (`IsCarryingItem`), then `$148F` is cleared for the coming sprite pass.
+The initial secondary adapter had these two bytes reversed; the source/symbol
+audit corrected that ordering. The native pickup and carried routines then
+publish each actor's own flags.
+
+Catch-up executes the native `01:A015` Down-release branch before recovery
+changes the actor's coordinates, leaving the object at departure. A failed
+attempt discards all owned entities before entering the loader, including an
+object held by a survivor when the shared timer expires. Clear arbitration
+still takes priority over retry cleanup.
+
+The native cleanup at `02:ABF2` assumes one carried object and moves it into
+slot zero. Its co-op adapter retains the owned carried records, runs the shared
+cleanup once, then recreates every transported object with the same native
+`07:F7D2` initializer and preserved type, position and palette. New slots are
+assigned deterministically; logical IDs and owners survive. Room initialization
+seeds each actor's carrying flags from its own object. No unowned carried sprite
+is assigned to an arbitrary nearby player.
+
+`CNR1` schema 3 appends an `ENT1` section after the actor pictures: record count,
+next identity, persistent level number, then 28-byte little-endian records
+(`id`, `kind`, `slot`, `type`, `owner`, `target`, `flags`). Preflight checks ID and
+slot uniqueness, bounds, valid player references, mutually exclusive ownership
+flags and both directions of held/mount references. The entire native container
+remains CRC protected and load remains transactional. Schema 2 imports only
+when its actors have no held, mounted or attached state; ownership cannot be
+reconstructed safely from an old single-player slot. Ordinary campaign SRAM
+and its separation from co-op SRAM are unchanged.
+
+Focused evidence (2026-09-23, copied/staged fixtures, original pickup routines):
+
+- `native-coop-carry-near.csv`: 560 actor records. Luigi retains the same key
+  during nine frames when Mario is nearer and also holds grab. After release,
+  Mario picks up that same ID. Slot 4 captures actual held ownership and both
+  native carry flags in schema 3.
+- `native-coop-carry-pipe.csv` and `native-coop-carry-pipe-compiled.csv`:
+  **1,444 identical records** with bounce disabled/enabled. Big Mario and fire
+  Luigi independently pick up keys in slots 7 and 4; Luigi enters the YI2 pipe.
+  Both keys arrive in level `$1CA`, relocated to slots 1 and 0, with unchanged
+  logical IDs/owners, equipment and reserves. Slot 6 preserves both held keys.
+- `native-coop-carry-state.csv`: load that two-key snapshot twice and replay
+  the same input; **306 consecutive actor records match exactly**. The initial
+  neutral load input releases the objects through native logic; the saved
+  registry and guest flags are separately verified as held at the boundary.
+- `native-coop-carry-catchup.csv`: 580 records. Luigi holds the key through
+  separation grace 59, drops it at x=99 on frame 463, then safely returns at
+  x=4748 on frame 486 with his power/reserve and no new protection.
+- `native-coop-carry-timeout.csv`: 1,008 records. Timeout charges one shared
+  life (5 to 4), clears the surviving carrier's ownership before retry, and
+  returns both players small to level `$106`, keeping reserves 1 and 2.
+- The simultaneous goal/death/TIME-000 regression still passes all 1,126
+  arbitration/victory records after this scheduler change. All accepted runs
+  retain stack `$01FF` and produce no dispatch misses.
+- Portable entity/snapshot tests pass at rosters 2/3/4/17, including slot reuse,
+  forged duplicate IDs, wrong owners, every-byte corruption and truncation.
+
+Reproduction tools: `make_coop_carry_fixture.py`, `check_coop_carry_trace.py`, and
+the shared schema-2/3 `coop_fixture.py` parser. `--pipe` deliberately stages two
+stock keys; `--catchup` stages excessive separation; `--timeout` stages TIME 001
+with sixty ticks left on its divider. These are focused cases, not campaign
+coverage. An immediate script `savestate` after a `press` now captures the last
+held frame before the script's neutral release frame; delayed snapshots retain
+their explicit delay. This makes held-object snapshots reproducible.
+
+Remaining work includes all loose-object contact candidates when players
+overlap, goal gift conversion per carrier, every carried-object/entrance type,
+balloon conflicts, keyholes, mounts, projectiles and full campaign validation.
+
+### Disabled-mod input correction
+
+Tracked as `beads-8wg.3.27`. The two-key compiled/interpreted comparison exposed
+an existing inactive Falcon hook at `01:80D2`: `smw_falcon_clear_carry_bridge`
+unconditionally removed Y/Down from the native controller bytes, preventing
+Mario from grabbing a key. A running pre-opcode trace localized the change
+between `01:80AC` and `01:80AF`, before the co-op sprite adapter. The temporary
+probe was removed after diagnosis.
+
+The helper now clears its private latch and returns without editing input when
+Falcon is inactive. Its four cleanup call sites (handoff, after-physics fallback,
+sprite pass, and state-load paths) share that guard; active Falcon cleanup keeps
+its existing behavior. `falcon_kick_guard_test` now exercises all 256 native
+controller-byte combinations across inactive physics, sprite and load hooks.
+The focused test passes alongside its existing active Punch/Kick/Dive checks.
+Its sprite-only fixture supplies empty-terrain stubs for the newer block-query
+dependencies. The repaired two-key runtime comparison above proves the original
+compiled failure no longer occurs. No framework/compiler change was required.
+The standalone Windows `test/falcon_kick_guard/build.bat` points to the current
+game-owned `src/foreign_controller.c` so this regression remains reproducible.
 
 ### Compiler table-boundary correction found by co-op validation
 

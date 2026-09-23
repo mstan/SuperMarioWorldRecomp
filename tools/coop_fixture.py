@@ -24,7 +24,8 @@ class Fixture:
         self.end = len(d)-12
         self.machine = self.end-self.word(self.end)
         m = self.machine
-        assert d[m:m+4] == b'CNR1' and self.word(m+4) == 2
+        self.version = self.word(m+4)
+        assert d[m:m+4] == b'CNR1' and self.version in (2, 3)
         self.check_crc(m, self.end)
         self.core = m+64
         self.core_end = self.core+self.word(m+40)
@@ -56,6 +57,16 @@ class Fixture:
             player = self.word(at)
             self.actors[player] = (at+16, records[player])
             at += 16+len(self.offsets)+(self.word(at+8)+self.word(at+12))*540
+        self.entities = {}
+        if self.version == 3:
+            assert d[at:at+4] == b'ENT1'
+            count = self.word(at+4)
+            self.next_entity, self.level = self.word(at+8), self.word(at+12)
+            at += 16
+            for _ in range(count):
+                entity = struct.unpack_from('<7I', d, at)
+                self.entities[entity[0]] = entity
+                at += 28
         assert at == self.end-4
 
     def word(self, at):
