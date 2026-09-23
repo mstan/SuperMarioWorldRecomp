@@ -4,3 +4,10 @@ COOP_HOOK(0x009D22) /* FileSelected.NotValid, after validation/copy */
 COOP_HOOK(0x009E0D) /* Native player-count choice, before loading campaign */
 COOP_HOOK(0x00C569) /* Player update, after once-per-world shared timers */
 COOP_HOOK(0x00E2BD) /* Player graphics entry, before primary draw */
+COOP_HOOK(0x018127) /* One normal-sprite update, with selected actor context */
+COOP_HOOK(0x01808C) /* Per-actor contact occupancy before world sprites */
+COOP_HOOK(0x00F60A) /* Individual lethal damage before shared music/freeze */
+COOP_HOOK(0x00F606) /* Enemy/crush kill entry includes F60A in its AOT block */
+COOP_HOOK(0x00D0B6) /* Death animation before original party-life handling */
+COOP_HOOK(0x00F6DB) /* Original camera with active-roster focus */
+COOP_HOOK(0x00E9A1) /* Screen clamp; keep actual terrain/autoscroll crushing */

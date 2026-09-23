@@ -217,13 +217,15 @@ following audited boundaries. The world update is not replayed for each actor.
 | `00:C47E` before `00:C569` | Original world/keyhole/effective-frame/shared timer work runs once. |
 | `00:C569` through `00:C592` | Scoped original player animation/motion/terrain, reserve-release and note-block state run for each actor. |
 | Secondary timer fields | Advance only the audited per-player timer bytes, with the original cadence. |
-| Normal/extended sprites | Original world update runs once; multi-actor contact/target arbitration still needs integration. |
+| Normal sprites | Each original update runs once with a selected actor context; complete contact and attack-target arbitration remains in progress. |
+| Extended sprites | Original world update runs once; ownership and multi-actor contact integration remain in progress. |
 | Player graphics | Primary draw/upload runs normally. Secondary body/cape draws run in a scoped scratch/OAM context; independent pictures join the OBJ renderer. |
 
 Each scoped call preserves the caller's registers, scratch bytes and stack
 balance, while retaining elapsed machine clocks and bus state. Original player
-routines can produce shared effects: deaths, room changes, transformations,
-projectiles and terrain rewards still require their event/ownership adapters.
+routines can produce shared effects: room changes, transformations, projectiles
+and terrain rewards still require their event/ownership adapters. Individual
+death and recovery adapters are under live validation as described below.
 The initial motion result does not establish those behaviors as correct.
 
 The regular launcher exposes both input seats. `[GamepadMap] KeyboardPlayers`
@@ -256,6 +258,51 @@ including coordinates, piece attributes and pixels. Preflight bounds-checks
 counts and attributes before replacing the session. Development snapshots from
 schema 1 are rejected; separate campaign SRAM remains compatible. Full mount,
 ownership and event state remains part of the unfinished integration work.
+
+### World contacts, camera and recovery
+
+The normal-sprite scheduler (`01:8127`) runs each entity once, binding the nearest
+active actor while the original routine executes. Exact distance ties use stable
+player IDs with primary-player priority. This supplies the actor context for the
+original AI and contact code; simultaneous contact collection, committed attack
+targets, carried-object ownership and special sprite policies remain unfinished.
+The per-actor carry/platform occupancy fields are cleared at `01:808C` with the
+original cadence. That entry is explicitly interpreter-only in the dispatch
+table, and the hook verifier checks that fact instead of accepting absent code.
+
+The character selector at `$0DB3` also selects score/progression slots in stock
+SMW. Gameplay always uses the shared party slot; character selection is confined
+to drawing. Collision centers now use the original `03:B664` clipping table:
+small actors have a 12-pixel box starting 20 pixels below `$96`, large actors a
+26-pixel box starting six pixels below it. `$96` is the pose-frame origin.
+
+Camera focus uses the active roster's bounds and the established travel leader
+when players cannot fit. The original camera code retains smoothing, scrolling
+settings and layer parallax. Edge checks use the actual rendered viewport;
+viewport changes restart separation grace. The normal 256-pixel screen clamp
+at `00:E9A1` is replaced by room boundaries during free scrolling. The terrain
+crush check at `00:E9FB` and original autoscroll path remain. Autoscroll, vertical
+rooms and resize transitions still require live acceptance evidence.
+
+Lethal damage has two audited entrances: `00:F606` supplies the initial enemy/
+crush velocity, while `00:F60A` preserves pit fall velocity. Both are hooked:
+the generated F606 block includes the F60A instructions without a second block
+boundary. Intercepting F60A alone missed compiled enemy deaths; a live contact
+trace exposed the shared freeze, and the adapter now covers both entrances.
+The death animation retains the original falling motion and four-frame timer
+cadence while omitting the global music/freeze and individual life charge.
+The primary death timer is excluded from the otherwise once-per-world timer
+stage, matching the cadence of secondary actors.
+
+After event resolution, the adapter checks separation and safe recovery. The
+read-only Map16 query follows the original collision pointers and P-switch
+remapping. It checks actual footing and body clearance, including collidable
+Layer 2, and waits when live sprites occupy the recovery area. Foot height is
+preserved when a small actor returns beside a large survivor. The current query
+is conservative: slope, moving-platform, mounted and supported-air placement
+need their remaining adapters. These cases are not yet acceptance-complete.
+Team failure enters the original level loader with the shared checkpoint flag
+and one life charged. Game-over presentation uses the original game modes.
 
 ### Status and evidence
 
@@ -309,7 +356,8 @@ ownership and event state remains part of the unfinished integration work.
   overworld, and Yoshi's Island 2. The recorded `native-coop-seats` run contains
   422 level frames per actor: Mario moves from x=24 to x=16 under P1 input,
   Luigi moves from x=24 to x=93 under P2 input, and each jumps independently.
-  Both finish on the terrain at y=360; the guest stack remains 511. The trace
+  Both finish on the terrain at y=360 in that trace's old center convention
+  (the corrected collision-box center is y=378); the guest stack remains 511. The trace
   is an ignored local artifact at `build-adaptive/playtest/native-coop-seats.csv`.
   Its frame-680 screenshot predates secondary rendering and shows only Mario.
   This is movement evidence,
@@ -332,6 +380,35 @@ ownership and event state remains part of the unfinished integration work.
   transparency, native/Mode7, legacy/fast, background depth, windows, color math,
   clipping, rotated OAM and stable 17-object ordering checks. The existing PPU
   composition regression matches its previous digest `436319d369c4a1e3`.
+- The 2026-09-23 normal-sprite/camera/recovery build verifies 11 compiled hook
+  sites and one explicitly interpreter-only entry. `tools/test_coop_hooks.py`
+  checks idempotence and rejects missing or partly compiled coverage claims.
+  Terrain tests cover small recovery beside a large anchor, hazards despite
+  protection, world sprites, collidable Layer 2, P-switch remapping, bounds,
+  truncated ROM data and a query leaving all WRAM unchanged.
+- Live `native-coop-recover-mario.csv` and `native-coop-recover-luigi.csv` runs
+  each contain 1,040 level frames per actor. The dying actor enters death at
+  simulation frame 672, finishes the original animation at 863, waits 180
+  gameplay frames and recovers at 1043. The survivor and world keep advancing;
+  lives stay at five and the stack stays at 511. The Luigi trace also records
+  exactly 120 protection ticks on return. Screenshots in the matching `-check`
+  directories show the survivor continuing and the recovered actor at safe
+  footing. Characters can occupy the same position after recovery.
+- `tools/check_coop_recovery_trace.py` validates those live lifecycle, world
+  cadence, life, protection and stack invariants. The 1,100-frame Luigi recovery
+  run produces byte-identical actor traces with default dispatch and
+  `SNESRECOMP_LLE_BOUNCE=1`. The latter runs the scheduler through compiled
+  dispatch; scoped interpreter calls can call compiled guest functions in both
+  modes, which is why both lethal entry points require instrumentation.
+- Native slots 12 (during death) and 13 (during the recovery delay) were saved
+  and restored in `native-coop-recover-state`. Its 1,248 repeated actor records
+  match the uninterrupted baseline with zero divergences. No dispatch misses
+  were recorded. This validates those state phases, not the unfinished mount,
+  transition, enemy-contact and campaign coverage.
+- In `native-coop-individual` both actors die before recovery; the shared life
+  count changes once from five to four and the native loader returns the team
+  to Yoshi's Island 2. The earlier `native-coop-enemy-death` trace exposed the
+  missed compiled kill entrance and is superseded by the validated builds above.
 
 ## Acceptance matrix
 

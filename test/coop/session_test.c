@@ -1,6 +1,7 @@
 #include "mods/coop/coop_session.h"
 #include "mods/coop/coop_guest.h"
 #include "mods/coop/coop_machine.h"
+#include "mods/coop/coop_terrain.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -168,6 +169,13 @@ static void guest_ownership(void) {
     assert(!owned[0x9d] && !owned[0x148b] && !owned[0x14ad] && !owned[0x1a]);
     coop_guest_set_input(b,0x8180,0x0080);
     assert(b[0x15]==0x81 && b[0x16]==0x80 && b[0x17]==0x80 && b[0x18]==0x80);
+    memset(b,0,0x20000);b[0x94]=16;b[0x96]=0x60;b[0x97]=1;
+    CoopPlayer p={0};coop_guest_read_player(&p,b);
+    assert(p.x==24 && p.y==378 && p.height==12 && p.half_width==6);
+    p.y=400;coop_guest_place_player(&p,b);coop_guest_read_player(&p,b);
+    assert(p.y==400 && b[0x96]==0x76 && b[0x97]==1);
+    b[0x19]=1;coop_guest_read_player(&p,b);assert(p.height==26 && p.y==393);
+    b[0x187a]=1;coop_guest_read_player(&p,b);assert(p.height==32 && p.y==406);
     free(a);free(b);free(owned);
 }
 
@@ -221,10 +229,49 @@ static void native_states(size_t players) {
     free(data);free(again);coop_machine_destroy(&a);coop_machine_destroy(&b);
 }
 
+static void terrain(void) {
+    uint8_t *r=calloc(0x20000,1),*rom=calloc(0x80000,1),*before=malloc(0x20000);
+    assert(r && rom && before);
+    CoopTerrain t={r,rom,0x80000};
+    /* Two horizontal screen pointers, then a separate layer-2 pointer. */
+    rom[0xba60-0x8000]=0;rom[0xba9c-0x8000]=0xc8;
+    rom[0xba61-0x8000]=0xb0;rom[0xba9d-0x8000]=0xc9;
+    rom[0xba70-0x8000]=0;rom[0xbaac-0x8000]=0xe3;
+    memset(r+0xc800,0x25,0x360);memset(r+0xe300,0x25,0x1b0);
+    r[0x5d]=2;
+    for(unsigned x=0;x<16;++x) {r[0xc980+x]=0; r[0x1c980+x]=1;}
+    uint16_t block=0;
+    assert(coop_terrain_block(&t,0,24,384,&block) && block==0x100);
+    assert(!coop_terrain_block(&t,0,-1,384,&block));
+    assert(!coop_terrain_block(&t,0,512,384,&block));
+    assert(!coop_terrain_block(&t,0,24,432,&block));
+    assert(coop_terrain_block(&t,0,256,0,&block) && block==0x25);
+    CoopPlayer anchor={.id=0,.life=COOP_PLAYING,.x=24,.y=371,.height=26,.grounded=true};
+    CoopPlayer returning={.id=1,.life=COOP_DEATH_BUBBLE,.power=COOP_SMALL,.mount=COOP_NO_ENTITY};
+    int32_t x=0,y=0;memcpy(before,r,0x20000);
+    assert(coop_terrain_safe(&t,&returning,&anchor,&x,&y) && x==24 && y==378);
+    assert(!memcmp(before,r,0x20000));
+    r[0xc981]=0x2f; /* Muncher must not become safe due to recovery protection. */
+    returning.protection_ticks=120;
+    assert(!coop_terrain_safe(&t,&returning,&anchor,&x,&y));
+    r[0xc981]=0;
+    r[0x14c8]=8;r[0xe4]=24;r[0xd8]=0x70;r[0x14d4]=1;
+    assert(!coop_terrain_safe(&t,&returning,&anchor,&x,&y));r[0x14c8]=0;
+    r[0x5b]=0x80;r[0xe471]=0x30;r[0x1e471]=1; /* layer-2 obstruction */
+    assert(!coop_terrain_safe(&t,&returning,&anchor,&x,&y));r[0x5b]=0;
+    r[0xc971]=0x2b;r[0x14ad]=1;
+    assert(coop_terrain_block(&t,0,24,372,&block) && block==0x132);
+    assert(!coop_terrain_safe(&t,&returning,&anchor,&x,&y));
+    r[0x14ad]=0;assert(coop_terrain_safe(&t,&returning,&anchor,&x,&y));
+    t.rom_size=16;assert(!coop_terrain_safe(&t,&returning,&anchor,&x,&y));
+    free(before);free(rom);free(r);
+}
+
 int main(void) {
     roster(2);roster(3);roster(4);roster(17);
     arbitration();priorities();camera_and_recovery();checkpoint_disconnect_input();states();guest_ownership();
     native_states(2);native_states(3);native_states(4);native_states(17);
+    terrain();
     puts("co-op: roster 2/3/4/17, recovery, arbitration, camera, input, checkpoint and atomic state validation passed");
     return 0;
 }

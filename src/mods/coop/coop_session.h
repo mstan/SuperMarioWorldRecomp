@@ -122,6 +122,11 @@ bool coop_session_resolve(CoopSession *s);
 void coop_player_input(CoopPlayer *p, uint32_t held, uint32_t action_mask);
 bool coop_camera_update(CoopSession *s, int32_t width, int32_t height,
     int32_t room_width, int32_t room_height, bool autoscroll);
+/* Native adapters may retain the original camera's smoothing and room rules.
+ * First choose a focus, then supply its actual viewport before edge checks. */
+bool coop_camera_frame(CoopSession *s,int32_t width,int32_t height,
+    int32_t room_width,int32_t room_height,bool autoscroll);
+bool coop_camera_check_separation(CoopSession *s,bool resized);
 bool coop_session_recover(CoopSession *s, CoopSafePlacement safe, void *context);
 void coop_session_restart(CoopSession *s);
 CoopPlayerId coop_nearest_player(const CoopSession *s, int32_t x, int32_t y,
