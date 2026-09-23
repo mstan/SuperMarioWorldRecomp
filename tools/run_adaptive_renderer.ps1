@@ -2,6 +2,7 @@
 param(
     [string]$DirectRomPath,
     [string]$RuntimeBin = 'C:\msys64\mingw64\bin',
+    [string[]]$GameArguments = @(),
     [switch]$CheckOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -34,7 +35,7 @@ NoSpriteLimits=1
 EnableAudio=1
 "@ | Set-Content -LiteralPath $rendererConfig -Encoding ascii
 }
-$rendererState = Join-Path $rendererMods 'state.toml'
+$rendererState = Join-Path $rendererMods 'preloaded\state.toml'
 if (-not (Test-Path -LiteralPath $rendererState)) {
     @'
 format_version = 1
@@ -57,6 +58,7 @@ if (-not (Test-Path -LiteralPath $rendererCachedRom) -and (Test-Path -LiteralPat
 }
 $rendererArguments = @('--config', $rendererConfig)
 if ($DirectRomPath) { $rendererArguments += (Resolve-Path -LiteralPath $DirectRomPath).Path }
+$rendererArguments += $GameArguments
 $savedRendererPath = $env:PATH
 Push-Location -LiteralPath $rendererData
 try {

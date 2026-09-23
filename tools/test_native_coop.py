@@ -17,6 +17,7 @@ def main():
     subprocess.run([compiler, '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror',
                     '-Isrc', 'src/mods/coop/coop_session.c',
                     'src/mods/coop/coop_state.c', 'src/mods/coop/coop_guest.c',
+                    'src/mods/coop/coop_machine.c',
                     'test/coop/session_test.c',
                     '-o', str(exe)], cwd=ROOT, check=True)
     subprocess.run([str(exe)], cwd=ROOT, check=True)

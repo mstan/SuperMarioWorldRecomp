@@ -310,6 +310,7 @@
       <ExcludedFromBuild Condition="'$(Platform)'=='Win32'">true</ExcludedFromBuild></ClCompile>
     <ClCompile Include="..\snesrecomp\runner\src\snes\ws_shadow.c" />
     <ClCompile Include="..\snesrecomp\runner\src\crc32.c" />
+    <ClCompile Include="..\snesrecomp\runner\src\snapshot_guard.c" />
     <ClCompile Include="..\snesrecomp\runner\src\sha256.c" />
     <ClCompile Include="..\snesrecomp\runner\src\keybinds.c" />
     <ClCompile Include="..\snesrecomp\runner\src\host_report.c" />
@@ -329,6 +330,12 @@
     <ClCompile Include="smw_video.c" />
     <ClCompile Include="smw_renderer.c" />
     <ClCompile Include="smw_renderer_hooks.c" />
+    <ClCompile Include="mods\smw_coop_plugin.c" />
+    <ClCompile Include="mods\coop\coop_session.c" />
+    <ClCompile Include="mods\coop\coop_state.c" />
+    <ClCompile Include="mods\coop\coop_guest.c" />
+    <ClCompile Include="mods\coop\coop_machine.c" />
+    <ClCompile Include="mods\coop\coop_runtime.c" />
 
     <ClCompile Include="opengl.c" />
     <ClCompile Include="platform\win32\volume_control.c" />
@@ -461,6 +468,7 @@
   </Target>
   <Target Name="ApplyAdaptiveRendererHooks" BeforeTargets="ClCompile" Condition="'$(Configuration)'!='CoopProduction'">
     <Exec WorkingDirectory="$(SolutionDir)" Command="python tools/apply_renderer_hooks.py --gen-dir src/gen" />
+    <Exec WorkingDirectory="$(SolutionDir)" Command="python tools/apply_coop_hooks.py --gen-dir src/gen" />
     <Exec WorkingDirectory="$(SolutionDir)" Command="python tools/apply_overrides.py --check --gen-dir src/gen --manifest overrides/falcon/overrides.manifest" />
   </Target>
   <Import Project="$(SolutionDir)snesrecomp\runner\msbuild\shader_presets.targets" />

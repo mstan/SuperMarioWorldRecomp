@@ -1,5 +1,6 @@
 #include "mods/coop/coop_session.h"
 #include "mods/coop/coop_guest.h"
+#include "mods/coop/coop_machine.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -170,9 +171,37 @@ static void guest_ownership(void) {
     free(a);free(b);free(owned);
 }
 
+static void native_states(size_t players) {
+    CoopMachine a={0},b={0};assert(coop_machine_init(&a,players));
+    a.room=123;a.previous_mode=0x14;a.room_initialized=true;
+    /* Non-contiguous identities and a different actor storage order must not
+     * conflate character, player, and input-seat identities. */
+    a.session.players[players-1].id=2000;a.actors[players-1].player=2000;
+    a.actors[players-1].input_seat=100;
+    CoopActor swap=a.actors[0];a.actors[0]=a.actors[players-1];a.actors[players-1]=swap;
+    for(size_t i=0;i<players;++i)memset(a.actors[i].guest.bytes,(int)(i+4),COOP_GUEST_BYTES);
+    size_t n=coop_machine_save_size(&a);uint8_t *data=malloc(n),*again=malloc(n);assert(data&&again);
+    assert(coop_machine_save(&a,data,n));assert(coop_machine_load(&b,data,n));
+    assert(b.actor_count==players && b.room==123 && b.room_initialized);
+    assert(coop_machine_actor(&b,2000)->input_seat==100);
+    assert(coop_machine_save(&b,again,n));assert(!memcmp(data,again,n));
+    CoopActor *original=b.actors;
+    for(size_t i=0;i<n;++i) {
+        data[i]^=0x80;assert(!coop_machine_load(&b,data,n));assert(b.actors==original);data[i]^=0x80;
+    }
+    for(size_t i=0;i<n;++i)assert(!coop_machine_load(&b,data,i));
+    assert(b.actors==original);
+    /* These are structurally well-formed blobs with correct checksums. */
+    a.actors[1].player=a.actors[0].player;
+    assert(coop_machine_save(&a,data,n));assert(!coop_machine_load(&b,data,n));
+    assert(b.actors==original);
+    free(data);free(again);coop_machine_destroy(&a);coop_machine_destroy(&b);
+}
+
 int main(void) {
     roster(2);roster(3);roster(4);roster(17);
     arbitration();priorities();camera_and_recovery();checkpoint_disconnect_input();states();guest_ownership();
+    native_states(2);native_states(3);native_states(4);native_states(17);
     puts("co-op: roster 2/3/4/17, recovery, arbitration, camera, input, checkpoint and atomic state validation passed");
     return 0;
 }

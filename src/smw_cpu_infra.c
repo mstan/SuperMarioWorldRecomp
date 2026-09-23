@@ -2,6 +2,7 @@
 #include "smw_rtl.h"
 #include "smw_renderer.h"
 #include "foreign_controller.h"
+#include "mods/coop/coop_runtime.h"
 #include "snes/saveload.h"
 #include "overrides/falcon/falcon_smw_adapter.h"
 
@@ -15,6 +16,7 @@
 #define SMW_FOREIGN_SAVE_VERSION 1u
 #define SMW_FOREIGN_SAVE_BLOB_CAP (SNES_FOREIGN_SAVE_MAX_PAYLOAD + 256u)
 #define SMW_COMBINED_SAVE_MAGIC 0x31584d53u /* "SMX1": renderer then controller */
+#define SMW_COOP_SAVE_MAGIC 0x31434d53u /* "SMC1": renderer then native roster */
 
 typedef struct {
   uint32 magic;
@@ -24,6 +26,12 @@ typedef struct {
 } SmwForeignSaveChunk;
 
 static int s_smw_foreign_chunk_loaded;
+
+size_t SmwStateSharedExtraSize(void) {
+  /* SMX1 + renderer SMWS v1 (no padding) + fixed foreign-controller slot. */
+  return sizeof(uint32) + 8 + 4 + 128 + 1 +
+      (SmwCoopActive() ? 0 : sizeof(SmwForeignSaveChunk));
+}
 
 static void SmwForeignSaveExtra(SaveLoadInfo *sli) {
   SmwForeignSaveChunk chunk;
@@ -76,17 +84,21 @@ static void SmwReadPrefix(SaveLoadInfo *sli, void *data, size_t size) {
 }
 
 static void SmwStateSaveExtra(SaveLoadInfo *sli) {
-  uint32 magic = SMW_COMBINED_SAVE_MAGIC;
+  uint32 magic = SmwCoopActive() ? SMW_COOP_SAVE_MAGIC : SMW_COMBINED_SAVE_MAGIC;
   sli->func(sli, &magic, sizeof(magic));
   SmwRendererSaveExtra(sli);
-  SmwForeignSaveExtra(sli);
+  if (SmwCoopActive()) SmwCoopSaveExtra(sli);
+  else SmwForeignSaveExtra(sli);
 }
 
 static void SmwStateLoadExtra(SaveLoadInfo *sli, uint32 version) {
   SmwPrefixReader reader = { { SmwReadPrefix }, sli, 0, 0 };
   s_smw_foreign_chunk_loaded = 0;
   sli->func(sli, &reader.magic, sizeof(reader.magic));
-  if (reader.magic == SMW_COMBINED_SAVE_MAGIC) {
+  if (reader.magic == SMW_COOP_SAVE_MAGIC && SmwCoopActive()) {
+    SmwRendererLoadExtra(sli, version);
+    SmwCoopLoadExtra(sli);
+  } else if (reader.magic == SMW_COMBINED_SAVE_MAGIC) {
     SmwRendererLoadExtra(sli, version);
     SmwForeignLoadExtra(sli, version);
   } else if (reader.magic == 0x53574d53u) { /* legacy SMWS */
@@ -106,6 +118,7 @@ static void SmwOnStateLoaded(uint32 version) {
   }
   SmwFalconOnStateLoaded();
   SmwRendererStateLoaded(version);
+  SmwCoopStateLoaded();
   s_smw_foreign_chunk_loaded = 0;
 }
 
@@ -118,4 +131,7 @@ const RtlGameInfo kSmwGameInfo = {
   .state_save_extra = &SmwStateSaveExtra,
   .state_load_extra = &SmwStateLoadExtra,
   .on_state_loaded = &SmwOnStateLoaded,
+  .snapshot_guard_identity = &SmwCoopSnapshotIdentity,
+  .snapshot_preflight = &SmwCoopSnapshotPreflight,
+  .snapshot_allowed = &SmwCoopPersistenceReady,
 };
