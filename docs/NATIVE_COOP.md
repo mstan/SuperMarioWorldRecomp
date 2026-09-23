@@ -205,6 +205,34 @@ must accept a roster rather than assume two.
 4. Full save-state support, execution-path parity, compatibility, packaging.
 5. Campaign-level acceptance evidence before closing the issue.
 
+### Initial player stage adapter
+
+The first live adapter is deliberately a development milestone, with the
+following audited boundaries. The world update is not replayed for each actor.
+
+| Stage | Current treatment |
+|---|---|
+| NMI, input polling and overworld | Original once-per-frame path. |
+| Level entry | Seed each actor from the original entrance state; retain its own equipment on later room entries. |
+| `00:C47E` before `00:C569` | Original world/keyhole/effective-frame/shared timer work runs once. |
+| `00:C569` through `00:C592` | Scoped original player animation/motion/terrain, reserve-release and note-block state run for each actor. |
+| Secondary timer fields | Advance only the audited per-player timer bytes, with the original cadence. |
+| Normal/extended sprites | Original world update runs once; multi-actor contact/target arbitration still needs integration. |
+| Player graphics | The primary still uses the original draw/upload path; independent secondary graphics remain to be implemented. |
+
+Each scoped call preserves the caller's registers, scratch bytes and stack
+balance, while retaining elapsed machine clocks and bus state. Original player
+routines can produce shared effects: deaths, room changes, transformations,
+projectiles and terrain rewards still require their event/ownership adapters.
+The initial motion result does not establish those behaviors as correct.
+
+The regular launcher exposes both input seats. `[GamepadMap] KeyboardPlayers`
+persists its keyboard assignments (bits 0 and 1 are the current two host seats);
+reloading hotkeys preserves those assignments. Recorded input accepts `p1.` and
+`p2.` button prefixes, for example `press p2.right+p2.b 45`. Unprefixed buttons
+retain their existing player-1 meaning. These are host input limits, separate
+from the dynamic simulation roster.
+
 ### Status and evidence
 
 - Worktree created from `main` at `f36d99f73d775febcf396e874b86a264c25d91da`.
@@ -253,6 +281,18 @@ must accept a roster rather than assume two.
   campaign acceptance matrix remain under implementation.
 - Implementation is in progress. No playable-completion or campaign-validation
   claim has been made. Update this section as code and evidence land.
+- The initial native movement adapter builds and runs through the intro,
+  overworld, and Yoshi's Island 2. The recorded `native-coop-seats` run contains
+  422 level frames per actor: Mario moves from x=24 to x=16 under P1 input,
+  Luigi moves from x=24 to x=93 under P2 input, and each jumps independently.
+  Both finish on the terrain at y=360; the guest stack remains 511. The trace
+  is an ignored local artifact at `build-adaptive/playtest/native-coop-seats.csv`.
+  Its frame-680 screenshot verifies the level scene, but currently shows only
+  Mario: independent Luigi rendering is pending. This is movement evidence,
+  not full co-op acceptance.
+- `tools/test_coop_input.py` passes against the actual config implementation:
+  shared keyboard assignment, launcher assignment changes, hotkey reload, and
+  write/read persistence. The existing roster/state tests also continue to pass.
 
 ## Acceptance matrix
 

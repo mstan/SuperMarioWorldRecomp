@@ -13,7 +13,7 @@ enum {
   kKeyMod_Ctrl = 0x1000,
 };
 
-Config g_config;
+Config g_config = {.keyboard_players = -1};
 
 #define REMAP_SDL_KEYCODE(key) ((key) & SDLK_SCANCODE_MASK ? kKeyMod_ScanCode : 0) | (key) & (kKeyMod_ScanCode - 1)
 #define _(x) REMAP_SDL_KEYCODE(x)
@@ -328,7 +328,14 @@ static bool HandleIniConfig(int section, const char *key, char *value) {
       }
     }
   } else if (section == 5) {
-    if (StringEqualsNoCase(key, "EnableGamepad1")) {
+    if (StringEqualsNoCase(key, "KeyboardPlayers")) {
+      char *end;
+      long mask = strtol(value, &end, 10);
+      while (*end == ' ' || *end == '\t') ++end;
+      if (end == value || *end || mask < 0 || mask > 3) return false;
+      g_config.keyboard_players = (int8)mask;
+      return true;
+    } else if (StringEqualsNoCase(key, "EnableGamepad1")) {
       return ParseBool(value, &g_config.enable_gamepad[0]);
     } else if (StringEqualsNoCase(key, "EnableGamepad2")) {
       return ParseBool(value, &g_config.enable_gamepad[1]);
@@ -510,6 +517,8 @@ void ParseConfigFile(const char *filename) {
   if (!ParseOneConfigFile(filename, 0))
     fprintf(stderr, "Warning: Unable to read config file %s\n", filename);
   RegisterDefaultKeys();
+  if (g_config.keyboard_players >= 0)
+    g_config.has_keyboard_controls = (uint8)g_config.keyboard_players;
 }
 
 /* Re-apply the [KeyMap] section from `filename` after the launcher's hotkey
@@ -519,6 +528,7 @@ void ParseConfigFile(const char *filename) {
  * back to the file's stale values). Keyboard defaults are then re-registered
  * for entries the file doesn't mention, matching ParseConfigFile's order. */
 void ConfigReloadKeyMap(const char *filename) {
+  uint8 assigned_keyboard_players = g_config.has_keyboard_controls;
   memset(keymap_hash_first, 0, sizeof(keymap_hash_first));
   free(keymap_hash);
   keymap_hash = NULL;
@@ -561,6 +571,8 @@ void ConfigReloadKeyMap(const char *filename) {
         KeyMapHash_Add(kDefaultKbdControls[k], k);
     }
   }
+  /* Rebinding hotkeys must not undo the launcher's controller assignments. */
+  g_config.has_keyboard_controls = assigned_keyboard_players;
 }
 
 /* ---------------------------------------------------------------------------
@@ -646,6 +658,7 @@ void WriteConfigFile(const char *filename) {
     { "General",    "NetplayPlayerName" },
     { "GamepadMap", "Deadzone" },
     { "GamepadMap", "DeadzoneP2" },
+    { "GamepadMap", "KeyboardPlayers" },
   };
   const int N = (int)countof(kvs);
   snprintf(kvs[0].val, sizeof(kvs[0].val), "%d", g_config.window_scale ? g_config.window_scale : 3);
@@ -662,6 +675,8 @@ void WriteConfigFile(const char *filename) {
   snprintf(kvs[10].val, sizeof(kvs[10].val), "%s", g_config.netplay_player_name);
   snprintf(kvs[11].val, sizeof(kvs[11].val), "%d", g_config.deadzone[0]);
   snprintf(kvs[12].val, sizeof(kvs[12].val), "%d", g_config.deadzone[1]);
+  g_config.keyboard_players = (int8)(g_config.has_keyboard_controls & 3);
+  snprintf(kvs[13].val, sizeof(kvs[13].val), "%u", g_config.has_keyboard_controls & 3);
 
   /* Read the existing file (may be absent on a fresh extract). */
   char *data = NULL;

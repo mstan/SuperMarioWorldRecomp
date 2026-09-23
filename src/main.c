@@ -301,6 +301,10 @@ static int g_script_phase;    // 0=holding, 1=waiting
 static int g_script_counter;  // frames left in current phase
 
 static uint32 ParseButtonMask(const char *name) {
+  /* Script seats use the same packed input layout as controllers. Unprefixed
+   * names remain player 1 for existing recordings. */
+  if (strncmp(name, "p1.", 3) == 0) return ParseButtonMask(name + 3) & 0xfff;
+  if (strncmp(name, "p2.", 3) == 0) return (ParseButtonMask(name + 3) & 0xfff) << 12;
   if (strcmp(name, "start")  == 0) return 0x0008;
   if (strcmp(name, "select") == 0) return 0x0004;
   if (strcmp(name, "up")     == 0) return 0x0010;
@@ -1317,11 +1321,7 @@ int main(int argc, char** argv) {
 #endif
       gi.region = "(USA)";
       gi.sram_path = "saves/save.srm";  /* generic SRAM path (RtlReadSram migrates legacy) */
-#ifdef SMW_COOP_BUILD
       gi.num_players = 2;
-#else
-      gi.num_players = 1;
-#endif
       gi.expected_crc = kSmwUsaCrc32;
       gi.has_expected_crc = 1;
 #if defined(RECOMP_LAUNCHER)
@@ -2595,8 +2595,8 @@ static void RenderNumber(uint8 *dst, size_t pitch, int n, uint8 big) {
 
 static void RefreshKeybindControllerBits(void) {
   const uint8_t *keys = snesrecomp_sdl_get_keyboard_state();
-  uint16_t kb_p1 = keybinds_read_player(keys, 1);
-  uint16_t kb_p2 = keybinds_read_player(keys, 2);
+  uint16_t kb_p1 = (g_config.has_keyboard_controls & 1) ? keybinds_read_player(keys, 1) : 0;
+  uint16_t kb_p2 = (g_config.has_keyboard_controls & 2) ? keybinds_read_player(keys, 2) : 0;
   static const uint8 kKb2CtrlsIdx[12] = {
       7, 6, 5, 4, 9, 8, 3, 11, 2, 10, 1, 0};
   for (int i = 0; i < 12; i++) {

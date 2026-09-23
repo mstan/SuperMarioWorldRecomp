@@ -14,6 +14,7 @@ typedef struct CoopGuestField { const char *name; uint16_t address, size; } Coop
 const CoopGuestField *coop_guest_fields(size_t *count);
 void coop_guest_capture(CoopGuestPlayer *out, const uint8_t *wram);
 void coop_guest_bind(const CoopGuestPlayer *in, uint8_t *wram);
+bool coop_guest_peek(const CoopGuestPlayer *in, uint16_t address, uint8_t *value);
 void coop_guest_read_player(CoopPlayer *out, const uint8_t *wram);
 void coop_guest_place_player(const CoopPlayer *in, uint8_t *wram);
 void coop_guest_set_input(uint8_t *wram, uint16_t held, uint16_t pressed);

@@ -7,6 +7,7 @@
 void SmwCoopEnable(bool enabled);
 bool SmwCoopEnabled(void);
 bool SmwCoopActive(void);
+CoopMachine *SmwCoopMachine(void);
 bool SmwCoopInstallHooks(void);
 /* Before the initial SRAM read; false means no namespace has been selected. */
 bool SmwCoopPrepareStorage(void);

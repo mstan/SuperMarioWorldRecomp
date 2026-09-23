@@ -93,6 +93,8 @@ typedef struct Config {
 
   // Which players have keyboard controls
   uint8 has_keyboard_controls;
+  /* -1 preserves legacy binding-derived defaults; otherwise explicit seats. */
+  int8 keyboard_players;
 } Config;
 
 enum {
