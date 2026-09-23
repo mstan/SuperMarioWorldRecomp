@@ -70,8 +70,9 @@ void SmwCoopCaptureMount(CoopMountVisual *visual,int x,int y) {
 }
 void SmwCoopPresentationLatch(void) {
     CoopMachine *m=SmwCoopMachine();if(!m)return;
-    unsigned mode=g_ram[0x100];
-    bool level=mode==0x13 || mode==0x14 || mode==0x0b || mode==0x0f || mode==0x15 || mode==0x18;
+    /* Fade modes are shared with the overworld. Its border Mario uses fence
+     * selector 3, which is not a level actor; retain the latched scene kind. */
+    bool level=SmwRendererIsLevelScene();
     if(level && m->room_initialized) {
         CoopActor *primary=coop_machine_actor(m,m->session.primary);
         CoopPlayer *p=coop_player(&m->session,m->session.primary);
@@ -177,8 +178,7 @@ void SmwCoopPresentationPrepare(void) {
     static size_t capacity;
     static uint32_t removed_bg[kPpuBufWidth*240],removed_obj[kPpuBufWidth*240];
     CoopMachine *m=SmwCoopMachine();size_t count=0;
-    bool level=m && m->room_initialized && (g_ram[0x100]==0x14 || g_ram[0x100]==0x13 ||
-        g_ram[0x100]==0x0b || g_ram[0x100]==0x0f || g_ram[0x100]==0x15);
+    bool level=m && m->room_initialized && SmwRendererIsLevelScene();
     if(m)for(size_t i=0;i<m->actor_count;++i) {
         if(m->actors[i].player!=m->session.primary)count+=m->actors[i].visible.count;
         if(level)count+=2; /* reserve plus optional bubble/warning */
@@ -224,8 +224,9 @@ void SmwCoopPresentationPrepare(void) {
            !PpuSetOverlayOamRange(g_ppu,(g_ram[0xd9b]&0x40)?0:56,1))
             Die("Native co-op reserve capture failed");
         int width=g_smw_video.enabled?g_smw_viewport.width:256;
-        int native=g_smw_video.enabled?SmwViewOffset(g_smw_viewport,(int)read16(g_ram,0x1a),
-                        (g_ram[0x5e]+1)*256):0;
+        /* The rendered scene is the one latched before this simulation tick.
+         * Screen-fixed HUD must use its projection, not the next live camera. */
+        int native=SmwRendererNativeOffset();
         /* Keep lives/bonus at the left and coins/score at the right. At native
          * width, TIME shifts 24 pixels to make room for the second stock box.
          * A larger future roster wraps instead of covering those counters. */

@@ -20,8 +20,8 @@ static SnesrecompExecutionMode smw_execution_mode(void) {
 }
 
 void SmwDrawPpuFrame(void) {
-  SmwCoopPresentationPrepare();
   SmwRendererBeginFrame();
+  SmwCoopPresentationPrepare();
   SimpleHdma hdma_chans[3];
 
   Dma *dma = g_dma;
@@ -68,9 +68,9 @@ void SmwDrawPpuFrame(void) {
 #include "mods/coop/coop_simulation.h"
 
 void RunOneFrameOfGame(void) {
-  SmwCoopPresentationLatch();
   SmwRendererSpawnFrame();
   SmwRendererLatchFrame();
+  SmwCoopPresentationLatch();
   // First-call reset gate. Was previously `if (*(uint16*)$7F8000 == 0) I_RESET()`,
   // which silently relied on WRAM being zero-initialized at power-on. Real hardware
   // (and snes9x) power-on WRAM is 0x55, so that check would never fire and I_RESET

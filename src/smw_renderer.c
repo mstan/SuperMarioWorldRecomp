@@ -44,6 +44,7 @@ static uint16_t object_colors[SMW_RENDER_MAX_WIDTH];
 static uint64_t object_order[SMW_RENDER_MAX_WIDTH];
 static uint32_t native_control[256*224];
 int SmwRendererNativeOffset(void) { return g_smw_video.enabled ? native_x : 0; }
+bool SmwRendererIsLevelScene(void) { return level_scene; }
 static bool world_layer(unsigned layer) {
   return layer == 0 || (layer == 1 && frame_ram[0x1925] < 32 &&
                        (0x800081feu & (1u << frame_ram[0x1925])));
@@ -158,7 +159,7 @@ void SmwRendererLatchFrame(void) {
    * live RAM at scanout instead mixes the next camera with the uploaded tiles,
    * making a clamped viewport move by the changing per-tick camera delta. */
   if (g_smw_video.enabled) memcpy(frame_ram,g_ram,sizeof(frame_ram));
-  unsigned mode=frame_ram[0x100];
+  unsigned mode=g_ram[0x100];
   if (mode==0x13 || mode==0x14) level_scene=true;
   else if (mode!=0x0b && mode!=0x0f && mode!=0x15 && mode!=0x18)
     level_scene=false;
