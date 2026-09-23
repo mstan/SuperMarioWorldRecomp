@@ -27,6 +27,9 @@ static CoopPlayerId scene_request=COOP_NO_PLAYER;
  * resolved destination lives in ordinary guest loader state at save boundaries. */
 static CoopPlayerId room_request=COOP_NO_PLAYER;
 static bool goal_query,goal_commit,goal_contact;
+static bool keyhole_query;
+static bool frozen_goal_bonus,settling_goal_bonus;
+static unsigned frozen_goal_score=6;
 static uint8_t goal_height,goal_stars;
 static CoopPlayerId goal_actor=COOP_NO_PLAYER;
 static CoopEntityId goal_entity=COOP_NO_ENTITY;
@@ -163,6 +166,30 @@ static void record_goal(CpuState *cpu,CoopMachine *m) {
         Die("Native co-op could not record a goal crossing");
     restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
 }
+static void collect_keyhole(CpuState *cpu,CoopMachine *m) {
+    if(!m->session.advancing || g_ram[0x1434])return;
+    CoopActor *original=bound_actor?bound_actor:primary_actor(m);
+    CoopActor *previous=bound_actor;capture(m,original);
+    CpuState caller=*cpu;uint8_t scratch[16];memcpy(scratch,g_ram,sizeof(scratch));
+    keyhole_query=true;
+    for(size_t i=0;i<m->actor_count;++i) {
+        CoopActor *a=&m->actors[i];CoopPlayer *p=coop_player(&m->session,a->player);
+        CoopEntity *key=coop_machine_entity(m,p->held_object);
+        if(p->life!=COOP_PLAYING || !key || key->kind!=COOP_ENTITY_NORMAL ||
+           key->type!=0x80 || key->owner!=p->id || key->flags!=COOP_ENTITY_HELD ||
+           g_ram[0x14c8+key->slot]!=0x0b)continue;
+        coop_guest_bind(&a->guest,g_ram);bound_actor=a;
+        restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
+        cpu->Y=(uint16_t)key->slot;
+        /* Enter after the stock global first-key scan. The ROM still tests
+         * carried status, both clipping boxes, contact and hole cooldown.
+         * Query hooks stop before scene effects and duplicate graphics. */
+        guest_jsr(cpu,0x01e1f3);
+    }
+    keyhole_query=false;bound_actor=previous;
+    restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
+    coop_guest_bind(&original->guest,g_ram);
+}
 static uint32_t follow_victory(CpuState *cpu,CoopMachine *m) {
     CoopActor *primary=primary_actor(m);
     if(!bound_actor || bound_actor==primary)return 0;
@@ -215,6 +242,8 @@ static void initialize_room(CoopMachine *m) {
 void SmwCoopSimulationBegin(void) {
     level_frame=gameplay_stage_started=false;room_request=COOP_NO_PLAYER;
     goal_query=goal_commit=goal_contact=false;goal_height=goal_stars=0;
+    keyhole_query=false;
+    frozen_goal_bonus=settling_goal_bonus=false;frozen_goal_score=6;
     goal_actor=COOP_NO_PLAYER;goal_entity=COOP_NO_ENTITY;
     scene_request=COOP_NO_PLAYER;
     CoopMachine *m=SmwCoopMachine();if(!m)return;
@@ -256,7 +285,8 @@ static void begin_gameplay_stage(CoopMachine *m) {
 }
 
 static void party_pause(CoopMachine *m) {
-    if(!(g_ram[0x16]&0x10) || g_ram[0x1493])return;
+    if(!(g_ram[0x16]&0x10) || g_ram[0x1493] || g_ram[0x1434] ||
+       m->session.outcome!=COOP_CONTINUE)return;
     bool eligible=false;
     for(size_t i=0;i<m->actor_count;++i) {
         uint8_t animation=0;CoopActor *a=&m->actors[i];
@@ -506,10 +536,33 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
             Die("Native co-op could not record a goal sphere contact");
         return 0x018788;
     }
+    if(pc==0x01e1c8) {collect_keyhole(cpu,m);return 0x01e23a;}
+    if(pc==0x01e210 && keyhole_query) {
+        if(!coop_session_event(&m->session,(CoopEvent){COOP_EVENT_EXIT,
+                bound_actor->player,cpu->X&0xff,0,COOP_EVENT_SECRET,0}))
+            Die("Native co-op could not record a keyhole contact");
+        return 0x01e269;
+    }
+    if(pc==0x01e23a && (keyhole_query || goal_commit))return 0x01e269;
     if(pc==0x01c107 && goal_commit) {
         cpu->_flag_C=goal_contact;cpu->P=(uint8_t)((cpu->P&~1u)|(goal_contact?1u:0u));
     }
     if(pc==0x07f252 && goal_commit)g_ram[0x1594+(cpu->X&0xff)]=goal_height;
+    if(pc==0x02ad22 && frozen_goal_bonus && goal_stars==0x50 && frozen_goal_score==6) {
+        unsigned slot=cpu->Y&0xff;
+        if(slot<6 && g_ram[0x16e1+slot]==0x0f)frozen_goal_score=slot;
+    }
+    if(pc==0x02ae38 && settling_goal_bonus)return 0x02adc8;
+    if(pc==0x05cf36 && settling_goal_bonus)return 0x05cfe9;
+    if(pc==0x00c9fe && m->session.outcome==COOP_CLEAR &&
+       g_ram[0x1434] && g_ram[0x1435]==2 && g_ram[0x1425]) {
+        /* Keyhole completion normally bypasses the tape's bonus-room gate.
+         * Use that same entrance when a simultaneous tape earned it. A is
+         * still the original secret-exit value; the bonus keeps that route. */
+        g_ram[0x1425]=0xff;g_ram[0xdb0]=0xf0;
+        g_ram[0x1493]=g_ram[0xdda]=g_ram[0xdae]=g_ram[0xdaf]=0;
+        cpu->Y=0x10;
+    }
     if(pc==0x00c915)return follow_victory(cpu,m);
     if(pc==0x00a21b) {party_pause(m);return 0x00a242;}
     if(pc==0x00a28a)begin_gameplay_stage(m);
@@ -597,6 +650,30 @@ static void apply_checkpoint(CoopMachine *m) {
     }
     coop_guest_bind(&primary_actor(m)->guest,g_ram);
 }
+static void settle_keyhole_bonus(void) {
+    /* A keyhole has no score-tally scene and freezes score-sprite timers.
+     * Settle the accepted tape's reward through the ROM's counter writers,
+     * stopping before their presentation/world-state tails. No game tick or
+     * countdown is advanced. Everything is durable in ordinary guest RAM. */
+    settling_goal_bonus=true;
+    if(goal_stars==0x50) {
+        if(frozen_goal_score>=6)Die("Native co-op lost the accepted goal life reward");
+        g_cpu.P|=0x30;g_cpu.P&=(uint8_t)~8u;cpu_p_to_mirrors(&g_cpu);
+        g_cpu.DB=g_cpu.PB=2;g_cpu.X=(uint16_t)frozen_goal_score;g_cpu.Y=0x0f;
+        guest_jsr(&g_cpu,0x02ae03);
+        /* The 3-up popup remains visual. Its original credit threshold has
+         * been consumed, so a later unfreeze cannot award the lives again. */
+        g_ram[0x16ff+frozen_goal_score]=0x29;
+    }
+    uint8_t frame=g_ram[0x13];g_ram[0x13]&=0xfc;
+    for(unsigned i=0;i<50 && g_ram[0x1900];++i) {
+        g_cpu.P=(uint8_t)((g_cpu.P|0x10)&~0x28u);cpu_p_to_mirrors(&g_cpu);
+        g_cpu.DB=g_cpu.PB=5;g_cpu.X&=0xff;g_cpu.Y&=0xff;
+        guest_jsr(&g_cpu,0x05cf05);
+    }
+    g_ram[0x13]=frame;settling_goal_bonus=false;
+    if(g_ram[0x1900])Die("Native co-op goal star credit did not finish");
+}
 static void apply_clear(CoopMachine *m) {
     const CoopAction *exit=NULL;
     for(size_t i=0;i<m->session.action_count;++i)
@@ -614,8 +691,9 @@ static void apply_clear(CoopMachine *m) {
     if(exit->entity!=COOP_NO_ENTITY) {
         g_cpu.X=exit->entity;g_ram[0x15e9]=(uint8_t)exit->entity;
         type=g_ram[0x9e + exit->entity];
-        if(type!=0x7b && type!=0x4a)Die("Native co-op clear has an unsupported source");
-        guest_jsr(&g_cpu,type==0x7b?0x01c0e7:0x018778);
+        if(type!=0x7b && type!=0x4a && type!=0x0e)
+            Die("Native co-op clear has an unsupported source");
+        guest_jsr(&g_cpu,type==0x7b?0x01c0e7:type==0x4a?0x018778:0x01e210);
     }
     capture(m,winner);
     if(type!=0x7b && goal_contact) {
@@ -624,9 +702,12 @@ static void apply_clear(CoopMachine *m) {
          * tail once, without replacing the chosen exit's music/type. */
         CoopActor *bonus=coop_machine_actor(m,goal_actor);
         coop_guest_bind(&bonus->guest,g_ram);bound_actor=bonus;
+        frozen_goal_bonus=type==0x0e;frozen_goal_score=6;
         g_cpu.X=goal_entity;g_cpu.DB=g_cpu.PB=1;
         g_ram[0x15e9]=(uint8_t)goal_entity;++g_ram[0x1602+goal_entity];
         guest_jsr(&g_cpu,0x01c109);capture(m,bonus);
+        if(frozen_goal_bonus)settle_keyhole_bonus();
+        frozen_goal_bonus=false;
     }
     goal_commit=false;bound_actor=NULL;
     restore_registers(&g_cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
@@ -775,7 +856,7 @@ void SmwCoopSimulationEnd(void) {
     static FILE *trace;
     if(path && *path && !trace) {
         trace=fopen(path,"w");
-        if(trace)fputs("frame,world_frame,player,x,y,power,animation,input,stack,life,recovery,lives,lock,camera_x,camera_y,protection,separation,reserve,mode,sublevel,level_data,room_request,checkpoint,checkpoint_upgrade,outcome,end_timer,peace,spotlight,goal_stars,exit_player,exit_flags,held_object,held_slot,held_status,held_x,held_y,level,drop_entity,drop_x,drop_y\n",trace);
+        if(trace)fputs("frame,world_frame,player,x,y,power,animation,input,stack,life,recovery,lives,lock,camera_x,camera_y,protection,separation,reserve,mode,sublevel,level_data,room_request,checkpoint,checkpoint_upgrade,outcome,end_timer,peace,spotlight,goal_stars,exit_player,exit_flags,held_object,held_slot,held_status,held_x,held_y,level,drop_entity,drop_x,drop_y,keyhole_timer,keyhole_direction,ow_exit,pause,keyhole_x,keyhole_y,time,exit_candidates,bonus_stars,bonus_pending,pending_lives\n",trace);
     }
     if(trace) {
         for(size_t i=0;i<m->actor_count;++i) {
@@ -796,8 +877,11 @@ void SmwCoopSimulationEnd(void) {
                 if(action->kind==COOP_ACTION_DROP_OBJECT && action->player==p->id)
                     dropped=coop_machine_entity(m,action->entity);
             }
+            unsigned exit_candidates=0;
+            for(size_t j=0;j<m->session.event_count;++j)
+                exit_candidates+=m->session.events[j].kind==COOP_EVENT_EXIT;
             unsigned slot=held?held->slot:12;
-            fprintf(trace,"%llu,%u,%u,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
+            fprintf(trace,"%llu,%u,%u,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
                 (unsigned long long)m->session.frame,g_ram[0x14],p->id,p->x,p->y,
                 (unsigned)p->power,animation,p->held_input,g_cpu.S,(unsigned)p->life,
                 p->recovery_ticks,m->session.lives,g_ram[0x9d],
@@ -811,7 +895,10 @@ void SmwCoopSimulationEnd(void) {
                 held?(g_ram[0xd8+slot]|(g_ram[0x14d4+slot]<<8)):0,m->level,
                 dropped?dropped->id:COOP_NO_ENTITY,
                 dropped?(g_ram[0xe4+dropped->slot]|(g_ram[0x14e0+dropped->slot]<<8)):0,
-                dropped?(g_ram[0xd8+dropped->slot]|(g_ram[0x14d4+dropped->slot]<<8)):0);
+                dropped?(g_ram[0xd8+dropped->slot]|(g_ram[0x14d4+dropped->slot]<<8)):0,
+                g_ram[0x1434],g_ram[0x1435],g_ram[0xdd5],g_ram[0x13d4],
+                read16(0x1436),read16(0x1438),g_ram[0xf31]*100u+g_ram[0xf32]*10u+g_ram[0xf33],exit_candidates,
+                g_ram[0xf48],g_ram[0x1425],g_ram[0x18e4]);
         }
         fflush(trace);
     }

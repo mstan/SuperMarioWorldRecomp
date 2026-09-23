@@ -25,3 +25,10 @@ COOP_HOOK(0x018778) /* Goal sphere contact before native shared clear effects */
 COOP_HOOK(0x07F722) /* Sprite initialization retires the previous slot identity */
 COOP_HOOK(0x05D8B7) /* Native loader has resolved the complete 9-bit room number */
 COOP_HOOK(0x02ABF2) /* Room sprite cleanup preserves every owned carried object */
+COOP_HOOK(0x01E1C8) /* Keyhole: query every eligible owned key before drawing once */
+COOP_HOOK(0x01E210) /* Keyhole accepted contact, before shared window/music/freeze */
+COOP_HOOK(0x01E23A) /* End pure keyhole query before its graphics stage */
+COOP_HOOK(0x02AD22) /* Capture the native score slot created for a frozen goal bonus */
+COOP_HOOK(0x02AE38) /* End isolated native life credit before popup motion */
+COOP_HOOK(0x05CF36) /* End isolated native star credit before tally presentation */
+COOP_HOOK(0x00C9FE) /* Keep a keyhole's secret route when a tape earns the bonus room */
