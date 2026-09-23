@@ -361,7 +361,8 @@ bool coop_camera_check_separation(CoopSession *s,bool resized) {
             emit(s, COOP_ACTION_DROP_OBJECT, p->id, p->held_object, 0);
         p->held_object = COOP_NO_ENTITY;
         p->life = COOP_CATCHUP_BUBBLE;
-        p->recovery_ticks = p->separation_ticks = 0;
+        p->recovery_ticks = s->ticks_per_second / 2;
+        p->separation_ticks = 0;
         --active;
     }
     return !s->failed;

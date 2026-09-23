@@ -15,6 +15,7 @@ typedef struct RasterLine {
 typedef struct OamOwner { int x; uint16_t position, attr; bool valid; } OamOwner;
 static RasterLine lines[224];
 static PpuOverlayCapture obj_capture[224];
+static PpuOverlayCapture bg3_capture[224];
 static uint8_t frame_ram[0x20000];
 static OamOwner pending[128], latched[128];
 typedef struct SpriteOwner { int x,y; bool valid, exact; } SpriteOwner;
@@ -219,6 +220,7 @@ void SmwRendererCaptureLine(const Ppu *p, int line) {
   if (!g_smw_video.enabled || line < 1 || line > 224) return;
   RasterLine *l = &lines[line-1];
   obj_capture[line-1] = p->overlayCaptures[kPpuOverlaySource_Obj];
+  bg3_capture[line-1] = p->overlayCaptures[kPpuOverlaySource_Bg3];
   memcpy(l->regs, p, sizeof(l->regs));
   memcpy(l->palette, p->cgram, sizeof(l->palette));
   memcpy(l->oam, p->oam, sizeof(l->oam));
@@ -342,6 +344,11 @@ static uint16_t background(const Ppu *p, const RasterLine *l, unsigned layer, in
     else return 0;
   }
   if (layer == 2 && (y <= 40 || frame_ram[0x1426]) && (x < 0 || x >= 256)) return 0;
+  if(layer==2 && y>=1 && y<=224) {
+    const PpuOverlayCapture *capture=&bg3_capture[y-1];
+    if((capture->flags&kPpuOverlayFlag_RemoveFromGame) && x>=capture->x0 && x<capture->x1 &&
+       y>=capture->y0 && y<capture->y1)return 0;
+  }
   unsigned tile_shift = PPU_bigTiles(p, layer) ? 4 : 3;
   int size = 1 << tile_shift;
   int bpp = layer == 2 ? 2 : 4;

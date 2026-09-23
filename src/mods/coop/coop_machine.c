@@ -3,7 +3,7 @@
 #include <string.h>
 
 enum { HEADER = 64, ACTOR_HEADER = 16, PIECE_BYTES = 28+COOP_PIECE_PIXELS*2,
-       ENTITY_HEADER = 16, ENTITY_BYTES = 28, TRAILER = 4 };
+       ENTITY_HEADER = 16, ENTITY_BYTES = 28, FOCUS_BYTES = 32, TRAILER = 4 };
 /* Stock US ROM SHA-256. A native session can never restore into a patched ROM. */
 static const uint8_t rom_id[32] = {
     0x08,0x38,0xe5,0x31,0xfe,0x22,0xc0,0x77,0x52,0x8f,0xeb,0xe1,0x4c,0xb3,0xff,0x7c,
@@ -84,6 +84,26 @@ CoopEntity *coop_machine_spawn_entity(CoopMachine *m,unsigned kind,unsigned slot
     *e=(CoopEntity){m->next_entity++,kind,slot,type,COOP_NO_PLAYER,COOP_NO_PLAYER,0};
     return e;
 }
+static int32_t focus_step(int64_t value) {return value < -4 ? -4 : value > 4 ? 4 : (int32_t)value;}
+void coop_machine_focus(CoopMachine *m,int32_t x,int32_t y,uint32_t active) {
+    if(!active)return;
+    if(!m->focus_initialized) {
+        m->focus_x=x;m->focus_y=y;m->focus_initialized=true;
+    } else {
+        if(active!=m->focus_count)m->focus_hold=active<m->focus_count;
+        int32_t dx=0,dy=0;
+        if(active==m->focus_count) {
+            dx=focus_step((int64_t)x-m->focus_center_x);
+            dy=focus_step((int64_t)y-m->focus_center_y);
+        }
+        if(!m->focus_hold) {
+            dx=focus_step((int64_t)x-m->focus_x);
+            dy=focus_step((int64_t)y-m->focus_y);
+        }
+        m->focus_x+=dx;m->focus_y+=dy;
+    }
+    m->focus_count=active;m->focus_center_x=x;m->focus_center_y=y;
+}
 size_t coop_machine_save_size(const CoopMachine *m) {
     if(!m || m->actor_count!=m->session.player_count || m->actor_count>UINT32_MAX)return 0;
     size_t core=coop_session_save_size(&m->session);
@@ -100,6 +120,8 @@ size_t coop_machine_save_size(const CoopMachine *m) {
     if(m->entity_count>UINT32_MAX || n>SIZE_MAX-ENTITY_HEADER ||
        m->entity_count>(SIZE_MAX-n-ENTITY_HEADER)/ENTITY_BYTES)return 0;
     n+=ENTITY_HEADER+m->entity_count*ENTITY_BYTES;
+    if(n>SIZE_MAX-FOCUS_BYTES)return 0;
+    n+=FOCUS_BYTES;
     return n;
 }
 static bool entities_valid(const CoopMachine *m) {
@@ -157,7 +179,7 @@ static bool load_piece(CoopVisualPiece *v,const uint8_t *p) {
 bool coop_machine_save(const CoopMachine *m,void *data,size_t capacity) {
     size_t n=coop_machine_save_size(m);if(!data || !n || capacity<n || !entities_valid(m))return false;
     uint8_t *p=data;memset(p,0,HEADER);
-    memcpy(p,"CNR1",4);put32(p+4,3);memcpy(p+8,rom_id,32);
+    memcpy(p,"CNR1",4);put32(p+4,4);memcpy(p+8,rom_id,32);
     size_t core=coop_session_save_size(&m->session);
     put32(p+40,(uint32_t)core);put32(p+44,(uint32_t)m->actor_count);
     put32(p+48,layout_id());put32(p+52,m->room);put32(p+56,m->previous_mode);
@@ -183,13 +205,18 @@ bool coop_machine_save(const CoopMachine *m,void *data,size_t capacity) {
         put32(p+at+12,e->type);put32(p+at+16,e->owner);put32(p+at+20,e->target);
         put32(p+at+24,e->flags);at+=ENTITY_BYTES;
     }
+    memcpy(p+at,"CAM1",4);
+    put32(p+at+4,(uint32_t)m->focus_x);put32(p+at+8,(uint32_t)m->focus_y);
+    put32(p+at+12,(uint32_t)m->focus_center_x);put32(p+at+16,(uint32_t)m->focus_center_y);
+    put32(p+at+20,m->focus_count);put32(p+at+24,m->focus_initialized);
+    put32(p+at+28,m->focus_hold);at+=FOCUS_BYTES;
     put32(p+at,crc(p,at));return true;
 }
 bool coop_machine_load(CoopMachine *m,const void *data,size_t size) {
     if(!m || !data || size<HEADER+TRAILER)return false;
     const uint8_t *p=data;
     uint32_t version=u32(p+4);
-    if(memcmp(p,"CNR1",4)||(version!=2 && version!=3)||memcmp(p+8,rom_id,32)||u32(p+48)!=layout_id()||
+    if(memcmp(p,"CNR1",4)||(version<2 || version>4)||memcmp(p+8,rom_id,32)||u32(p+48)!=layout_id()||
         u32(p+60)>1||u32(p+56)>0x29||u32(p+size-4)!=crc(p,size-4))return false;
     size_t core=u32(p+40),count=u32(p+44);
     if(core>size-HEADER-TRAILER || count>(size-HEADER-TRAILER-core)/(ACTOR_HEADER+COOP_GUEST_BYTES))return false;
@@ -224,12 +251,14 @@ bool coop_machine_load(CoopMachine *m,const void *data,size_t size) {
         }
     }
     tmp.next_entity=1;tmp.level=UINT32_MAX;
-    if(version==3) {
+    if(version>=3) {
         if(size-TRAILER-at<ENTITY_HEADER || memcmp(p+at,"ENT1",4))goto fail;
         tmp.entity_count=tmp.entity_capacity=u32(p+at+4);
         tmp.next_entity=u32(p+at+8);tmp.level=u32(p+at+12);at+=ENTITY_HEADER;
-        if(tmp.entity_count>22 || tmp.entity_count!=(size-TRAILER-at)/ENTITY_BYTES ||
-           (size-TRAILER-at)%ENTITY_BYTES)goto fail;
+        size_t tail=version>=4?FOCUS_BYTES:0;
+        if(size-TRAILER-at<tail || tmp.entity_count>22 ||
+           tmp.entity_count!=(size-TRAILER-at-tail)/ENTITY_BYTES ||
+           (size-TRAILER-at-tail)%ENTITY_BYTES)goto fail;
         if(tmp.entity_count) {
             tmp.entities=calloc(tmp.entity_count,sizeof(*tmp.entities));if(!tmp.entities)goto fail;
         }
@@ -238,6 +267,17 @@ bool coop_machine_load(CoopMachine *m,const void *data,size_t size) {
                 u32(p+at+16),u32(p+at+20),u32(p+at+24)};
             at+=ENTITY_BYTES;
         }
+    }
+    if(version>=4) {
+        if(size-TRAILER-at!=FOCUS_BYTES || memcmp(p+at,"CAM1",4) ||
+           u32(p+at+20)>count || u32(p+at+24)>1 || u32(p+at+28)>1)goto fail;
+        tmp.focus_x=(int32_t)u32(p+at+4);tmp.focus_y=(int32_t)u32(p+at+8);
+        tmp.focus_center_x=(int32_t)u32(p+at+12);tmp.focus_center_y=(int32_t)u32(p+at+16);
+        tmp.focus_count=u32(p+at+20);tmp.focus_initialized=u32(p+at+24)!=0;
+        tmp.focus_hold=u32(p+at+28)!=0;at+=FOCUS_BYTES;
+        if(tmp.focus_x<0 || tmp.focus_x>65535 || tmp.focus_y<0 || tmp.focus_y>65535 ||
+           tmp.focus_center_x<0 || tmp.focus_center_x>65535 ||
+           tmp.focus_center_y<0 || tmp.focus_center_y>65535)goto fail;
     }
     if(at!=size-TRAILER || !entities_valid(&tmp))goto fail;
     coop_machine_destroy(m);*m=tmp;return true;

@@ -46,6 +46,11 @@ typedef struct CoopMachine {
     CoopEntity *entities;
     size_t entity_count,entity_capacity;
     uint32_t next_entity,level;
+    /* Camera focus has its own continuity across roster changes. Removing a
+     * dying actor must not move a stationary survivor's view. */
+    int32_t focus_x,focus_y,focus_center_x,focus_center_y;
+    uint32_t focus_count;
+    bool focus_initialized,focus_hold;
 } CoopMachine;
 
 bool coop_machine_init(CoopMachine *m, size_t players);
@@ -55,6 +60,7 @@ CoopEntity *coop_machine_entity(CoopMachine *m,CoopEntityId id);
 CoopEntity *coop_machine_entity_slot(CoopMachine *m,unsigned kind,unsigned slot);
 CoopEntity *coop_machine_spawn_entity(CoopMachine *m,unsigned kind,unsigned slot,unsigned type);
 void coop_machine_forget_entity(CoopMachine *m,CoopEntityId id);
+void coop_machine_focus(CoopMachine *m,int32_t x,int32_t y,uint32_t active);
 size_t coop_machine_save_size(const CoopMachine *m);
 bool coop_machine_save(const CoopMachine *m, void *data, size_t capacity);
 /* Transactional: failure leaves both policy and native images untouched. */

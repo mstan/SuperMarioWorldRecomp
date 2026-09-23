@@ -24,6 +24,7 @@ COOP_HOOK(0x018773) /* Goal sphere after graphics/sparkles, before contact */
 COOP_HOOK(0x018778) /* Goal sphere contact before native shared clear effects */
 COOP_HOOK(0x07F722) /* Sprite initialization retires the previous slot identity */
 COOP_HOOK(0x05D8B7) /* Native loader has resolved the complete 9-bit room number */
+COOP_HOOK(0x05D83E) /* Direct retry uses translevel, not overwritten overworld Map16 */
 COOP_HOOK(0x02ABF2) /* Room sprite cleanup preserves every owned carried object */
 COOP_HOOK(0x01E1C8) /* Keyhole: query every eligible owned key before drawing once */
 COOP_HOOK(0x01E210) /* Keyhole accepted contact, before shared window/music/freeze */

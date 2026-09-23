@@ -129,6 +129,7 @@ static void camera_and_recovery(void) {
     assert(coop_session_recover(&s,safe,NULL));
     assert(s.players[1].life==COOP_CATCHUP_BUBBLE);
     s.players[3].swimming=true;
+    for(int i=0;i<30;++i)assert(coop_session_begin_frame(&s,true));
     assert(coop_session_recover(&s,safe,NULL));
     assert(s.players[1].life==COOP_PLAYING && s.players[1].protection_ticks==0);
     coop_session_destroy(&s);
@@ -222,6 +223,13 @@ static void native_states(size_t players) {
     a.actors[0].visible=a.actors[0].pending;
     a.actors[0].visible.pieces[0].x=87;
     a.level=0x106;
+    coop_machine_focus(&a,300,378,(uint32_t)players);
+    coop_machine_focus(&a,240,378,(uint32_t)players-1);
+    assert(a.focus_x==300 && a.focus_hold);
+    coop_machine_focus(&a,243,378,(uint32_t)players-1);
+    assert(a.focus_x==303);
+    coop_machine_focus(&a,4000,5000,(uint32_t)players);
+    assert(a.focus_x==307 && a.focus_y==382 && !a.focus_hold);
     CoopEntity *held=coop_machine_spawn_entity(&a,COOP_ENTITY_NORMAL,3,0x80);assert(held);
     held->owner=2000;held->flags=COOP_ENTITY_HELD;
     coop_player(&a.session,2000)->held_object=held->id;
@@ -236,6 +244,7 @@ static void native_states(size_t players) {
     assert(b.actors[0].pending.pieces[0].x==-7 && b.actors[0].visible.pieces[0].x==87);
     assert(b.actors[0].visible.pieces[0].pixels[15]==0x83e0);
     assert(b.level==0x106 && b.entity_count==2);
+    assert(b.focus_x==307 && b.focus_y==382 && b.focus_count==players);
     assert(coop_machine_entity(&b,held_id)->owner==2000);
     assert(coop_machine_save(&b,again,n));assert(!memcmp(data,again,n));
     CoopActor *original=b.actors;
@@ -261,7 +270,7 @@ static void native_states(size_t players) {
     data[actor+8]=COOP_BODY_PIECES+1;repair_native_crc(data,n);
     assert(!coop_machine_load(&b,data,n) && b.actors==original);
     memcpy(data,again,n);
-    size_t entities=n-4-2*28;
+    size_t entities=n-4-32-2*28;
     data[entities+28]=data[entities];repair_native_crc(data,n); /* duplicate identity */
     assert(!coop_machine_load(&b,data,n) && b.actors==original);
     memcpy(data,again,n);
@@ -276,7 +285,7 @@ static void native_states(size_t players) {
 static void terrain(void) {
     uint8_t *r=calloc(0x20000,1),*rom=calloc(0x80000,1),*before=malloc(0x20000);
     assert(r && rom && before);
-    CoopTerrain t={r,rom,0x80000};
+    CoopTerrain t={r,rom,0x80000,NULL};
     /* Two horizontal screen pointers, then a separate layer-2 pointer. */
     rom[0xba60-0x8000]=0;rom[0xba9c-0x8000]=0xc8;
     rom[0xba61-0x8000]=0xb0;rom[0xba9d-0x8000]=0xc9;
@@ -293,17 +302,17 @@ static void terrain(void) {
     CoopPlayer anchor={.id=0,.life=COOP_PLAYING,.x=24,.y=371,.height=26,.grounded=true};
     CoopPlayer returning={.id=1,.life=COOP_DEATH_BUBBLE,.power=COOP_SMALL,.mount=COOP_NO_ENTITY};
     int32_t x=0,y=0;memcpy(before,r,0x20000);
-    assert(coop_terrain_safe(&t,&returning,&anchor,&x,&y) && x==24 && y==378);
+    assert(coop_terrain_safe(&t,&returning,&anchor,&x,&y) && x==48 && y==378);
     assert(!memcmp(before,r,0x20000));
-    r[0xc981]=0x2f; /* Muncher must not become safe due to recovery protection. */
+    memset(r+0xc980,0x2f,16); /* Munchers never become safe due to protection. */
     returning.protection_ticks=120;
     assert(!coop_terrain_safe(&t,&returning,&anchor,&x,&y));
-    r[0xc981]=0;
-    r[0x14c8]=8;r[0xe4]=24;r[0xd8]=0x70;r[0x14d4]=1;
+    memset(r+0xc980,0,16);
+    r[0x14c8]=8;r[0xe4]=40;r[0xd8]=0x70;r[0x14d4]=1;
     assert(!coop_terrain_safe(&t,&returning,&anchor,&x,&y));r[0x14c8]=0;
-    r[0x5b]=0x80;r[0xe471]=0x30;r[0x1e471]=1; /* layer-2 obstruction */
+    r[0x5b]=0x80;memset(r+0xe470,0x30,16);memset(r+0x1e470,1,16); /* layer-2 obstruction */
     assert(!coop_terrain_safe(&t,&returning,&anchor,&x,&y));r[0x5b]=0;
-    r[0xc971]=0x2b;r[0x14ad]=1;
+    memset(r+0xc970,0x2b,16);r[0x14ad]=1;
     assert(coop_terrain_block(&t,0,24,372,&block) && block==0x132);
     assert(!coop_terrain_safe(&t,&returning,&anchor,&x,&y));
     r[0x14ad]=0;assert(coop_terrain_safe(&t,&returning,&anchor,&x,&y));

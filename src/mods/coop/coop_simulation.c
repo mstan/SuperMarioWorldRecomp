@@ -228,6 +228,7 @@ static uint32_t follow_victory(CpuState *cpu,CoopMachine *m) {
     return 0x00cd24;
 }
 static void initialize_room(CoopMachine *m) {
+    m->focus_initialized=m->focus_hold=false;m->focus_count=0;
     retire_released_objects(m);
     if(m->session.outcome==COOP_GAME_OVER) {
         for(size_t i=0;i<m->session.player_count;++i)m->session.players[i].reserve=0;
@@ -487,10 +488,13 @@ static uint32_t death_hook(CpuState *cpu,CoopMachine *m,uint32_t pc) {
     }
     if(pc==0x00d0b6) {
         g_ram[0x19]=0;g_ram[0x13e0]=0x3e;
-        if(!m->session.advancing)return 0x00d11c;
+        bool team_death=m->session.outcome==COOP_RETRY || m->session.outcome==COOP_GAME_OVER;
+        if(!m->session.advancing && !(team_death && gameplay_stage_started &&
+           !m->session.input_blocked))return 0x00d11c;
         if(!(g_ram[0x13]&3) && g_ram[0x1496])--g_ram[0x1496];
         if(!g_ram[0x1496]) {
-            queue_event(m,COOP_EVENT_DEATH_FINISHED,a->player);
+            if(team_death)p->life=COOP_DEATH_BUBBLE;
+            else queue_event(m,COOP_EVENT_DEATH_FINISHED,a->player);
             return 0x00d11c; /* death-animation RTS, before team effects */
         }
         cpu->A=(cpu->A&0xff00)|g_ram[0x1496];
@@ -502,16 +506,23 @@ static void run_team_camera(CpuState *cpu,CoopMachine *m) {
     CoopActor *primary=primary_actor(m);capture(m,primary);
     CoopActor *focus=NULL;
     int64_t left=INT32_MAX,right=INT32_MIN,top=INT32_MAX,bottom=INT32_MIN;
-    bool grounded=false;
+    bool grounded=false;uint32_t active=0;
     for(size_t i=0;i<m->actor_count;++i) {
         CoopActor *a=&m->actors[i];CoopPlayer *p=coop_player(&m->session,a->player);
-        if(p->life!=COOP_PLAYING)continue;
+        uint8_t animation=0;coop_guest_peek(&a->guest,0x71,&animation);
+        if(p->life!=COOP_PLAYING || animation==9)continue;
+        ++active;
         if(!focus)focus=a;
         if(p->x-p->half_width<left)left=p->x-p->half_width;
         if(p->x+p->half_width>right)right=p->x+p->half_width;
         if(p->y-p->height/2<top)top=p->y-p->height/2;
         if(p->y+p->height/2>bottom)bottom=p->y+p->height/2;
         grounded|=p->grounded;
+    }
+    /* The original camera also calculates streaming deltas. Keep those zero
+     * while the whole team dies; never point it at a falling death pose. */
+    if(!focus) {
+        memset(g_ram+0x17bd,0,4);return;
     }
     if(focus) {
         const CoopPlayer *leader=coop_player_const(&m->session,m->session.camera.leader);
@@ -521,7 +532,8 @@ static void run_team_camera(CpuState *cpu,CoopMachine *m) {
         }
         coop_guest_bind(&focus->guest,g_ram);
         CoopPlayer proxy=*coop_player(&m->session,focus->player);
-        proxy.x=(int32_t)((left+right)/2);proxy.y=(int32_t)((top+bottom)/2);
+        coop_machine_focus(m,(int32_t)((left+right)/2),(int32_t)((top+bottom)/2),active);
+        proxy.x=m->focus_x;proxy.y=m->focus_y;
         proxy.grounded=grounded;
         coop_guest_place_player(&proxy,g_ram);
     }
@@ -536,6 +548,14 @@ static void run_team_camera(CpuState *cpu,CoopMachine *m) {
 uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
     CoopMachine *m=SmwCoopMachine();if(!m)return 0;
     pc&=0x7fffff;
+    if(pc==0x05d83e && m->session.outcome==COOP_RETRY) {
+        /* $7E:D000 is the overworld's translevel map, then level Map16 RAM.
+         * A direct retry cannot reread it as overworld data. The current
+         * translevel and party submap still identify the primary entrance. */
+        put16(0x1a,0);put16(0x1e,0);g_ram[0x0f]=0;
+        cpu->A=(cpu->A&0xff00)|g_ram[0x13bf];cpu->Y=(uint16_t)(g_ram[0xdd6]>>2);
+        return 0x05d8a2;
+    }
     if(pc==0x05d8b7) {m->level=read16(0x0e);return 0;}
     if(pc==0x02abf2 && !room_sprite_depth) {
         carry_through_room(cpu,m);return 0x02ac5b;
@@ -779,7 +799,7 @@ static void recover_and_frame(CoopMachine *m) {
     if(!coop_camera_check_separation(s,resized))Die("Native co-op separation check failed");
     /* Drop before recovery binds a new position: objects stay at departure. */
     apply_object_drops(m);
-    CoopTerrain terrain={g_ram,g_rom,0x80000}; /* validated stock-US ROM */
+    CoopTerrain terrain={g_ram,g_rom,0x80000,s}; /* validated stock-US ROM */
     if(!coop_session_recover(s,safe_recovery,&terrain))Die("Native co-op recovery failed");
     for(size_t i=0;i<s->action_count;++i) {
         const CoopAction *action=&s->actions[i];
@@ -815,7 +835,9 @@ static void recover_and_frame(CoopMachine *m) {
 void SmwCoopSimulationEnd(void) {
     CoopMachine *m=SmwCoopMachine();if(!m || !level_frame)return;
     capture(m,primary_actor(m));
-    m->session.lives=g_ram[0xdbe]+1u;m->session.coins=g_ram[0xdbf];
+    if(m->session.outcome==COOP_CONTINUE || m->session.outcome==COOP_CLEAR)
+        m->session.lives=g_ram[0xdbe]+1u;
+    m->session.coins=g_ram[0xdbf];
     if(!end_timer_at_begin && g_ram[0x1493] && m->session.outcome==COOP_CONTINUE) {
         /* Original boss/switch scripts have already produced their shared
          * scene. Register that transition even when their gameplay is frozen;
@@ -826,6 +848,7 @@ void SmwCoopSimulationEnd(void) {
                 COOP_NO_ENTITY,0,secret?COOP_EVENT_SECRET:0,0}))
             Die("Native co-op could not record a scripted level clear");
     }
+    CoopOutcome previous_outcome=m->session.outcome;
     if(!coop_session_resolve(&m->session))Die("Native co-op event resolution failed");
     apply_object_drops(m);
     apply_checkpoint(m);
@@ -843,7 +866,32 @@ void SmwCoopSimulationEnd(void) {
     } else if(m->session.outcome==COOP_CONTINUE) {
         recover_and_frame(m);
     }
-    if(m->session.outcome==COOP_RETRY || m->session.outcome==COOP_GAME_OVER) {
+    bool team_death=m->session.outcome==COOP_RETRY || m->session.outcome==COOP_GAME_OVER;
+    if(team_death && previous_outcome==COOP_CONTINUE) {
+        /* A timeout kills remaining actors too. The committed outcome charges
+         * one life immediately; original actor death timers delay the loader. */
+        for(size_t i=0;i<m->actor_count;++i) {
+            CoopActor *a=&m->actors[i];CoopPlayer *p=coop_player(&m->session,a->player);
+            if(p->life!=COOP_PLAYING)continue;
+            coop_guest_bind(&a->guest,g_ram);
+            p->life=COOP_DYING;g_ram[0x71]=9;g_ram[0x1496]=0x30;g_ram[0x7d]=0x90;
+            g_ram[0x19]=g_ram[0x140d]=g_ram[0x1407]=g_ram[0x1490]=g_ram[0x1497]=0;
+            capture(m,a);
+        }
+        coop_guest_bind(&primary_actor(m)->guest,g_ram);
+        g_ram[0x1dfb]=9;g_ram[0xdda]=0xff;
+    } else if(m->session.outcome==COOP_CONTINUE) {
+        for(size_t i=0;i<m->session.action_count;++i)
+            if(m->session.actions[i].kind==COOP_ACTION_DEATH)g_ram[0x1df9]=0x23; /* short native fall cue */
+    }
+    bool death_animating=false;
+    if(team_death) {
+        g_ram[0xdbe]=(uint8_t)(m->session.lives-1u);
+        for(size_t i=0;i<m->session.player_count;++i)
+            death_animating|=m->session.players[i].life==COOP_DYING;
+        if(death_animating)g_ram[0x9d]=1;
+    }
+    if(team_death && !death_animating) {
         /* Timeout can end the attempt while a survivor is still carrying.
          * No owned entity from that attempt may enter the native room loader. */
         for(size_t i=0;i<m->entity_count;) {
@@ -881,15 +929,16 @@ void SmwCoopSimulationEnd(void) {
     static FILE *trace;
     if(path && *path && !trace) {
         trace=fopen(path,"w");
-        if(trace)fputs("frame,world_frame,player,x,y,power,animation,input,stack,life,recovery,lives,lock,camera_x,camera_y,protection,separation,reserve,mode,sublevel,level_data,room_request,checkpoint,checkpoint_upgrade,outcome,end_timer,peace,spotlight,goal_stars,exit_player,exit_flags,held_object,held_slot,held_status,held_x,held_y,level,drop_entity,drop_x,drop_y,keyhole_timer,keyhole_direction,ow_exit,pause,keyhole_x,keyhole_y,time,exit_candidates,bonus_stars,bonus_pending,pending_lives\n",trace);
+        if(trace)fputs("frame,world_frame,player,x,y,power,animation,input,stack,life,recovery,lives,lock,camera_x,camera_y,protection,separation,reserve,mode,sublevel,level_data,room_request,checkpoint,checkpoint_upgrade,outcome,end_timer,peace,spotlight,goal_stars,exit_player,exit_flags,held_object,held_slot,held_status,held_x,held_y,level,drop_entity,drop_x,drop_y,keyhole_timer,keyhole_direction,ow_exit,pause,keyhole_x,keyhole_y,time,exit_candidates,bonus_stars,bonus_pending,pending_lives,death_timer,sfx,music,focus_x,focus_y,focus_count\n",trace);
     }
     if(trace) {
         for(size_t i=0;i<m->actor_count;++i) {
             CoopActor *a=&m->actors[i];CoopPlayer *p=coop_player(&m->session,a->player);
             /* Actor animation is reported by reading its own image without
              * binding it into the running game's WRAM. */
-            uint8_t animation=0;
+            uint8_t animation=0,death_timer=0;
             coop_guest_peek(&a->guest,0x71,&animation);
+            coop_guest_peek(&a->guest,0x1496,&death_timer);
             CoopPlayerId exit_player=COOP_NO_PLAYER;unsigned exit_flags=0;
             for(size_t j=0;j<m->session.action_count;++j)
                 if(m->session.actions[j].kind==COOP_ACTION_EXIT) {
@@ -906,7 +955,7 @@ void SmwCoopSimulationEnd(void) {
             for(size_t j=0;j<m->session.event_count;++j)
                 exit_candidates+=m->session.events[j].kind==COOP_EVENT_EXIT;
             unsigned slot=held?held->slot:12;
-            fprintf(trace,"%llu,%u,%u,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
+            fprintf(trace,"%llu,%u,%u,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u",
                 (unsigned long long)m->session.frame,g_ram[0x14],p->id,p->x,p->y,
                 (unsigned)p->power,animation,p->held_input,g_cpu.S,(unsigned)p->life,
                 p->recovery_ticks,m->session.lives,g_ram[0x9d],
@@ -924,6 +973,8 @@ void SmwCoopSimulationEnd(void) {
                 g_ram[0x1434],g_ram[0x1435],g_ram[0xdd5],g_ram[0x13d4],
                 read16(0x1436),read16(0x1438),g_ram[0xf31]*100u+g_ram[0xf32]*10u+g_ram[0xf33],exit_candidates,
                 g_ram[0xf48],g_ram[0x1425],g_ram[0x18e4]);
+            fprintf(trace,",%u,%u,%u,%d,%d,%u\n",death_timer,g_ram[0x1df9],g_ram[0x1dfb],
+                m->focus_x,m->focus_y,m->focus_count);
         }
         fflush(trace);
     }
