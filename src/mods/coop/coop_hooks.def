@@ -20,3 +20,5 @@ COOP_HOOK(0x01C0E7) /* Goal crossing accepted, before shared clear effects */
 COOP_HOOK(0x01C107) /* Goal bonus contact result before shared award */
 COOP_HOOK(0x07F252) /* Native goal star lookup and exceptional 3-up award */
 COOP_HOOK(0x00C915) /* Shared victory director; followers run only actor motion */
+COOP_HOOK(0x018773) /* Goal sphere after graphics/sparkles, before contact */
+COOP_HOOK(0x018778) /* Goal sphere contact before native shared clear effects */

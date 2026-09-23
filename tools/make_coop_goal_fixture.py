@@ -2,10 +2,39 @@
 """Stage a COPY of a YI2 entrance state before its original goal tape."""
 import argparse
 from pathlib import Path
-from coop_fixture import Fixture
+from coop_fixture import Fixture, ROOT
 
 
-def contacts(source, output, secret, timeout, waiting):
+def sphere_type(f, slot):
+    d, r = f.data, f.ram
+    rom = (ROOT/'smw.sfc').read_bytes()
+    d[r+0x9e+slot] = 0x4a
+    for table, source_table in ((0x1656, 0x3f26c), (0x1662, 0x3f335),
+                                (0x166e, 0x3f3fe), (0x167a, 0x3f4c7),
+                                (0x1686, 0x3f590), (0x190f, 0x3f659)):
+        d[r+table+slot] = rom[source_table+0x4a]
+    assert d[r+0x167a+slot] & 0x80
+
+
+def sphere(source, output, collector, waiting):
+    """Replace a loaded goal in an offline copy with a stock goal sphere."""
+    f = Fixture(source)
+    d, r = f.data, f.ram
+    slot = next(i for i in range(12)
+                if d[r+0x14c8+i] == 8 and d[r+0x9e+i] == 0x7b)
+    sphere_type(f, slot)
+    d[r+0xd8+slot], d[r+0x14d4+slot] = 352 & 255, 352 >> 8
+    for player in range(2):
+        collects = collector == 'both' or player == int(collector)
+        f.actor(player, 4800 if collects else 4740, 352,
+                1 if player == 0 else 3, 1 if player == 0 else 4,
+                2 if waiting and not collects else 0,
+                180 if waiting and not collects else 0)
+    f.save(output)
+    print(f'Created goal-sphere fixture: {output} (collector={collector}, waiting={waiting})')
+
+
+def contacts(source, output, secret, timeout, waiting, mixed_sphere):
     """Synthetic competing contacts using a naturally loaded stock goal sprite.
 
     Duplicate that sprite's owned tables into an empty slot. This exercises
@@ -42,6 +71,11 @@ def contacts(source, output, secret, timeout, waiting):
     if timeout:
         # UpdateStatusBar decrements the frame divider before its BPL test.
         d[r+0xf30:r+0xf34] = bytes((0, 0, 0, 1))
+    if mixed_sphere:
+        sphere_type(f, source_slot)
+        # The sphere uses native alternate-frame contact (unlike the tape).
+        # Align the next true frame with its slot to stage simultaneous hits.
+        d[r+0x13] = (d[r+0x13] & 0xfe) | ((source_slot ^ 1) & 1)
     f.save(output)
     print(f'Created competing-goal fixture: {output} (secret={secret}, timeout={timeout}, waiting={waiting})')
 
@@ -68,10 +102,16 @@ if __name__ == '__main__':
     parser.add_argument('--waiting', action='store_true')
     parser.add_argument('--contacts', choices=('normal', 'secret'))
     parser.add_argument('--timeout', action='store_true')
+    parser.add_argument('--sphere', action='store_true')
+    parser.add_argument('--mixed-sphere', action='store_true')
     args = parser.parse_args()
-    if args.contacts:
-        contacts(args.source, args.output, args.contacts == 'secret', args.timeout, args.waiting)
+    if args.sphere:
+        if args.contacts or args.timeout or args.mixed_sphere:
+            parser.error('--sphere cannot be combined with contact options')
+        sphere(args.source, args.output, args.collector, args.waiting)
+    elif args.contacts:
+        contacts(args.source, args.output, args.contacts == 'secret', args.timeout, args.waiting, args.mixed_sphere)
     else:
-        if args.timeout:
-            parser.error('--timeout requires --contacts')
+        if args.timeout or args.mixed_sphere:
+            parser.error('--timeout and --mixed-sphere require --contacts')
         make(args.source, args.output, args.collector, args.waiting)

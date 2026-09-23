@@ -302,9 +302,18 @@ reserves; catch-up actors retain their equipment. A valid clear overrides
 same-frame death/timeout without charging a life. The next gameplay entry
 returns the core outcome to normal and preserves the surviving equipment.
 
+Goal spheres use the same actor collection at `01:8773`, after their single
+graphics/sparkle update. Each actor runs the native contact query, including its
+alternate-frame contact rule. `01:8778` records accepted contacts before the
+one-time sphere removal/music/end-timer effects. If a sphere wins an exit tie
+while another actor validly touches a tape, that tape's accepted-bonus tail at
+`01:C109` still runs once. It preserves the chosen exit and supplies the team's
+star reward and original coin conversion. Equal star rewards select the
+primary/stable actor. The stock sprite-slot bound is separate from roster size.
+
 Goal collection state is temporary within one host frame; committed scene
 state is already in the guest and native actor snapshot. No snapshot schema
-change or custom UI is needed. Other completion mechanisms (sphere, keyhole,
+change or custom UI is needed. Other completion mechanisms (keyhole,
 boss/switch scripts), mounted/carried-object rewards, bonus-room participation,
 and full campaign coverage still require their own adapters and validation.
 
@@ -603,6 +612,25 @@ the interior hook must appear in the generated blocks or the build fails.
   cadence, equipment, stack, life totals, replay, and execution-mode equality.
   No dispatch misses or unresolved-abandon messages occurred in accepted runs.
   Hook coverage is 18 compiled and three interpreter sites.
+
+Goal sphere extension:
+
+- `native-coop-sphere` uses an offline fixture replacing the loaded goal with
+  the stock sphere type and its ROM tweaker data. Real Luigi movement triggers
+  the single team clear; all 1,196 actor records pass the same victory,
+  equipment, stack, and life invariants. Frame 70 shows the sphere before touch.
+- `native-coop-goal-mixed` stages Mario on a sphere and Luigi on a fifty-star
+  tape in one contact frame. Mario wins the normal-exit tie, and Luigi's tape
+  still awards fifty stars and exactly three lives. Frame 140 shows the original
+  fifty-star graphic with both actors. All 1,126 actor records are identical
+  under the default and compiled-bounce scheduler settings.
+- The mixed fixture aligns the true-frame parity with the sphere's slot:
+  stock sphere contacts run on alternate frames, whereas tape contacts run
+  every frame. This preserves the original contact query. These fixtures
+  validate the adapter; Sunken Ghost Ship water/campaign coverage remains open.
+  `--sphere` and `--contacts normal --mixed-sphere` reproduce the two cases.
+  Build and hook checks pass with 20 compiled and three interpreter sites;
+  accepted runs have no dispatch misses or unresolved-abandon messages.
 
 ### Compiler table-boundary correction found by co-op validation
 

@@ -25,6 +25,8 @@ static bool gameplay_stage_started;
 static CoopPlayerId room_request=COOP_NO_PLAYER;
 static bool goal_query,goal_commit,goal_contact;
 static uint8_t goal_height,goal_stars;
+static CoopPlayerId goal_actor=COOP_NO_PLAYER;
+static CoopEntityId goal_entity=COOP_NO_ENTITY;
 static unsigned read16(unsigned at) {return g_ram[at]|(g_ram[at+1]<<8);}
 static void put16(unsigned at,unsigned value) {g_ram[at]=(uint8_t)value;g_ram[at+1]=(uint8_t)(value>>8);}
 
@@ -51,7 +53,7 @@ static void guest_jsr(CpuState *cpu,uint32_t entry) {
     if(!interp_bridge_run(cpu,entry) || cpu->S!=stack)
         Die("Native co-op scoped guest routine failed its return contract");
 }
-static void collect_goal(CpuState *cpu,CoopMachine *m) {
+static void collect_goal(CpuState *cpu,CoopMachine *m,uint32_t query) {
     if(!m->session.advancing)return;
     CoopActor *original=bound_actor?bound_actor:primary_actor(m);
     CoopActor *previous=bound_actor;capture(m,original);
@@ -62,9 +64,9 @@ static void collect_goal(CpuState *cpu,CoopMachine *m) {
         if(coop_player(&m->session,a->player)->life!=COOP_PLAYING)continue;
         coop_guest_bind(&a->guest,g_ram);bound_actor=a;
         restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
-        /* Run the ROM's post X / bottom Y tests for every candidate. The
-         * C0E7 observer records an event before any shared effects execute. */
-        guest_jsr(cpu,0x01c0c2);
+        /* Run the ROM's crossing/contact tests for every candidate. The
+         * accepted-contact observer records before shared effects execute. */
+        guest_jsr(cpu,query);
     }
     goal_query=false;bound_actor=previous;
     restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
@@ -80,8 +82,10 @@ static void record_goal(CpuState *cpu,CoopMachine *m) {
     guest_jsr(cpu,0x01a7e4);
     uint8_t height=(uint8_t)(g_ram[0x1528+slot]-g_ram[0xd8+slot]);
     uint8_t stars=cpu->_flag_C?g_rom[0x3f1aa+(height>>2)]:0;
-    if(cpu->_flag_C && (!goal_contact || stars>goal_stars)) {
+    if(cpu->_flag_C && (!goal_contact || stars>goal_stars ||
+       (stars==goal_stars && coop_player_precedes(&m->session,bound_actor->player,goal_actor)))) {
         goal_contact=true;goal_height=height;goal_stars=stars;
+        goal_actor=bound_actor->player;goal_entity=slot;
     }
     if(!coop_session_event(&m->session,(CoopEvent){COOP_EVENT_EXIT,bound_actor->player,
             slot,stars,(g_ram[0x187b+slot]&4)?COOP_EVENT_SECRET:0,0}))
@@ -138,6 +142,7 @@ static void initialize_room(CoopMachine *m) {
 void SmwCoopSimulationBegin(void) {
     level_frame=gameplay_stage_started=false;room_request=COOP_NO_PLAYER;
     goal_query=goal_commit=goal_contact=false;goal_height=goal_stars=0;
+    goal_actor=COOP_NO_PLAYER;goal_entity=COOP_NO_ENTITY;
     CoopMachine *m=SmwCoopMachine();if(!m)return;
     unsigned mode=g_ram[0x100];
     if(mode!=0x14) {m->previous_mode=mode;return;}
@@ -390,8 +395,15 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
     if(!level_frame)return 0;
     CoopMachine *m=SmwCoopMachine();if(!m)return 0;
     pc&=0x7fffff;
-    if(pc==0x01c0c2 && !goal_query) {collect_goal(cpu,m);return 0x01c12c;}
+    if(pc==0x01c0c2 && !goal_query) {collect_goal(cpu,m,pc);return 0x01c12c;}
     if(pc==0x01c0e7 && goal_query) {record_goal(cpu,m);return 0x01c12c;}
+    if(pc==0x018773 && !goal_query) {collect_goal(cpu,m,pc);return 0x018788;}
+    if(pc==0x018778 && goal_query) {
+        if(!coop_session_event(&m->session,(CoopEvent){COOP_EVENT_EXIT,
+                bound_actor->player,cpu->X&0xff,0,0,0}))
+            Die("Native co-op could not record a goal sphere contact");
+        return 0x018788;
+    }
     if(pc==0x01c107 && goal_commit) {
         cpu->_flag_C=goal_contact;cpu->P=(uint8_t)((cpu->P&~1u)|(goal_contact?1u:0u));
     }
@@ -468,8 +480,21 @@ static void apply_clear(CoopMachine *m) {
     g_cpu.P|=0x30;g_cpu.P&=(uint8_t)~8u;cpu_p_to_mirrors(&g_cpu);
     g_cpu.X=exit->entity;g_cpu.Y&=0xff;g_cpu.D=0;g_cpu.DB=g_cpu.PB=1;
     g_ram[0x15e9]=(uint8_t)exit->entity;
-    guest_jsr(&g_cpu,0x01c0e7);
-    goal_commit=false;bound_actor=NULL;capture(m,winner);
+    uint8_t type=g_ram[0x9e + exit->entity];
+    if(type!=0x7b && type!=0x4a)Die("Native co-op clear has an unsupported source");
+    guest_jsr(&g_cpu,type==0x7b?0x01c0e7:0x018778);
+    capture(m,winner);
+    if(type!=0x7b && goal_contact) {
+        /* Exit ownership and a valid tape reward are independent. If a
+         * sphere wins the normal-exit tie, execute the tape's accepted-bonus
+         * tail once, without replacing the chosen exit's music/type. */
+        CoopActor *bonus=coop_machine_actor(m,goal_actor);
+        coop_guest_bind(&bonus->guest,g_ram);bound_actor=bonus;
+        g_cpu.X=goal_entity;g_cpu.DB=g_cpu.PB=1;
+        g_ram[0x15e9]=(uint8_t)goal_entity;++g_ram[0x1602+goal_entity];
+        guest_jsr(&g_cpu,0x01c109);capture(m,bonus);
+    }
+    goal_commit=false;bound_actor=NULL;
     restore_registers(&g_cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
     g_ram[0x15e9]=sprite;
     CoopGuestPlayer entry=winner->guest;
