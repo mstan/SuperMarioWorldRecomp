@@ -319,9 +319,46 @@ primary/stable actor. The stock sprite-slot bound is separate from roster size.
 
 Goal collection state is temporary within one host frame; committed scene
 state is already in the guest and native actor snapshot. No snapshot schema
-change or custom UI is needed. Keyhole arbitration, mount
+change or custom UI is needed. Mounted keyhole activation, mount
 rewards, bonus-room participation, and full campaign coverage still require
 their own adapters and validation.
+
+### Native keyhole completion
+
+At `01:E1C8`, query every active actor's explicitly owned, carried key. The
+stock global scan chooses only the highest occupied key slot, which can hide
+another player's valid contact. Each candidate instead enters `01:E1F3` with
+its own key slot. The original carried-status, clipping, overlap and keyhole
+cooldown checks remain authoritative. `01:E210` records an accepted secret exit
+before shared effects; `01:E23A` stops queries before graphics. The hole is
+drawn once by its ordinary sprite update. This iterates the dynamic roster;
+normal-sprite slot capacity is independent of player count.
+
+The existing broker chooses secret before normal, then primary/stable actor.
+Only the chosen hole executes the original `01:E210` timer, music, freeze and
+window-center effects. `00:C47E` continues to own the whole keyhole sequence
+once per world frame. Core gameplay clocks stop, and pause input cannot
+interrupt a committed exit. `00:C9FE` retains the original secret-exit value.
+Other actors keep their equipment; dead/waiting actors return small with their
+own reserves. A same-frame valid clear prevents timeout from charging a life.
+
+A simultaneous tape reward needs an extra handoff: a keyhole skips the normal
+score-tally scene and freezes score-sprite credit timers. After the accepted
+tape tail, its BCD stars are credited by the original `05:CF05` counter writer,
+stopping at `05:CF36` before tally graphics/phase changes. The bounded credit
+loop supplies the routine's eligible frame phase and restores the true-frame
+byte afterwards; it advances no gameplay ticks. For fifty stars, `02:AD22`
+records the exact native 3-up popup slot. The original `02:AE03` life writer
+queues its reward once, stopping at `02:AE38` before popup motion. That popup's
+timer moves past its consumed credit threshold, preventing duplicate lives
+after restoration/unfreeze. Ordinary stars, life queues, timers and pictures
+already belong to the complete snapshot; no new save format is required.
+
+The stock status-bar handler still applies the hundred-star threshold. If that
+earns a bonus room, keyhole completion at `00:C9FE` uses the normal bonus-room
+entrance settings while preserving the secret route. The next gameplay entry
+restores the whole roster in the original bonus room. Completing every bonus
+interaction and mounted/Yoshi-mouth key activation remain separate work.
 
 ### Native scripted completion
 
@@ -774,7 +811,59 @@ their explicit delay. This makes held-object snapshots reproducible.
 
 Remaining work includes all loose-object contact candidates when players
 overlap, goal gift conversion per carrier, every carried-object/entrance type,
-balloon conflicts, keyholes, mounts, projectiles and full campaign validation.
+balloon conflicts, mounted keyholes, mounts, projectiles and full campaign validation.
+
+### Keyhole validation
+
+Focused evidence (2026-09-23). The keys are picked up by original routines;
+holes, conflicting tapes and exceptional starting counters are explicit offline
+fixture inputs, not claims about original level layouts. All runs use the
+original ROM, Screen-based spawning, an uninterrupted runtime and stack `$01FF`,
+with no dispatch misses. Release build, hook coverage (30 compiled boundaries
+and three interpreted boundaries), and core tests for 2/3/4/17 actors pass.
+
+- `native-coop-keyhole.csv` / `native-coop-keyhole-compiled.csv`: 320 identical
+  actor records. Luigi's slot-4 key opens the hole while Mario retains his
+  separate slot-7 key. The accepted clear leads to exactly 122 world frames of
+  native window animation, game mode `$0B`, secret exit `$02`, five lives,
+  unchanged equipment/reserves and no accepted pause during the scene. Running
+  frame captures show the native keyhole window and its center.
+- `native-coop-keyhole-both.csv`: two accepted keyholes on the same frame,
+  one commit, Mario wins, 320 actor records. `native-coop-keyhole-waiting.csv`
+  has Luigi finish while Mario awaits recovery; Mario returns small, keeping
+  reserve 1, and Luigi retains fire/reserve 4.
+- `native-coop-keyhole-conflict.csv`: simultaneous normal tape and keyhole at
+  TIME 000. Luigi's secret exit wins; Mario's native timeout death still makes
+  him small, but no shared life is charged. A dead actor's invalid physical
+  tape touch awards no stars. The two valid exit requests resolve once.
+- `native-coop-keyhole-tape.csv`: simultaneous live Mario tape contact earns
+  fifty stars while Luigi wins the secret exit. The actual shared star counter
+  receives 50, and the native life queue grants exactly three lives (5 to 8).
+  The keyhole cadence stays 122 frames, with no time-score tally substituted.
+- `native-coop-keyhole-secret-tie.csv`: marking that tape as another secret exit
+  instead chooses Mario. The tape's original victory sequence runs, no keyhole
+  window starts, and 1,126 actor records pass the existing goal validator.
+- `native-coop-keyhole-bonus.csv` / `native-coop-keyhole-bonus-floor.csv`:
+  **1,174 identical actor records** through the same mixed exit starting at
+  eighty stars. The result is eight lives, thirty remaining stars, secret route
+  `$02` and original bonus-room `$100` entry with both actor states intact.
+  A running capture confirms the original bonus-room presentation.
+- `native-coop-keyhole-replay.csv`: an actual mid-keyhole state repeats 166
+  identical actor records. `native-coop-keyhole-reward-replay.csv` repeats 200
+  records from a snapshot with stars already credited and two lives still in
+  the native queue; final totals remain fifty stars and eight lives.
+
+Reproduction tools: `tools/make_coop_keyhole_fixture.py` and
+`tools/check_coop_keyhole_trace.py`. From an unowned YI2 entrance copy, the
+default fixture has two loose keys and Luigi's hole; `--both` supplies both
+holes; `--waiting` makes Mario await recovery. Hold `y+p2.y+p2.right` for Luigi's
+case or `y+right+p2.y+p2.right` for both. Save during the 122-frame animation
+for the replay check. For conflicts, first capture an actual two-key state
+while holding `y+p2.y`; use that copy with `--contacts`, optionally `--timeout`,
+`--tape-secret`, or `--bonus-start 80`. The added hole uses a higher sprite slot
+so its native query observes the held keys before the script's neutral load
+frame releases them. The trace's `exit_candidates` proves simultaneous contact;
+star/life counters distinguish a recorded award from a credited one.
 
 ### Disabled-mod input correction
 
