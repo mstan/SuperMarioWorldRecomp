@@ -30,6 +30,14 @@ def apply(text, required):
         out.append(line)
     return ''.join(out), found
 
+def interpreted_entries(dispatch):
+    # An explicit all-NULL dispatch row routes every M/X variant through the
+    # interpreter, where coop_hooks.def installs the same boundary observer.
+    # Merely failing to find a generated block is never sufficient evidence.
+    return {int(pc,16) for pc in re.findall(
+        r'\{\s*0x([0-9A-Fa-f]+)u?\s*,\s*\{\s*NULL\s*,\s*NULL\s*,\s*NULL\s*,\s*NULL\s*\}',
+        dispatch)}
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--gen-dir', type=Path, required=True)
@@ -42,12 +50,14 @@ def main():
         found.update(seen)
         if changed != text:
             updates.append((path, changed))
-    missing = required - found
+    interpreted = interpreted_entries((args.gen_dir / 'dispatch_v2.c').read_text(encoding='utf-8'))
+    missing = required - found - interpreted
     if missing:
         raise SystemExit('Missing native co-op boundaries: ' + ', '.join(f'{pc:06X}' for pc in sorted(missing)))
     for path, text in updates:
         path.write_text(text, encoding='utf-8', newline='\n')
-    print(f'Native co-op hooks: {len(found)} sites, {len(updates)} banks updated')
+    print(f'Native co-op hooks: {len(found)} compiled sites, '
+          f'{len((required-found)&interpreted)} interpreted entries, {len(updates)} banks updated')
 
 if __name__ == '__main__':
     main()

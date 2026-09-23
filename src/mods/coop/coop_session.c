@@ -284,7 +284,7 @@ static int32_t clamp64(int64_t n, int32_t lo, int32_t hi) {
     return n < lo ? lo : n > hi ? hi : (int32_t)n;
 }
 
-bool coop_camera_update(CoopSession *s, int32_t w, int32_t h,
+bool coop_camera_frame(CoopSession *s, int32_t w, int32_t h,
                         int32_t rw, int32_t rh, bool autoscroll) {
     if (!s || s->failed || w < 32 || h < 32 || rw < 1 || rh < 1) return false;
     CoopCamera *c = &s->camera;
@@ -334,14 +334,21 @@ bool coop_camera_update(CoopSession *s, int32_t w, int32_t h,
         c->x = clamp64((int64_t)cx - w / 2, 0, rw > w ? rw - w : 0);
         c->y = clamp64((int64_t)cy - h / 2, 0, rh > h ? rh - h : 0);
     }
-    if (!s->advancing || s->outcome != COOP_CONTINUE || autoscroll) return true;
+    return true;
+}
+
+bool coop_camera_check_separation(CoopSession *s,bool resized) {
+    if(!s || s->failed)return false;
+    CoopCamera *c=&s->camera;
+    size_t active=coop_active_count(s);
+    if (!s->advancing || s->outcome != COOP_CONTINUE || c->autoscroll) return true;
     for (size_t i = 0; i < s->player_count; ++i) {
         CoopPlayer *p = &s->players[i];
         if (p->life != COOP_PLAYING) continue;
         bool outside = (int64_t)p->x - p->half_width < c->x ||
-            (int64_t)p->x + p->half_width > (int64_t)c->x + w ||
+            (int64_t)p->x + p->half_width > (int64_t)c->x + c->width ||
             (int64_t)p->y - p->height / 2 < c->y ||
-            (int64_t)p->y + p->height / 2 > (int64_t)c->y + h;
+            (int64_t)p->y + p->height / 2 > (int64_t)c->y + c->height;
         if (!outside || p->id == c->leader || active <= 1) { p->separation_ticks = 0; continue; }
         if (resized) continue;
         if (++p->separation_ticks < s->ticks_per_second) continue;
@@ -353,6 +360,12 @@ bool coop_camera_update(CoopSession *s, int32_t w, int32_t h,
         --active;
     }
     return !s->failed;
+}
+
+bool coop_camera_update(CoopSession *s,int32_t w,int32_t h,int32_t rw,int32_t rh,bool autoscroll) {
+    if(!s)return false;
+    bool resized=s->camera.width!=w || s->camera.height!=h;
+    return coop_camera_frame(s,w,h,rw,rh,autoscroll) && coop_camera_check_separation(s,resized);
 }
 
 bool coop_session_recover(CoopSession *s, CoopSafePlacement safe, void *context) {

@@ -41,14 +41,25 @@ bool coop_guest_peek(const CoopGuestPlayer *in,uint16_t address,uint8_t *value) 
 
 static unsigned read16(const uint8_t *r,unsigned a) {return r[a]|((unsigned)r[a+1]<<8);}
 static void put16(uint8_t *r,unsigned a,unsigned v) {r[a]=(uint8_t)v;r[a+1]=(uint8_t)(v>>8);}
+/* GetMarioClipping ($03:B664): $96 remains the top of the 32px pose frame
+ * even for small Mario. Using $96+height/2 places a small actor 18px too high.
+ * These four entries describe standing/small, then their mounted variants. */
+static const uint8_t clip_y[]={6,20,16,24};
+static const uint8_t clip_height[]={26,12,32,24};
+static unsigned clip_shape(const uint8_t *r) {
+    return ((r[0x73] || !r[0x19])?1u:0u)+(r[0x187a]?2u:0u);
+}
 
 void coop_guest_read_player(CoopPlayer *p,const uint8_t *r) {
     p->power=(CoopPower)r[0x19];
     p->reserve=r[0xdc2];
-    p->half_width=8;
-    p->height=r[0x73] || r[0x19]==0 ? 16 : 32;
+    p->protection_ticks=r[0x1497];
+    p->star_ticks=(uint32_t)r[0x1490]*4;
+    unsigned shape=clip_shape(r);
+    p->half_width=6;
+    p->height=clip_height[shape];
     p->x=(int32_t)read16(r,0x94)+8;
-    p->y=(int32_t)read16(r,0x96)+p->height/2;
+    p->y=(int32_t)read16(r,0x96)+clip_y[shape]+p->height/2;
     p->grounded=(r[0x77]&4)!=0 || r[0x1471]!=0;
     p->swimming=r[0x75]!=0;
     p->supported_flight=r[0x1407]!=0 || r[0x1891]!=0;
@@ -57,9 +68,11 @@ void coop_guest_read_player(CoopPlayer *p,const uint8_t *r) {
 
 void coop_guest_place_player(const CoopPlayer *p,uint8_t *r) {
     put16(r,0x94,(unsigned)(p->x-8));
-    put16(r,0x96,(unsigned)(p->y-p->height/2));
-    memcpy(r+0xd1,r+0x94,4);
     r[0x19]=(uint8_t)p->power;r[0xdc2]=(uint8_t)p->reserve;
+    r[0x73]=0;
+    unsigned shape=clip_shape(r);
+    put16(r,0x96,(unsigned)(p->y-clip_y[shape]-clip_height[shape]/2));
+    memcpy(r+0xd1,r+0x94,4);
     r[0x7a]=r[0x7b]=r[0x7c]=r[0x7d]=0;
     r[0x13da]=r[0x13dc]=0;
     r[0x71]=r[0x1496]=0;

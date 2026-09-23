@@ -18,6 +18,7 @@ def main():
                     '-Isrc', 'src/mods/coop/coop_session.c',
                     'src/mods/coop/coop_state.c', 'src/mods/coop/coop_guest.c',
                     'src/mods/coop/coop_machine.c',
+                    'src/mods/coop/coop_terrain.c',
                     'test/coop/session_test.c',
                     '-o', str(exe)], cwd=ROOT, check=True)
     subprocess.run([str(exe)], cwd=ROOT, check=True)
