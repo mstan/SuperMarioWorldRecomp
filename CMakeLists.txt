@@ -136,6 +136,7 @@ set(SMW_RUNTIME_SOURCES
     src/mods/coop/coop_machine.c
     src/mods/coop/coop_runtime.c
     src/mods/coop/coop_simulation.c
+    src/mods/coop/coop_presentation.c
     third_party/gl_core/gl_core_3_1.c
     ${SMW_OVERRIDE_SOURCES}
 )

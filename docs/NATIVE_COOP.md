@@ -218,7 +218,7 @@ following audited boundaries. The world update is not replayed for each actor.
 | `00:C569` through `00:C592` | Scoped original player animation/motion/terrain, reserve-release and note-block state run for each actor. |
 | Secondary timer fields | Advance only the audited per-player timer bytes, with the original cadence. |
 | Normal/extended sprites | Original world update runs once; multi-actor contact/target arbitration still needs integration. |
-| Player graphics | The primary still uses the original draw/upload path; independent secondary graphics remain to be implemented. |
+| Player graphics | Primary draw/upload runs normally. Secondary body/cape draws run in a scoped scratch/OAM context; independent pictures join the OBJ renderer. |
 
 Each scoped call preserves the caller's registers, scratch bytes and stack
 balance, while retaining elapsed machine clocks and bus state. Original player
@@ -232,6 +232,30 @@ reloading hotkeys preserves those assignments. Recorded input accepts `p1.` and
 `p2.` button prefixes, for example `press p2.right+p2.b 45`. Unprefixed buttons
 retain their existing player-1 meaning. These are host input limits, separate
 from the dynamic simulation roster.
+
+### Independent graphics
+
+`coop_presentation.c` captures the ROM's body/cape pieces after selecting each
+actor's original pose and palette. The wrapper enters after Yoshi/shared music
+work, retains only audited player fields, and restores scratch/OAM before the
+primary draws. It resolves the original `MarioGFXDMA` sources into private
+picture memory. NMI and world sprite graphics still run once. Seven body/cape
+pieces is the original draw routine's maximum, checked at runtime; the actor
+list remains dynamic.
+
+The framework's opt-in `PpuExtraObject` capability adds private RGB15 pictures
+at the OBJ stage. It preserves native sprite ordering, background priority,
+windows, brightness and color math. The legacy, fast and Mode 7 renderers use
+the same private colors. The SMW widescreen renderer uses the same compositor.
+With no extra objects, the existing native path and snapshot layout stay intact.
+This is actor rendering; it does not add menus or a co-op UI overlay.
+
+Each actor stores both its pending guest draw and its visible draw latched at
+NMI. The native `CNR1` container now uses schema version 2 to serialize both,
+including coordinates, piece attributes and pixels. Preflight bounds-checks
+counts and attributes before replacing the session. Development snapshots from
+schema 1 are rejected; separate campaign SRAM remains compatible. Full mount,
+ownership and event state remains part of the unfinished integration work.
 
 ### Status and evidence
 
@@ -287,12 +311,27 @@ from the dynamic simulation roster.
   Luigi moves from x=24 to x=93 under P2 input, and each jumps independently.
   Both finish on the terrain at y=360; the guest stack remains 511. The trace
   is an ignored local artifact at `build-adaptive/playtest/native-coop-seats.csv`.
-  Its frame-680 screenshot verifies the level scene, but currently shows only
-  Mario: independent Luigi rendering is pending. This is movement evidence,
+  Its frame-680 screenshot predates secondary rendering and shows only Mario.
+  This is movement evidence,
   not full co-op acceptance.
 - `tools/test_coop_input.py` passes against the actual config implementation:
   shared keyboard assignment, launcher assignment changes, hotkey reload, and
   write/read persistence. The existing roster/state tests also continue to pass.
+- Independent graphics now run in a fresh 3,400-frame menu-to-level recording.
+  `native-coop-draw-check` frames 3130, 3190 and 3300 show both actors, separate
+  jumps and original palettes. The shared timer follows its original cadence.
+  The earlier concern about a zero timer was a misreading of the small capture:
+  magnification and the recorded RAM show 394, 393, 391 and 390 as expected.
+- Live schema-2 state restore preserves both actors and their graphics.
+  `native-coop-256-check/frame-000090.bmp` verifies the 256-pixel PPU path;
+  `native-coop-compiled-check` verifies compiled guest dispatch. The 200-frame
+  restore/input run produces byte-identical actor traces with default interpreter
+  dispatch and `SNESRECOMP_LLE_BOUNCE=1`. These bounded checks do not validate
+  the remaining rooms, abilities or interaction rules.
+- Framework `tests/ppu/test_extra_objects.py` passes private-color, opaque-black,
+  transparency, native/Mode7, legacy/fast, background depth, windows, color math,
+  clipping, rotated OAM and stable 17-object ordering checks. The existing PPU
+  composition regression matches its previous digest `436319d369c4a1e3`.
 
 ## Acceptance matrix
 
