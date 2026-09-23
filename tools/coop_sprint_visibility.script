@@ -1,0 +1,5 @@
+wait 60
+loadstate 10
+wait 30
+press p1.right+p1.y 220
+wait 30

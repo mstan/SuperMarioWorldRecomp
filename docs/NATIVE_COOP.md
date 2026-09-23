@@ -1293,6 +1293,73 @@ sample-loss issue (`beads-8wg.3.29`) remains unresolved; the instrumented
 underflows), despite reaching the stage. HUD/transition validation does not
 qualify audio health.
 
+## Player visibility across wide-screen boundaries (2026-09-23)
+
+The owner supplied an F1 state in cave room `$1CB`: Mario disappeared when
+Luigi walked right, then returned when Luigi walked left. Sprinting Mario from
+the YI2 entrance with Luigi idle reproduced the complementary right-edge
+failure. Both were presentation failures, with the actors alive and no damage
+flashing or catch-up transition causing the disappearance.
+
+The renderer already retained signed horizontal coordinates for ordinary
+sprites, but the native player body/cape helper had no ownership observer.
+Unowned OAM was rejected outside the embedded 256-pixel view. In the cave,
+Mario stayed at world X=52 while the native camera reached 73: the valid tile
+X=-21 was rejected despite still appearing at wide-screen X=52. In the sprint,
+tile X=269 wrapped through the nine-bit OAM encoding to -243 and was rejected.
+
+Two targeted observers in `SmwRendererGuestHook` now cover the shared native
+body/cape helper, for each actor that calls it:
+
+| Native instruction | Enhancement |
+|---|---|
+| `$00:E498`, `BCS +5` | Let the helper finish horizontal tile writes; the host renderer clips full coordinates to the selected viewport. This also removes the helper's older `[-128,384)` drawing limit. |
+| `$00:E49A`, `STA $0300,Y` | Associate that exact tile/attribute image with the full signed 16-bit X still held in A, before it becomes a wrapped OAM coordinate. |
+
+This uses the existing renderer ownership/latching path. The original hidden
+tile, vertical cull, invulnerability flash, palette, animation, OAM priority and
+P1 overlap rules remain in force. No simulation, camera or recovery policy was
+changed. Native width and disabled widescreen do not activate these observers.
+There is no roster-size constant or secondary-player exception in the fix.
+
+The two hook sites are installed in generated code by
+`tools/apply_renderer_hooks.py` and explicitly registered for interpreted code
+in `SmwRendererInstallHooks`. Regeneration changed one generated bank; generated
+C was not hand-edited. The pinned ROM bytes at `$00:E498` are `B0 05 99 00 03`.
+The generator requires both sites and was checked for idempotence.
+
+### Evidence and replay
+
+Local private artifacts are under `build-adaptive/playtest/visibility-feedback`.
+`owner.sav` is the owner's unmodified F1 state, copied before testing. Use
+backed-up test slot 10 with the ordinary adaptive wrapper and
+`SMW_COOP_TRACE`/`SMW_RENDER_DIAGNOSTICS`; never pause or step.
+
+| Run | Result |
+|---|---|
+| `cave-long-before`, `cave-after-{0,1}` | 340 frames using `tools/coop_cave_visibility.script` at 21:9. Mario remains visible while Luigi moves away and back. Fourteen captures verify 2,758 opaque native Mario pixels per execution path. |
+| `sprint-before`, `sprint-after-{0,1}` | 360 frames using `tools/coop_sprint_visibility.script`, with `mount-feedback/entrance-v5.sav` in slot 10. Twenty captures verify 4,216 opaque native Mario pixels across the right boundary. |
+| `far-after` | A copied cave fixture places small Mario at X=400 and fire Luigi at X=52, Y=352, camera=0; 32:9 rendering verifies the helper's formerly culled X=400, then camera movement. Four captures verify another 788 pixels. This staged fixture qualifies visibility, not terrain streaming or campaign progression. |
+| `native-after` | The prior two-mounted HUD-motion fixture at 4:3 produces 13 entire BMPs byte-identical to the pre-fix golden captures in `av-feedback/hud-native`. |
+
+For cave captures use frames
+`100,130,140,150,160,170,180,190,200,220,240,260,280,300`. For sprint captures
+use `100,120,130,140,150,160,170,180,190,200,210,220,230,240,250,260,270,280,290,300`.
+Suffixes 0/1 select `SNESRECOMP_LLE_BOUNCE=0/1`. Both complete gameplay CSVs
+and all corresponding BMPs match between compiled and interpreted runs; their
+gameplay CSVs also match the original failing build. The far fixture uses
+`wait 60; loadstate 10; wait 100` as separate script lines, 170 benchmark frames,
+and captures 63/65/70/100. Generate it with `Fixture.actor` and `Fixture.camera`
+from `tools/coop_fixture.py`, always writing a copy.
+
+`tools/check_coop_visibility.py build-adaptive/playtest/visibility-feedback`
+passes: 7,762 independently decoded original OBJ pixels, both boundary cases,
+execution parity, unchanged gameplay/native images, and negative controls.
+The original disappearance images fail the same pixel oracle. The build and
+co-op hook checks pass; no dispatch misses were recorded. Owner saves and
+settings are restored after testing. This fixes the two reported visibility
+cases; the broader co-op acceptance matrix remains open.
+
 ## Acceptance matrix
 
 | Area | Required evidence |
