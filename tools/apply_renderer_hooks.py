@@ -29,6 +29,9 @@ def apply(text):
         m = re.search(r'cpu_trace_block\(cpu, 0x([0-9A-F]+)\)', line)
         if m: block = m[1]
         hook = None
+        if block == '01A7EB' and 'if (cpu->_flag_Z == 1)' in line and '$A7F7' in line:
+            out.append('    /*SMW-HOST*/ { extern void SmwRendererGuestHook(CpuState *, uint32_t); SmwRendererGuestHook(cpu, 0x01A7F3u); }\n')
+            found.add('player_contact')
         if block == '00E482' and 'if (cpu->_flag_C == 1)' in line and 'goto L_E49F' in line:
             out.append('    /*SMW-HOST*/ { extern void SmwRendererGuestHook(CpuState *, uint32_t); SmwRendererGuestHook(cpu, 0x00E498u); }\n')
             found.add('player_cull')
@@ -76,7 +79,7 @@ def main():
         changed, hits = apply(text)
         found |= hits
         if changed != text: updates.append((path, changed))
-    missing = set(PCS) | {'draw', 'fireball', 'frontier', 'wing_cull', 'sprite_allocation', 'baseball_cull', 'player_cull'}
+    missing = set(PCS) | {'draw', 'fireball', 'frontier', 'wing_cull', 'sprite_allocation', 'baseball_cull', 'player_cull', 'player_contact'}
     missing -= found
     if missing: raise SystemExit(f'Missing required renderer hook sites: {missing}')
     for path, changed in updates: path.write_text(changed, encoding='utf-8', newline='\n')

@@ -550,6 +550,24 @@ static void run_player_routines(CpuState *cpu,CoopMachine *m) {
     coop_guest_bind(&primary->guest,g_ram);
     restore_primary_mount(m);
 }
+static void trace_normal_contact(const CoopMachine *m,const CoopActor *actor,unsigned slot,unsigned phase) {
+    const char *path=getenv("SMW_COOP_CONTACT_TRACE");
+    static FILE *trace;
+    if(path && *path && !trace) {
+        trace=fopen(path,"w");
+        if(trace)fputs("frame,world_frame,phase,player,slot,type,status,sprite_x,sprite_y,sprite_vx,sprite_vy,offscreen_x,offscreen_y,camera_x,camera_y,player_x,player_y,previous_y,player_vx,player_vy,power,animation,in_air,contact_timer,carrying,input,behind_net,sprite_behind,lock,tweaker_a,tweaker_d\n",trace);
+    }
+    if(!trace)return;
+    fprintf(trace,"%llu,%u,%u,%u,%u,%u,%u,%u,%u,%d,%d,%u,%u,%u,%u,%u,%u,%u,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
+        (unsigned long long)m->session.frame,g_ram[0x14],phase,actor->player,slot,
+        g_ram[0x9e + slot],g_ram[0x14c8+slot],g_ram[0xe4+slot]|(g_ram[0x14e0+slot]<<8),
+        g_ram[0xd8+slot]|(g_ram[0x14d4+slot]<<8),(int8_t)g_ram[0xb6+slot],(int8_t)g_ram[0xaa+slot],
+        g_ram[0x15a0+slot],g_ram[0x186c+slot],read16(0x1a),read16(0x1c),
+        read16(0x94),read16(0x96),read16(0xd3),(int8_t)g_ram[0x7b],(int8_t)g_ram[0x7d],
+        g_ram[0x19],g_ram[0x71],g_ram[0x72],g_ram[0x154c+slot],g_ram[0x148f],g_ram[0x15],
+        g_ram[0x13f9],g_ram[0x1632+slot],g_ram[0x9d],g_ram[0x1656+slot],g_ram[0x167a+slot]);
+    fflush(trace);
+}
 static bool run_normal_sprite(CpuState *cpu,CoopMachine *m) {
     unsigned slot=cpu->X&0xff;if(slot>=12)return false;
     CoopEntity *e=coop_machine_entity_slot(m,COOP_ENTITY_NORMAL,slot);
@@ -582,10 +600,12 @@ static bool run_normal_sprite(CpuState *cpu,CoopMachine *m) {
     if(unrelated_mount)g_ram[0x187a]=g_ram[0x72]=0; /* no second mount for this rider */
     if(yoshi && e->owner==COOP_NO_PLAYER && !g_ram[0x9d] && g_ram[0x14a3])--g_ram[0x14a3];
     bound_actor=a;
+    trace_normal_contact(m,a,slot,0);
     ++sprite_call_depth;cpu_push_jsr_return_frame(cpu);
     if(!interp_bridge_run(cpu,0x018127) || cpu->S!=caller.S)
         Die("Native co-op sprite routine failed its guest return contract");
     --sprite_call_depth;bound_actor=NULL;
+    trace_normal_contact(m,a,slot,1);
     e=normal_entity(m,slot,false);
     if(e->type==0x35 && g_ram[0x14c8+slot]) {
         coop_mount_capture(e,g_ram);
