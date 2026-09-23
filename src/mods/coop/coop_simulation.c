@@ -17,6 +17,7 @@ static unsigned player_call_depth;
 static unsigned sprite_call_depth;
 static unsigned camera_call_depth;
 static unsigned room_sprite_depth;
+static unsigned carried_reward_depth;
 static CoopActor *bound_actor;
 static bool level_frame;
 static bool timer_had_time;
@@ -126,6 +127,26 @@ static void carry_through_room(CpuState *cpu,CoopMachine *m) {
         if(t->entity.flags==COOP_ENTITY_HELD)p->held_object=t->entity.id;
     }
     --room_sprite_depth;restore_registers(cpu,&completed);memcpy(g_ram,scratch,sizeof(scratch));
+}
+static void convert_carried_reward(CpuState *cpu,CoopMachine *m) {
+    unsigned slot=cpu->Y&0xff;
+    CoopEntity *e=coop_machine_entity_slot(m,COOP_ENTITY_NORMAL,slot);
+    if(!e || e->owner==COOP_NO_PLAYER ||
+       !(e->flags&(COOP_ENTITY_HELD|COOP_ENTITY_ATTACHED)))
+        Die("Native co-op goal conversion requires the object's carrier");
+    CoopActor *owner=coop_machine_actor(m,e->owner);
+    CoopActor *original=bound_actor?bound_actor:primary_actor(m);
+    CoopActor *previous=bound_actor;capture(m,original);
+    coop_guest_bind(&owner->guest,g_ram);bound_actor=owner;
+    /* The native clear cancels star power before its gift table is read.
+     * Equipment, reserve and riding state must come from this carrier. */
+    g_ram[0x1490]=0;
+    ++carried_reward_depth;guest_jsr(cpu,0x00fb00);--carried_reward_depth;
+    g_ram[0x1470]=g_ram[0x148f]=0;capture(m,owner);
+    bound_actor=previous;coop_guest_bind(&original->guest,g_ram);
+    /* Preserve the completed native registers/scratch for TriggerGoalTape's
+     * loop. Sprite initialization has already retired the carried identity;
+     * its replacement is an ordinary unowned world reward. */
 }
 static void collect_goal(CpuState *cpu,CoopMachine *m,uint32_t query) {
     if(!m->session.advancing)return;
@@ -524,8 +545,12 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
         unsigned slot=cpu->X&0xff;
         if(slot<12) {
             CoopEntity *e=normal_entity(m,slot,true);
-            if(g_ram[0x14c8+slot]==0x0b && bound_actor)claim_carried(m,e,bound_actor);
+            if(g_ram[0x14c8+slot]==0x0b && bound_actor && !carried_reward_depth)
+                claim_carried(m,e,bound_actor);
         }
+    }
+    if(pc==0x00fb00 && goal_commit && !carried_reward_depth) {
+        convert_carried_reward(cpu,m);return 0x00fb8c;
     }
     if(pc==0x01c0c2 && !goal_query) {collect_goal(cpu,m,pc);return 0x01c12c;}
     if(pc==0x01c0e7 && goal_query) {record_goal(cpu,m);return 0x01c12c;}
