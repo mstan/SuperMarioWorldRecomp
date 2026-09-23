@@ -304,6 +304,22 @@ need their remaining adapters. These cases are not yet acceptance-complete.
 Team failure enters the original level loader with the shared checkpoint flag
 and one life charged. Game-over presentation uses the original game modes.
 
+Shared controls are gathered before the original level-mode handler. Start is
+available to an actor awaiting recovery; either player can pause/resume, using
+the original debounce and sounds. Select for the stock early-exit command stays
+on the primary player's input. Message dismissal combines fresh action presses
+and uses the original message-box handler and delay. No additional menu is drawn.
+Gameplay countdowns begin at the actual post-pause branch, so both the pause and
+resume frames have the correct timing. Frozen entrance/scene phases also leave
+co-op gameplay countdowns unchanged. Returning from game over resets the session
+lifecycle and equipment before the next level; full continue/campaign coverage
+remains part of acceptance testing.
+
+The hook manifest can declare an interior boundary's audited containing entry.
+The verifier accepts interpreter coverage only while every variant of that entry
+is explicitly interpreter-only. If code generation later compiles any variant,
+the interior hook must appear in the generated blocks or the build fails.
+
 ### Status and evidence
 
 - Worktree created from `main` at `f36d99f73d775febcf396e874b86a264c25d91da`.
@@ -409,6 +425,22 @@ and one life charged. Game-over presentation uses the original game modes.
   count changes once from five to four and the native loader returns the team
   to Yoshi's Island 2. The earlier `native-coop-enemy-death` trace exposed the
   missed compiled kill entrance and is superseded by the validated builds above.
+- Shared-control hooks add two interior sites in interpreter-only `GM14Level`:
+  pause handling (`00:A21B`) and the gameplay branch (`00:A28A`). The build now
+  verifies 11 compiled sites and three interpreter sites. Hook tests also reject
+  absent or partly compiled containing entries for interior-hook coverage.
+- `native-coop-shared-pause` loads a recovery-delay state. P2 presses Start while
+  awaiting recovery; P1 resumes. Across 92 paused host frames, the world frame
+  stays at 20 and recovery stays at 46. Recovery still occurs at simulation
+  frame 1043 with 120 protection ticks. The input recorder adds a release frame
+  between commands; the script's one press plus 90-frame wait spans 92 frames.
+  This exercises the requested in-game pause feature, without debugger pausing
+  or stepping.
+- In `native-coop-message-dismiss-check`, P2 jumps into Yoshi's House's original
+  message block and dismisses it with a later fresh B press. Frames 2270/2310
+  show the native message and a stationary world counter; frame 2440 shows the
+  message closed and gameplay resumed. The fresh menu run also verifies the
+  unchanged original count/file screens. No dispatch misses were recorded.
 
 ## Acceptance matrix
 

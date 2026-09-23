@@ -132,7 +132,9 @@ static void interpreted_hook(CpuState *cpu,uint32_t pc) {
 bool SmwCoopInstallHooks(void) {
     if(!enabled)return true;
 #define COOP_HOOK(pc) if(!interp_bridge_add_pre_opcode_hook(pc,interpreted_hook))return false;
+#define COOP_HOOK_INSIDE(pc,owner) COOP_HOOK(pc)
 #include "coop_hooks.def"
+#undef COOP_HOOK_INSIDE
 #undef COOP_HOOK
     return true;
 }

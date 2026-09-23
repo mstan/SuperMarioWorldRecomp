@@ -130,6 +130,8 @@ static void checkpoint_disconnect_input(void) {
     assert(s.checkpoint==7 && s.players[0].power==COOP_BIG && s.players[1].checkpoint_upgrade);
     assert(s.players[2].power==COOP_FIRE);
     CoopPlayer *p=&s.players[1];
+    coop_player_input(p,8,0x80);assert(p->pressed_input==8);
+    coop_player_input(p,8,0x80);assert(p->pressed_input==0);
     coop_player_input(p,0x81,0x80);p->life=COOP_PLAYING;
     coop_player_input(p,0x81,0x80);assert(p->held_input==1 && p->pressed_input==0);
     coop_player_input(p,1,0x80);coop_player_input(p,0x81,0x80);assert(p->pressed_input==0x80);
