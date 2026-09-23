@@ -84,20 +84,23 @@ static bool safe_at(const CoopTerrain *t,const CoopPlayer *returning,
                     const CoopPlayer *anchor,int center,int32_t *x,int32_t *y) {
     /* Start with the anchor's footing, not its center: a small returning
      * actor must not appear in the floor below a tall survivor. */
+    bool mounted=returning->mount!=COOP_NO_ENTITY;
     int height=returning->checkpoint_upgrade || returning->power!=COOP_SMALL?26:12;
-    int feet=anchor->y+anchor->height/2,left=center-6,right=center+5;
-    if(left<0 || feet<height)return false;
+    if(mounted)height=height==26?32:24;
+    int clearance=mounted?48:height,half=mounted?16:6;
+    int feet=anchor->y+anchor->height/2,left=center-half,right=center+half-1;
+    if(left<0 || feet<clearance)return false;
     bool support=false,water=anchor->swimming;
     for(unsigned layer=0;layer<2;++layer) {
         if(layer==0 && (t->ram[0x5b]&0x40))continue;
         if(layer==1 && !(t->ram[0x5b]&0x80))continue;
         int dx=layer?(int16_t)r16(t->ram,0x26):0;
         int dy=layer?(int16_t)r16(t->ram,0x28):0;
-        if(!body_clear(t,layer,left+dx,right+dx,feet-height+dy,feet+dy,water))return false;
+        if(!body_clear(t,layer,left+dx,right+dx,feet-clearance+dy,feet+dy,water))return false;
         support|=footing(t,layer,left+dx,feet+dy) && footing(t,layer,right+dx,feet+dy);
     }
     if(!support && !water)return false;
-    if(!clear_of_sprites(t,left,right,feet-height,feet))return false;
+    if(!clear_of_sprites(t,left,right,feet-clearance,feet))return false;
     if(t->session)for(size_t i=0;i<t->session->player_count;++i) {
         const CoopPlayer *p=&t->session->players[i];
         if(p->id==returning->id || p->life!=COOP_PLAYING)continue;
@@ -108,8 +111,7 @@ static bool safe_at(const CoopTerrain *t,const CoopPlayer *returning,
 }
 bool coop_terrain_safe(const CoopTerrain *t,const CoopPlayer *returning,
                        const CoopPlayer *anchor,int32_t *x,int32_t *y) {
-    if(!t || !returning || !anchor || !x || !y || anchor->life!=COOP_PLAYING ||
-       returning->mount!=COOP_NO_ENTITY)return false;
+    if(!t || !returning || !anchor || !x || !y || anchor->life!=COOP_PLAYING)return false;
     /* Keep both bodies distinct. If nearby footing is obstructed, keep the
      * visible recovery bubble and try again; never fall back to overlapping. */
     static const int offsets[]={24,-24,40,-40,56,-56};

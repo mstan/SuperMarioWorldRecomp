@@ -9,7 +9,8 @@
 static unsigned read16(const uint8_t *p,unsigned a) {return p[a]|(p[a+1]<<8);}
 static uint16_t picture[0x8000],palette[256];
 
-static void capture_visual(CoopVisual *visual,bool primary) {
+static void capture_pieces(CoopVisualPiece *pieces,uint32_t *size,unsigned capacity,
+                           bool primary,int origin_x,int origin_y) {
     /* Reproduce MarioGFXDMA's source selection into private picture memory.
      * The guest NMI still uploads the primary once; it is never replayed. */
     memcpy(picture,g_ppu->vram,sizeof(picture));
@@ -28,9 +29,7 @@ static void capture_visual(CoopVisual *visual,bool primary) {
     }
     unsigned source=read16(g_ram,0xd99);
     for(unsigned j=0;j<16;++j)picture[0x67f0+j]=(uint16_t)read16(g_ram,(source+j*2)&0xffff);
-    int origin_x=(int16_t)(read16(g_ram,0x94)-read16(g_ram,0x1a));
-    int origin_y=(int16_t)(read16(g_ram,0x96)-read16(g_ram,0x1c));
-    memset(visual,0,sizeof(*visual));
+    memset(pieces,0,capacity*sizeof(*pieces));*size=0;
     for(unsigned slot=0;slot<128;++slot) {
         if(primary) {
             unsigned fence=g_ram[0x13f9];
@@ -40,8 +39,8 @@ static void capture_visual(CoopVisual *visual,bool primary) {
         }
         unsigned pos=read16(g_ram,0x200+slot*4),attr=read16(g_ram,0x202+slot*4);
         if((pos>>8)==0xf0)continue;
-        if(visual->count==COOP_BODY_PIECES)Die("Native co-op player draw exceeded audited piece count");
-        CoopVisualPiece *v=&visual->pieces[visual->count++];
+        if(*size==capacity)Die("Native co-op draw exceeded audited piece count");
+        CoopVisualPiece *v=&pieces[(*size)++];
         v->x=origin_x+(int8_t)((pos&255)-(origin_x&255));
         v->y=origin_y+(int8_t)((pos>>8)-(origin_y&255));
         v->width=v->height=(g_ram[0x420+slot]&2)?16:8;
@@ -59,7 +58,16 @@ static void capture_visual(CoopVisual *visual,bool primary) {
         }
     }
 }
+static void capture_visual(CoopVisual *visual,bool primary) {
+    capture_pieces(visual->pieces,&visual->count,COOP_BODY_PIECES,primary,
+        (int16_t)(read16(g_ram,0x94)-read16(g_ram,0x1a)),
+        (int16_t)(read16(g_ram,0x96)-read16(g_ram,0x1c)));
+}
 void SmwCoopCaptureVisual(CoopVisual *visual) {capture_visual(visual,false);}
+void SmwCoopCaptureMount(CoopMountVisual *visual,int x,int y) {
+    capture_pieces(visual->pieces,&visual->count,COOP_MOUNT_PIECES,false,
+        x-(int)read16(g_ram,0x1a),y-(int)read16(g_ram,0x1c));
+}
 void SmwCoopPresentationLatch(void) {
     CoopMachine *m=SmwCoopMachine();if(!m)return;
     unsigned mode=g_ram[0x100];
@@ -73,6 +81,10 @@ void SmwCoopPresentationLatch(void) {
     for(size_t i=0;i<m->actor_count;++i) {
         if(!level)m->actors[i].pending.count=0;
         m->actors[i].visible=m->actors[i].pending;
+    }
+    for(size_t i=0;i<m->entity_count;++i) {
+        if(!level)m->entities[i].pending.count=0;
+        m->entities[i].visible=m->entities[i].pending;
     }
 }
 
@@ -131,8 +143,11 @@ static void reserve_picture(uint16_t *pixels,const CoopPlayer *p) {
     }
     static const uint8_t letters[2][5]={{17,27,21,17,17},{16,16,16,16,31}};
     if(p->character<2) {
+        /* A small corner badge overlaps the original blue border. */
+        for(unsigned y=8;y<15;++y)for(unsigned x=3;x<10;++x)
+            pixels[y*DECOR_WIDTH+x]=0x8000;
         for(unsigned y=0;y<5;++y)for(unsigned x=0;x<5;++x)
-            if(letters[p->character][y]&(16>>x))pixels[(y+1)*DECOR_WIDTH+x+2]=p->character?0x83e0:0x801f;
+            if(letters[p->character][y]&(16>>x))pixels[(y+9)*DECOR_WIDTH+x+4]=p->character?0x83e0:0x801f;
     } else identity(pixels,DECOR_WIDTH,1,p);
 }
 static void bubble_picture(uint16_t *pixels,const CoopPlayer *p) {
@@ -169,6 +184,7 @@ void SmwCoopPresentationPrepare(void) {
         if(level)count+=2; /* reserve plus optional bubble/warning */
     }
     if(level)++count; /* original TIME label and digits */
+    if(m)for(size_t i=0;i<m->entity_count;++i)count+=m->entities[i].visible.count;
     if(count>capacity) {
         if(count>SIZE_MAX/sizeof(*objects) || count>SIZE_MAX/(DRAW_PIXELS*sizeof(*pixels)))
             Die("Native co-op draw allocation overflow");
@@ -180,6 +196,14 @@ void SmwCoopPresentationPrepare(void) {
         pixels=next_pixels;capacity=count;
     }
     size_t at=0;
+    if(m)for(size_t i=0;i<m->entity_count;++i) {
+        const CoopEntity *e=&m->entities[i];
+        for(unsigned j=0;j<e->visible.count;++j) {
+            const CoopVisualPiece *v=&e->visible.pieces[j];
+            objects[at++]=(PpuExtraObject){v->x,v->y,(uint16_t)v->width,(uint16_t)v->height,16,
+                (uint8_t)v->priority,(uint8_t)v->math,(uint8_t)v->slot,e->id,v->pixels};
+        }
+    }
     if(m)for(size_t i=0;i<m->actor_count;++i) {
         CoopActor *a=&m->actors[i];if(a->player==m->session.primary)continue;
         for(unsigned j=0;j<a->visible.count;++j) {

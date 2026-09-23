@@ -237,6 +237,12 @@ static void native_states(size_t players) {
     CoopEntity *mount=coop_machine_spawn_entity(&a,COOP_ENTITY_NORMAL,8,0x35);assert(mount);
     mount->owner=0;mount->flags=COOP_ENTITY_RIDDEN;mount->target=2000;
     coop_player(&a.session,0)->mount=mount->id;
+    mount->mount_valid=true;mount->mount[5]=73; /* independent swallow timer */
+    mount->pending.count=mount->visible.count=1;
+    mount->pending.pieces[0]=mount->visible.pieces[0]=*piece;
+    mount->visible.pieces[0].x=111;
+    CoopYoshiSource *source=coop_yoshi_source(&a,0x106,0,640,336,0x12d);assert(source);
+    source->uses=1;a.mounts_initialized=true;
     size_t n=coop_machine_save_size(&a);uint8_t *data=malloc(n),*again=malloc(n);assert(data&&again);
     assert(coop_machine_save(&a,data,n));assert(coop_machine_load(&b,data,n));
     assert(b.actor_count==players && b.room==123 && b.room_initialized);
@@ -246,6 +252,9 @@ static void native_states(size_t players) {
     assert(b.level==0x106 && b.entity_count==2);
     assert(b.focus_x==307 && b.focus_y==382 && b.focus_count==players);
     assert(coop_machine_entity(&b,held_id)->owner==2000);
+    assert(coop_machine_entity_slot(&b,COOP_ENTITY_NORMAL,8)->mount[5]==73);
+    assert(coop_machine_entity_slot(&b,COOP_ENTITY_NORMAL,8)->visible.pieces[0].x==111);
+    assert(b.mounts_initialized && b.source_count==1 && b.sources[0].uses==1);
     assert(coop_machine_save(&b,again,n));assert(!memcmp(data,again,n));
     CoopActor *original=b.actors;
     for(size_t i=0;i<n;++i) {
@@ -270,11 +279,18 @@ static void native_states(size_t players) {
     data[actor+8]=COOP_BODY_PIECES+1;repair_native_crc(data,n);
     assert(!coop_machine_load(&b,data,n) && b.actors==original);
     memcpy(data,again,n);
-    size_t entities=n-4-32-2*28;
+    size_t entities=actor+players*(16+COOP_GUEST_BYTES)+2*540+16;
     data[entities+28]=data[entities];repair_native_crc(data,n); /* duplicate identity */
     assert(!coop_machine_load(&b,data,n) && b.actors==original);
     memcpy(data,again,n);
     data[entities+16]=0;data[entities+17]=0;repair_native_crc(data,n); /* incorrect holder */
+    assert(!coop_machine_load(&b,data,n) && b.actors==original);
+    memcpy(data,again,n);
+    size_t mounts=entities+2*28+32;
+    data[mounts+16+4]=COOP_MOUNT_PIECES+1;repair_native_crc(data,n);
+    assert(!coop_machine_load(&b,data,n) && b.actors==original);
+    memcpy(data,again,n);
+    data[n-8]=(uint8_t)(players+1);repair_native_crc(data,n); /* excessive grants */
     assert(!coop_machine_load(&b,data,n) && b.actors==original);
     a.actors[1].player=a.actors[0].player;
     assert(coop_machine_save(&a,data,n));assert(!coop_machine_load(&b,data,n));

@@ -34,3 +34,7 @@ COOP_HOOK(0x02AE38) /* End isolated native life credit before popup motion */
 COOP_HOOK(0x05CF36) /* End isolated native star credit before tally presentation */
 COOP_HOOK(0x00C9FE) /* Keep a keyhole's secret route when a tape earns the bonus room */
 COOP_HOOK(0x00FB00) /* Convert each carried goal reward using its own carrier */
+COOP_HOOK(0x01EA70) /* Singleton Yoshi draw replaced by one scoped draw per mount */
+COOP_HOOK(0x0289E1) /* A Yoshi-block egg has a real allocated native sprite slot */
+COOP_HOOK(0x00C0FB) /* Native tile update after Map16 write, before VRAM queuing */
+COOP_HOOK(0x00C0C1) /* Do not consume item-memory until the Yoshi source is exhausted */

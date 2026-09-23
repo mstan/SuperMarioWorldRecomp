@@ -18,6 +18,7 @@ static unsigned sprite_call_depth;
 static unsigned camera_call_depth;
 static unsigned room_sprite_depth;
 static unsigned carried_reward_depth;
+static unsigned mount_draw_depth;
 static CoopActor *bound_actor;
 static bool level_frame;
 static bool timer_had_time;
@@ -59,6 +60,72 @@ static CoopEntity *normal_entity(CoopMachine *m,unsigned slot,bool reset) {
     if(!e)e=coop_machine_spawn_entity(m,COOP_ENTITY_NORMAL,slot,g_ram[0x9e + slot]);
     if(!e)Die("Native co-op could not allocate a sprite identity");
     e->type=g_ram[0x9e + slot];return e;
+}
+static CoopEntity *actor_mount(CoopMachine *m,const CoopActor *a) {
+    return coop_machine_entity(m,coop_player(&m->session,a->player)->mount);
+}
+static void mount_owner(CoopMachine *m,CoopEntity *e,CoopActor *a) {
+    CoopPlayer *p=coop_player(&m->session,a->player);
+    if(e->type==0x35 && g_ram[0x14c8+e->slot]==8 && g_ram[0xc2+e->slot]==1 && g_ram[0x187a]) {
+        if((e->owner!=COOP_NO_PLAYER && e->owner!=p->id) ||
+           (p->mount!=COOP_NO_ENTITY && p->mount!=e->id))Die("Native co-op mount ownership conflict");
+        e->owner=p->id;e->flags=COOP_ENTITY_RIDDEN;p->mount=e->id;
+    } else if(e->flags==COOP_ENTITY_RIDDEN) {
+        CoopPlayer *old=coop_player(&m->session,e->owner);
+        if(old && old->mount==e->id)old->mount=COOP_NO_ENTITY;
+        e->owner=COOP_NO_PLAYER;e->flags=0;
+    }
+}
+static void restore_primary_mount(CoopMachine *m) {
+    CoopEntity *e=actor_mount(m,primary_actor(m));
+    coop_mount_bind(e,g_ram);
+}
+static void adopt_mounts(CoopMachine *m) {
+    if(m->mounts_initialized)return;
+    /* CNR2 predates the full room number. Recover it from the original
+     * sprite-data pointer table, preferring the original primary entrance
+     * conversion when it matches. Never silently give sources an invalid key. */
+    if(m->level==UINT32_MAX) {
+        unsigned trans=g_ram[0x13bf],submap=g_ram[0x1f11+(g_ram[0xdd6]>>2)];
+        unsigned entrance=(trans>=0x25?trans-0x24:trans)+(submap?256:0);
+        unsigned match=UINT32_MAX,matches=0;
+        for(unsigned level=0;level<512;++level) {
+            unsigned at=0x2ec00+level*2,pointer=g_rom[at]|(g_rom[at+1]<<8);
+            if(g_ram[0xd0]!=7 || pointer!=read16(0xce))continue;
+            match=level;++matches;
+            if(!g_ram[0x141a] && level==entrance) {matches=1;break;}
+        }
+        if(matches==1)m->level=match;
+    }
+    /* Older states contain the stock singleton globals. A ridden Yoshi can
+     * be imported only when one native riding actor identifies its owner. */
+    unsigned legacy=g_ram[0x18e2]?g_ram[0x18e2]:g_ram[0x18df];
+    for(unsigned slot=0;slot<12;++slot)if(g_ram[0x14c8+slot] && g_ram[0x9e + slot]==0x35) {
+        CoopEntity *e=normal_entity(m,slot,false);
+        if(!e->mount_valid) {
+            if(legacy==slot+1)coop_mount_capture(e,g_ram);
+            else {memset(e->mount,0,sizeof(e->mount));e->mount_valid=true;}
+        }
+        if(g_ram[0xc2+slot]!=1 || e->owner!=COOP_NO_PLAYER)continue;
+        CoopActor *owner=NULL;
+        for(size_t i=0;i<m->actor_count;++i) {
+            uint8_t riding=0;coop_guest_peek(&m->actors[i].guest,0x187a,&riding);
+            if(riding) {if(owner)Die("Legacy co-op state has ambiguous mount ownership");owner=&m->actors[i];}
+        }
+        if(owner) {
+            e->owner=owner->player;e->flags=COOP_ENTITY_RIDDEN;
+            coop_player(&m->session,owner->player)->mount=e->id;
+        }
+    }
+    m->mounts_initialized=true;restore_primary_mount(m);
+}
+static unsigned mount_count(unsigned excluded) {
+    unsigned n=0;
+    for(unsigned slot=0;slot<12;++slot)if(slot!=excluded && g_ram[0x14c8+slot]) {
+        unsigned type=g_ram[0x9e + slot],hatch=g_ram[0x151c+slot];
+        n+=type==0x35 || type==0x2d || (type==0x2c && (hatch==0x35 || hatch==0x2d));
+    }
+    return n;
 }
 static void release_owner(CoopMachine *m,CoopEntity *e) {
     CoopPlayer *p=coop_player(&m->session,e->owner);
@@ -242,8 +309,10 @@ static void initialize_room(CoopMachine *m) {
             p->checkpoint_upgrade=false;
         }
     }
-    if(!g_ram[0x141a])
+    if(!g_ram[0x141a]) {
+        m->source_count=0;
         m->session.checkpoint=(g_ram[0x1ea2+g_ram[0x13bf]]&0x40)?g_ram[0x13bf]+1u:0;
+    }
     CoopGuestPlayer entry;coop_guest_capture(&entry,g_ram);
     for(size_t i=0;i<m->actor_count;++i) {
         CoopActor *a=&m->actors[i];CoopPlayer *p=coop_player(&m->session,a->player);
@@ -253,6 +322,8 @@ static void initialize_room(CoopMachine *m) {
         if(m->room_initialized || a->player!=m->session.primary) {
             g_ram[0x19]=(uint8_t)p->power;g_ram[0xdc2]=(uint8_t)p->reserve;
         }
+        if(a->player!=m->session.primary && p->mount==COOP_NO_ENTITY)
+            g_ram[0x187a]=g_ram[0x188b]=0;
         g_ram[0x1470]=g_ram[0x148f]=(uint8_t)(p->held_object!=COOP_NO_ENTITY);
         capture(m,a);
         a->pending.count=a->visible.count=0;
@@ -260,6 +331,7 @@ static void initialize_room(CoopMachine *m) {
     m->room=(uint32_t)g_ram[0xce]|((uint32_t)g_ram[0xcf]<<8)|((uint32_t)g_ram[0xd0]<<16);
     m->room_initialized=true;
     coop_guest_bind(&primary_actor(m)->guest,g_ram);
+    m->mounts_initialized=false;
 }
 void SmwCoopSimulationBegin(void) {
     level_frame=gameplay_stage_started=false;room_request=COOP_NO_PLAYER;
@@ -272,6 +344,7 @@ void SmwCoopSimulationBegin(void) {
     unsigned mode=g_ram[0x100];
     if(mode!=0x14) {m->previous_mode=mode;return;}
     if(!m->room_initialized || m->previous_mode!=0x14)initialize_room(m);
+    adopt_mounts(m);
     m->previous_mode=mode;level_frame=true;
     end_timer_at_begin=g_ram[0x1493];
     timer_had_time=(g_ram[0xf31]|g_ram[0xf32]|g_ram[0xf33])!=0;
@@ -333,6 +406,56 @@ static void tick_secondary_timers(void) {
         if(g_ram[0x14aa])--g_ram[0x14aa];
     }
 }
+static CoopActor *mount_target(CoopMachine *m,const CoopEntity *e) {
+    if(e->owner!=COOP_NO_PLAYER)return coop_machine_actor(m,e->owner);
+    int x=g_ram[0xe4+e->slot]|(g_ram[0x14e0+e->slot]<<8);
+    int y=g_ram[0xd8+e->slot]|(g_ram[0x14d4+e->slot]<<8);
+    CoopActor *best=NULL;int64_t distance=INT64_MAX;
+    for(size_t i=0;i<m->actor_count;++i) {
+        CoopActor *a=&m->actors[i];const CoopPlayer *p=coop_player_const(&m->session,a->player);
+        if(p->life!=COOP_PLAYING || p->mount!=COOP_NO_ENTITY)continue;
+        int64_t dx=p->x-x,dy=p->y-y,d=dx*dx+dy*dy;
+        if(d<distance || (d==distance && (!best || coop_player_precedes(&m->session,a->player,best->player))))
+            best=a,distance=d;
+    }
+    return best?best:primary_actor(m);
+}
+static void draw_mounts(CpuState *cpu,CoopMachine *m) {
+    CpuState caller=*cpu;uint8_t scratch[16],oam[0x2a0];
+    memcpy(scratch,g_ram,sizeof(scratch));memcpy(oam,g_ram+0x200,sizeof(oam));
+    CoopActor *primary=primary_actor(m);capture(m,primary);
+    ++mount_draw_depth;
+    for(unsigned slot=0;slot<12;++slot) {
+        CoopEntity *e=coop_machine_entity_slot(m,COOP_ENTITY_NORMAL,slot);
+        if(!e || e->type!=0x35 || !g_ram[0x14c8+slot])continue;
+        e->pending.count=0;
+        CoopActor *a=mount_target(m,e);
+        CoopPlayer *p=coop_player(&m->session,a->player);
+        if(e->owner!=COOP_NO_PLAYER && p->life!=COOP_PLAYING)continue;
+        bool unrelated=e->owner==COOP_NO_PLAYER && p->mount!=COOP_NO_ENTITY;
+        coop_guest_bind(&a->guest,g_ram);coop_mount_bind(e,g_ram);
+        if(unrelated)g_ram[0x187a]=g_ram[0x72]=0;
+        memcpy(g_ram,scratch,sizeof(scratch));
+        for(unsigned i=0;i<128;++i)g_ram[0x201+i*4]=0xf0;
+        restore_registers(cpu,&caller);bound_actor=a;
+        cpu_push_jsl_return_frame(cpu);
+        if(!interp_bridge_run(cpu,0x01ea70) || cpu->S!=caller.S)
+            Die("Native co-op mount graphics failed its return contract");
+        /* The native draw prepares private dynamic head/body tiles. Capture
+         * before another Yoshi chooses different tiles for those DMA slots. */
+        e=coop_machine_entity_slot(m,COOP_ENTITY_NORMAL,slot);
+        if(!e)Die("Native co-op mount disappeared while drawing");
+        g_ram[0xd84]=10;
+        SmwCoopCaptureMount(&e->pending,g_ram[0xe4+slot]|(g_ram[0x14e0+slot]<<8),
+                           g_ram[0xd8+slot]|(g_ram[0x14d4+slot]<<8));
+        coop_mount_capture(e,g_ram);
+        if(!unrelated) {mount_owner(m,e,a);capture(m,a);}
+    }
+    --mount_draw_depth;bound_actor=NULL;
+    restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));memcpy(g_ram+0x200,oam,sizeof(oam));
+    coop_guest_bind(&primary->guest,g_ram);restore_primary_mount(m);
+    if(!g_ram[0x187a]) {g_ram[0x188b]=0;capture(m,primary);}
+}
 static void draw_secondary_players(CpuState *cpu,CoopMachine *m) {
     CpuState caller=*cpu;
     uint8_t scratch[16],oam[0x2a0];
@@ -346,6 +469,10 @@ static void draw_secondary_players(CpuState *cpu,CoopMachine *m) {
         a->pending.count=0;
         if(p->life!=COOP_PLAYING && p->life!=COOP_DYING)continue;
         coop_guest_bind(&a->guest,g_ram);
+        /* The secondary body entry skips 01:EA70, which clears this Yoshi
+         * saddle offset before stock drawing. An on-foot actor must not keep
+         * the mounted anchor's offset after recovery (including old states). */
+        if(!g_ram[0x187a])g_ram[0x188b]=0;
         memcpy(g_ram,scratch,sizeof(scratch));
         for(unsigned slot=0;slot<128;++slot)g_ram[0x201+slot*4]=0xf0;
         g_ram[0xdb3]=(uint8_t)(p->character==1);
@@ -376,6 +503,8 @@ static void run_player_routines(CpuState *cpu,CoopMachine *m) {
     uint8_t scratch[16];memcpy(scratch,g_ram,sizeof(scratch));
     uint8_t turn=g_ram[0xdb3];
     CoopActor *primary=primary_actor(m);
+    CoopEntity *primary_mount=actor_mount(m,primary);
+    if(primary_mount)coop_mount_capture(primary_mount,g_ram); /* native world timer tick */
     /* Primary timers and animation graphics changed since frame begin. */
     if(coop_player(&m->session,primary->player)->life==COOP_DYING) {
         /* C47E normally cannot tick this timer during death, because stock
@@ -391,9 +520,11 @@ static void run_player_routines(CpuState *cpu,CoopMachine *m) {
         CoopPlayer *p=coop_player(&m->session,a->player);
         if(p->life!=COOP_PLAYING && p->life!=COOP_DYING)continue;
         coop_guest_bind(&a->guest,g_ram);
+        CoopEntity *mount=actor_mount(m,a);coop_mount_bind(mount,g_ram);
         if(a!=primary) {
             memcpy(g_ram+0xd1,g_ram+0x94,4); /* AdvancePlayerPosition */
             tick_secondary_timers();
+            if(mount && !g_ram[0x9d] && g_ram[0x14a3])--g_ram[0x14a3];
         }
         /* This selector also indexes score/progression. Character identity
          * is only bound for graphics; gameplay uses the shared party slot. */
@@ -410,12 +541,14 @@ static void run_player_routines(CpuState *cpu,CoopMachine *m) {
         bound_actor=NULL;
         if(cpu->S!=caller.S)Die("Native co-op player routine unbalanced the guest stack");
         capture(m,a);
+        mount=actor_mount(m,a);if(mount)coop_mount_capture(mount,g_ram);
         if(g_ram[0x100]!=0x14)break;
     }
     --player_call_depth;
     restore_registers(cpu,&caller);
     memcpy(g_ram,scratch,sizeof(scratch));g_ram[0xdb3]=turn;
     coop_guest_bind(&primary->guest,g_ram);
+    restore_primary_mount(m);
 }
 static bool run_normal_sprite(CpuState *cpu,CoopMachine *m) {
     unsigned slot=cpu->X&0xff;if(slot>=12)return false;
@@ -425,29 +558,49 @@ static bool run_normal_sprite(CpuState *cpu,CoopMachine *m) {
         return false;
     }
     e=normal_entity(m,slot,false);
+    bool yoshi=e->type==0x35;
+    if(yoshi && e->owner!=COOP_NO_PLAYER) {
+        const CoopPlayer *rider=coop_player_const(&m->session,e->owner);
+        if(rider && rider->life!=COOP_PLAYING) {e->pending.count=0;return true;}
+    }
     CoopActor *primary=primary_actor(m);capture(m,primary);
     int x=(g_ram[0xe4+slot]|(g_ram[0x14e0+slot]<<8))+8;
     int y=(g_ram[0xd8+slot]|(g_ram[0x14d4+slot]<<8))+8;
     CoopPlayerId target=e->owner!=COOP_NO_PLAYER?e->owner:
         coop_nearest_player(&m->session,x,y,false,false);
     CoopActor *a=coop_machine_actor(m,target);
+    if(yoshi)a=mount_target(m,e);
     if(!a)a=primary;
     unsigned previous_status=g_ram[0x14c8+slot];
     if(previous_status==0x0b && e->owner==COOP_NO_PLAYER)
         Die("Native co-op encountered a carried sprite without an owner");
     CpuState caller=*cpu;uint8_t scratch[16];memcpy(scratch,g_ram,sizeof(scratch));
     coop_guest_bind(&a->guest,g_ram);
+    CoopGuestPlayer saved_actor=a->guest;
+    bool unrelated_mount=yoshi && e->owner==COOP_NO_PLAYER && actor_mount(m,a)!=NULL;
+    coop_mount_bind(yoshi?e:actor_mount(m,a),g_ram);
+    if(unrelated_mount)g_ram[0x187a]=g_ram[0x72]=0; /* no second mount for this rider */
+    if(yoshi && e->owner==COOP_NO_PLAYER && !g_ram[0x9d] && g_ram[0x14a3])--g_ram[0x14a3];
     bound_actor=a;
     ++sprite_call_depth;cpu_push_jsr_return_frame(cpu);
     if(!interp_bridge_run(cpu,0x018127) || cpu->S!=caller.S)
         Die("Native co-op sprite routine failed its guest return contract");
-    --sprite_call_depth;bound_actor=NULL;capture(m,a);
+    --sprite_call_depth;bound_actor=NULL;
     e=normal_entity(m,slot,false);
+    if(e->type==0x35 && g_ram[0x14c8+slot]) {
+        coop_mount_capture(e,g_ram);
+        if(!unrelated_mount)mount_owner(m,e,a);
+    } else {
+        CoopEntity *mount=actor_mount(m,a);if(mount)coop_mount_capture(mount,g_ram);
+    }
+    if(unrelated_mount)coop_guest_bind(&saved_actor,g_ram);
+    capture(m,a);
     if(!g_ram[0x14c8+slot])coop_machine_forget_entity(m,e->id);
     else if(g_ram[0x14c8+slot]==0x0b)claim_carried(m,e,a);
     else if(e->flags&(COOP_ENTITY_HELD|COOP_ENTITY_ATTACHED))release_owner(m,e);
     restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
     coop_guest_bind(&primary->guest,g_ram);
+    restore_primary_mount(m);
     return true;
 }
 static void prepare_world_contacts(CoopMachine *m) {
@@ -561,6 +714,34 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
         carry_through_room(cpu,m);return 0x02ac5b;
     }
     if(!level_frame)return 0;
+    if(pc==0x01ea70 && !mount_draw_depth)return 0x01ea8e; /* each mount was drawn at E2BD */
+    if(pc==0x0289e1) {
+        unsigned slot=cpu->X&255,layer=read16(0x1933),x=read16(0x9a)&~15u,y=read16(0x98)&~15u;
+        CoopTerrain terrain={g_ram,g_rom,0x80000,&m->session};uint16_t tile;
+        if(m->level>=512 || slot>=12 || !coop_terrain_block(&terrain,layer,x,y,&tile))
+            Die("Native co-op Yoshi source has no terrain identity");
+        CoopYoshiSource *source=coop_yoshi_source(m,m->level,layer,x,y,tile);
+        if(!source)Die("Native co-op could not record a Yoshi source");
+        bool grant=source->uses<m->actor_count && mount_count(slot)<m->actor_count;
+        if(source->uses<m->actor_count)++source->uses;
+        cpu->Y=grant?0:1;
+        return 0x0289fb; /* native table: adult Yoshi or normal 1-up */
+    }
+    if((pc==0x00c0c1 || pc==0x00c0fb) && (g_ram[0x9c]==0x0d || g_ram[0x9c]==0x16)) {
+        unsigned x=read16(0x0c)&~15u,y=read16(0x0e)&~15u,layer=read16(0x1933);
+        for(size_t i=0;i<m->source_count;++i) {
+            const CoopYoshiSource *s=&m->sources[i];
+            if(s->level!=m->level || s->layer!=layer || s->x!=x || s->y!=y || s->uses>=m->actor_count)continue;
+            if(pc==0x00c0c1)return 0x00c0c4; /* keep source usable across a room visit */
+            /* Native GenerateTile has already resolved the Map16 pointers
+             * (including vertical rooms). Keep its graphics/VRAM update. */
+            unsigned index=(read16(0x98)&0x1f0)|((read16(0x9a)>>4)&15);
+            unsigned lo=read16(0x6b)+index,hi=read16(0x6e)+index;
+            if(lo>=0x10000 || hi>=0x10000)Die("Native co-op Yoshi block pointer overflow");
+            g_ram[lo]=(uint8_t)s->tile;g_ram[hi+0x10000]=(uint8_t)(s->tile>>8);
+            cpu->Y=(uint16_t)(s->tile*2);break;
+        }
+    }
     if(pc==0x07f722 && !room_sprite_depth) {
         unsigned slot=cpu->X&0xff;
         if(slot<12) {
@@ -642,7 +823,7 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
     if((pc&0x7fffff)==0x01808c)prepare_world_contacts(m);
     if((pc&0x7fffff)==0x018127 && !sprite_call_depth && run_normal_sprite(cpu,m))
         return 0x018126; /* original bank-1 RTS; world sprite runs once */
-    if((pc&0x7fffff)==0x00e2bd)draw_secondary_players(cpu,m);
+    if((pc&0x7fffff)==0x00e2bd) {draw_mounts(cpu,m);draw_secondary_players(cpu,m);}
     if((pc&0x7fffff)==0x00c569) {
         run_player_routines(cpu,m);
         return 0x00c592; /* original RTS, with the original return frame */
@@ -657,6 +838,14 @@ static void apply_object_drops(CoopMachine *m) {
     uint8_t sprite=g_ram[0x15e9];
     for(size_t i=0;i<m->session.action_count;++i) {
         const CoopAction *action=&m->session.actions[i];
+        if(action->kind==COOP_ACTION_DETACH_MOUNT) {
+            CoopEntity *e=coop_machine_entity(m,action->entity);
+            CoopActor *a=coop_machine_actor(m,action->player);
+            if(e && e->flags==COOP_ENTITY_RIDDEN && e->owner==action->player && a) {
+                e->owner=COOP_NO_PLAYER;e->flags=0;g_ram[0xc2+e->slot]=0;
+                coop_guest_bind(&a->guest,g_ram);g_ram[0x187a]=g_ram[0x188b]=0;capture(m,a);
+            }
+        }
         if(action->kind!=COOP_ACTION_DROP_OBJECT)continue;
         CoopEntity *e=coop_machine_entity(m,action->entity);
         if(!e || e->owner!=action->player || e->flags!=COOP_ENTITY_HELD)continue;
@@ -811,12 +1000,19 @@ static void recover_and_frame(CoopMachine *m) {
         /* Use a clean pose/movement image from the safe anchor. The returning
          * actor's equipment, reserve and protection remain its own. */
         coop_guest_bind(&anchor->guest,g_ram);
-        g_ram[0x187a]=0;g_ram[0x78]=0;g_ram[0x1490]=star;
+        CoopEntity *mount=actor_mount(m,a);
+        coop_mount_bind(mount,g_ram);
+        g_ram[0x187a]=mount?1:0;g_ram[0x188b]=0;g_ram[0x78]=0;g_ram[0x1490]=star;
         g_ram[0x1470]=g_ram[0x1471]=g_ram[0x148f]=0;
         const CoopPlayer *anchor_player=coop_player(s,anchor->player);
         p->grounded=anchor_player->grounded;p->swimming=anchor_player->swimming;
         p->behind_fence=anchor_player->behind_fence;
         coop_guest_place_player(p,g_ram);capture(m,a);
+        if(mount) {
+            unsigned slot=mount->slot,x=read16(0x94),y=read16(0x96)+16;
+            g_ram[0xe4+slot]=(uint8_t)x;g_ram[0x14e0+slot]=(uint8_t)(x>>8);
+            g_ram[0xd8+slot]=(uint8_t)y;g_ram[0x14d4+slot]=(uint8_t)(y>>8);
+        }
     }
     CoopActor *primary=primary_actor(m);
     for(size_t i=0;i<m->actor_count;++i) {
@@ -929,7 +1125,7 @@ void SmwCoopSimulationEnd(void) {
     static FILE *trace;
     if(path && *path && !trace) {
         trace=fopen(path,"w");
-        if(trace)fputs("frame,world_frame,player,x,y,power,animation,input,stack,life,recovery,lives,lock,camera_x,camera_y,protection,separation,reserve,mode,sublevel,level_data,room_request,checkpoint,checkpoint_upgrade,outcome,end_timer,peace,spotlight,goal_stars,exit_player,exit_flags,held_object,held_slot,held_status,held_x,held_y,level,drop_entity,drop_x,drop_y,keyhole_timer,keyhole_direction,ow_exit,pause,keyhole_x,keyhole_y,time,exit_candidates,bonus_stars,bonus_pending,pending_lives,death_timer,sfx,music,focus_x,focus_y,focus_count\n",trace);
+        if(trace)fputs("frame,world_frame,player,x,y,power,animation,input,stack,life,recovery,lives,lock,camera_x,camera_y,protection,separation,reserve,mode,sublevel,level_data,room_request,checkpoint,checkpoint_upgrade,outcome,end_timer,peace,spotlight,goal_stars,exit_player,exit_flags,held_object,held_slot,held_status,held_x,held_y,level,drop_entity,drop_x,drop_y,keyhole_timer,keyhole_direction,ow_exit,pause,keyhole_x,keyhole_y,time,exit_candidates,bonus_stars,bonus_pending,pending_lives,death_timer,sfx,music,focus_x,focus_y,focus_count,riding,draw_offset,mount,mount_slot,mount_x,mount_y,mouth,tongue_timer,mount_count,source_uses\n",trace);
     }
     if(trace) {
         for(size_t i=0;i<m->actor_count;++i) {
@@ -973,8 +1169,16 @@ void SmwCoopSimulationEnd(void) {
                 g_ram[0x1434],g_ram[0x1435],g_ram[0xdd5],g_ram[0x13d4],
                 read16(0x1436),read16(0x1438),g_ram[0xf31]*100u+g_ram[0xf32]*10u+g_ram[0xf33],exit_candidates,
                 g_ram[0xf48],g_ram[0x1425],g_ram[0x18e4]);
-            fprintf(trace,",%u,%u,%u,%d,%d,%u\n",death_timer,g_ram[0x1df9],g_ram[0x1dfb],
+            fprintf(trace,",%u,%u,%u,%d,%d,%u",death_timer,g_ram[0x1df9],g_ram[0x1dfb],
                 m->focus_x,m->focus_y,m->focus_count);
+            uint8_t riding=0,draw_offset=0;coop_guest_peek(&a->guest,0x187a,&riding);
+            coop_guest_peek(&a->guest,0x188b,&draw_offset);
+            const CoopEntity *mount=actor_mount(m,a);unsigned ms=mount?mount->slot:12;
+            unsigned uses=0;for(size_t j=0;j<m->source_count;++j)uses+=m->sources[j].uses;
+            fprintf(trace,",%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",riding,draw_offset,p->mount,ms,
+                mount?(g_ram[0xe4+ms]|(g_ram[0x14e0+ms]<<8)):0,
+                mount?(g_ram[0xd8+ms]|(g_ram[0x14d4+ms]<<8)):0,
+                mount?g_ram[0x160e + ms]:255,mount?mount->mount[4]:0,mount_count(12),uses);
         }
         fflush(trace);
     }

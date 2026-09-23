@@ -1095,6 +1095,130 @@ This is focused regression evidence, not complete campaign acceptance. Mounts,
 independent projectiles, remaining contacts, exceptional rooms, bosses, bonus
 games and campaign coverage remain under the main implementation issue.
 
+## Mounted recovery, corner badges, and additional Yoshi grants (2026-09-23)
+
+Follow-up owner reports are tracked in `beads-8wg.3.28` and mount work in
+`beads-8wg.3.30`. This increment addresses the buried Luigi picture, badge
+placement, and the block's second egg. The full mount acceptance matrix remains
+open; the limitations below are part of the implementation status.
+
+### Persistent drawing offset
+
+The owner's untouched slot 0 contains Mario riding with `$187A=1,$188B=6` and
+Luigi on foot with `$187A=0,$188B=6`. Luigi's collision feet match the pipe top;
+`00:E33E` adds the stale six-pixel saddle offset when drawing. Recovery had copied
+the mounted anchor's native pose. The secondary body entry bypasses `01:EA70`,
+which normally clears that offset before drawing.
+
+Recovery now explicitly sets riding state from the returning actor's owned
+mount and resets `$188B`. Both on-foot draw paths clear the saddle offset,
+including the first frame after importing an older snapshot. Mounted catch-up
+uses the mounted collision shape, checks 48 pixels of vertical clearance and
+a 32-pixel width, then moves the same owned mount with its returning rider.
+Death detaches the mount and returns the actor on foot. Unsafe placement still
+waits in the bubble.
+
+### Original reserve art with corner badges
+
+The original blue border and item tiles remain unchanged. A seven-pixel black
+badge with a five-pixel red M or green L overlaps the upper-left corner instead
+of floating above the box. Occupied-box captures exposed an additional problem:
+the wide renderer moved the original reserve sprite before testing its overlay
+removal rectangle. It now checks the native coordinates before relocation,
+preventing a duplicate item from appearing between the two boxes. Both occupied
+boxes were inspected at 256 and 342 pixels. No save menu changes were made.
+
+### Mount ownership and block grants
+
+The native `02:89E1` egg path previously consulted SMW's singleton baby/adult
+Yoshi state and selected `$78` (1-up) whenever another Yoshi existed. The adapter
+now counts active adults, babies and pending Yoshi eggs against the session
+roster size, excluding the egg slot currently being allocated. It selects the
+original adult/1-up table at `02:89FB`; native egg motion and hatching still run.
+At the cap the native alternate reward is used. Each successful allocation
+consumes one of the source's N rewards, including an alternate reward.
+
+Sources are a dynamic collection keyed by full room number, layer and aligned
+Map16 coordinates, with the original tile and consumed reward count. The stock
+Yoshi block generates tile `$16` (used block with item memory), not only `$0D`.
+The `00:C0C1` and `00:C0FB` hooks preserve its item-memory bit and restore the
+original Map16/VRAM tile while rewards remain. The last reward uses the original
+used-block path. Source records survive subroom visits and snapshot reloads;
+a new attempt clears them. The tested YI2 source is `$106`, layer 0, `(864,336)`,
+tile `$126`; no level or source coordinate is hardcoded in the adapter.
+
+Adult Yoshi records now own their native globals, rider identity and private
+rendered pictures. Selection prefers the existing owner, otherwise the nearest
+eligible unmounted actor with primary/stable-ID tie breaking. An actor cannot
+claim two mounts. Native sprite updates run once per world frame, and each mount
+runs the original `01:EA70` animation/drawing/mouth stage once with its own state.
+Its dynamic head/body tiles are captured before another mount changes the same
+native DMA slots. The original singleton draw is bypassed after those scoped
+draws. Dismount releases ownership; death detaches; catch-up retains ownership
+and freezes that mount's mouth stage while waiting.
+
+The 21 scoped bytes are `$0DC1,$13C7,$1410,$141E,$14A3,$18AC..$18B3`,
+`$18D4..$18D6,$18DA,$18DE,$18E7,$18E8,$191C`: entrance carry/color, wings,
+tongue/swallow/walk/start-eat/duck state, mouth coordinates, berry counts/type,
+egg contents/lay timer, stomp/growth and key flag. Native per-sprite tables keep
+the mouth slot, tongue position and animation. `$18DF/$18E2` are derived from the
+currently bound mount. Roster and source storage remain dynamic; the 12 native
+normal-sprite slots are a guest hardware/game limitation, not a player-count
+constant. Mount pictures have a checked 16-piece capacity.
+
+### Snapshot version 5 and evidence
+
+The native machine writes CNR version 5 with a `YSH1` extension after `CAM1`.
+It contains the adoption flag, stable mount IDs, private globals, pending/visible
+pieces and source records. Length/count/identity/CRC validation occurs before
+atomic replacement. Core tests preserve different mount data and reject corrupt
+picture counts or excess grants for rosters 2, 3, 4 and 17. Versions 2–4 remain
+readable under their existing restrictions. A legacy native ridden Yoshi is
+adopted when exactly one actor identifies its owner. CNR2's missing room number
+is recovered from the original sprite-data pointer table when unambiguous,
+preferring the matching original primary entrance conversion. An unresolved
+legacy room cannot create a source with an invalid saved key. New snapshots
+require this build; normal SRAM and the isolated co-op save namespace are unchanged.
+
+Local, uncommitted ROM-derived evidence is under
+`build-adaptive/playtest/mount-feedback/`:
+
+| Evidence | Result |
+|---|---|
+| `owner-final.csv`, `owner-images/frame-000{100,200}.bmp` | Original owner state imports Mario's mount, clears Luigi's offset to zero, and draws his feet on the pipe. |
+| `control-{0,1}.csv` | 680 identical records for compiled/interpreted dispatch: two independent riders, separate tongue timers, Luigi movement and dismount with Mario remaining mounted. |
+| `catchup.csv`, `catchup-images` | Mounted Luigi waits 30 ticks and returns beside Mario with the same mount identity. |
+| `fall.csv` | Mounted Luigi falls, detaches, completes native death animation and 180-tick bubble, then returns small/on foot with zero saddle offset; Mario remains riding. |
+| `first-grant.sav`, `second-grant.sav` | Two native Yoshi hatches from the same block; first use leaves tile `$126`, second leaves `$132`; state reload between hits preserves consumption. |
+| `second-yoshi.sav`, `at-cap.sav` | Second adult hatches while Mario rides the first; the following capped hit produces native `$78` and exhausts the block. |
+| `control-images`, `native-images`, frames 100/200 | Two original-colored riders and original reserve art with corner badges at 342/256 pixels; occupied reserves have no duplicate sprite. |
+
+The build, `tools/test_native_coop.py`, `tools/test_coop_hooks.py`, and
+`tools/check_coop_mount_trace.py build-adaptive/playtest/mount-feedback` pass.
+Coverage is 36 compiled and three interpreter hook sites. No dispatch misses
+were recorded. These are finite running tests, never paused/stepped observations.
+
+Reproduce fixtures with `tools/make_coop_mount_fixture.py SOURCE COPY --scenario`.
+`riders`, `source`, `source-empty`, and `cap` take a version-5 YI2 entrance copy
+without mounts; `catchup` and `fall` take the actual two-mounted running state.
+Save backups before using test slots 10/11. A grant script waits 60 frames,
+loads slot 10, waits 80, presses `p2.b` for 18, waits 180 and saves slot 11.
+Use the first resulting save as the next input to test repeat use. For control
+parity, load the same two-mounted state, wait 20, press `p2.y` for 1, wait 50,
+press `p1.y` for 1, wait 50, press `p2.right` for 20, wait 20, then press `p2.a`
+for 1; compare `SNESRECOMP_LLE_BOUNCE=0/1`. Run through the normal adaptive
+wrapper with `SMW_COOP_TRACE`; create the capture directory before enabling
+`SMW_RENDER_DIAGNOSTICS`. The staged source fixtures move the camera offline,
+so their initial VRAM is not evidence of correct terrain streaming.
+
+**Remaining mount work:** multiple mounted actors through room/level entrances
+and no-Yoshi rooms, placed/baby egg sources, mouth-object exclusivity and the
+full swallowed-shell/berry/wing/key ability matrix, and campaign coverage.
+The previous carried-object room adapter still does not transport secondary
+mounts. This increment is suitable for testing the reported in-room behavior;
+it does not qualify complete mount support. Audio health remains tracked in
+`beads-8wg.3.29` as described above.
+
 ## Acceptance matrix
 
 | Area | Required evidence |

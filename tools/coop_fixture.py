@@ -25,7 +25,7 @@ class Fixture:
         self.machine = self.end-self.word(self.end)
         m = self.machine
         self.version = self.word(m+4)
-        assert d[m:m+4] == b'CNR1' and self.version in (2, 3, 4)
+        assert d[m:m+4] == b'CNR1' and self.version in (2, 3, 4, 5)
         self.check_crc(m, self.end)
         self.core = m+64
         self.core_end = self.core+self.word(m+40)
@@ -69,7 +69,20 @@ class Fixture:
                 at += 28
         if self.version >= 4:
             assert d[at:at+4] == b'CAM1'
+            self.focus = at
             at += 32
+        self.mounts, self.sources = {}, []
+        if self.version >= 5:
+            assert d[at:at+4] == b'YSH1'
+            mounts, sources = self.word(at+4), self.word(at+8)
+            at += 16
+            for _ in range(mounts):
+                identity, pending, visible = struct.unpack_from('<3I', d, at)
+                self.mounts[identity] = bytes(d[at+12:at+33])
+                at += 33+(pending+visible)*540
+            for _ in range(sources):
+                self.sources.append(struct.unpack_from('<6I', d, at))
+                at += 24
         assert at == self.end-4
 
     def word(self, at):
