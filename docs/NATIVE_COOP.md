@@ -138,10 +138,16 @@ and frozen entrance/cutscene phases do not consume gameplay countdowns.
 
 ## Menus, input, and persistence
 
-With the mod enabled, select player count **before** save files. One Player shows
-normal files; Two Player shows clearly labeled co-op files. When disabled, keep
-the original order. Select the persistence namespace before loading file lists
-or writing campaign/automatic-resume data.
+With the mod enabled, select player count **before** save files. Reuse SMW's
+original player-count and save-file screens, including their art, text, cursor,
+input, and sound. One Player opens normal files; Two Player opens the separate
+co-op files through the same regular file menu. When disabled, keep the original
+order. Select the persistence namespace before loading file lists or writing
+campaign/automatic-resume data.
+
+Owner correction, 2026-09-22: no custom co-op menu overlays or extra co-op file
+labels. This supersedes the initial custom count selector and file banner. Keep
+the separate save storage. The custom assignment overlay was also removed.
 
 Co-op saves are unique and separate from normal SRAM, state slots, and resume
 files. New co-op campaigns start fresh; no import/copy feature in this release.
@@ -214,6 +220,37 @@ must accept a roster rather than assume two.
   replacing the destination session.
 - Fresh stock generation and the unmodified native game baseline build passed
   using the pinned framework and SDL3/MinGW. No IPS image was used.
+- Added a default-off development package to the normal executable, with the
+  same menu boundaries instrumented in generated C and the interpreter. Live
+  scripted runs confirm player-count selection precedes the native file list,
+  separate co-op files load, and missing input assignments stop entry to gameplay.
+  The first UI used custom overlays; the owner's later correction replaces these
+  with the ROM's existing menu routines and removes all co-op menu overlays.
+- Persistence selects `saves/native-coop-v1` for co-op and `saves` for solo.
+  The small `last-mode.txt` in the co-op directory selects the correct namespace
+  before automatic resume on a subsequent launch. With no previous selection,
+  SRAM and snapshots remain unavailable until the player chooses a count.
+  Changing namespaces clears the SRAM buffer before reading the selected file.
+- Native actor-image records store player ID and input seat separately. The
+  codec includes the stock ROM identity and an ownership-layout signature;
+  tests cover reordered/non-contiguous IDs and 2/3/4/17 players. Invalid,
+  truncated, corrupt, and duplicate-owner records leave the destination intact.
+- Shared framework work lives on `feat/native-coop-runtime`, issue
+  `beads-8wg.2.68`: optional integrity/mode envelopes, preflight/session gates,
+  save-stream error propagation, and composable interpreter hooks. A redirected
+  hook restarts opcode classification at its destination. The bridge contract
+  harness passes 119 checks, including composition and redirected calls/returns.
+- Corrected the playtest script's mod-state location to
+  `mods/preloaded/state.toml`; the prior `mods/state.toml` was ignored. Added
+  optional game arguments for recorded input and finite live runs. Existing
+  settings/saves remain in `build-adaptive/playtest`.
+- Current menu evidence: `build-adaptive/playtest/native-coop-stock-menu-check`
+  (ignored local artifacts), frames 390 and 480, shows the ROM's original count
+  screen and regular file menu with no co-op overlay/banner. The earlier
+  `native-coop-menu-check` captures are superseded. Live slot 3 to slot 4 restore
+  also passed through the guarded loader, restoring two native actor records.
+  Native movement/rendering, mount adapters, complete state payloads, and the
+  campaign acceptance matrix remain under implementation.
 - Implementation is in progress. No playable-completion or campaign-validation
   claim has been made. Update this section as code and evidence land.
 

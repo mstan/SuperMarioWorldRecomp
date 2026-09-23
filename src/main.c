@@ -503,11 +503,13 @@ static SDL_HitTestResult HitTestCallback(SDL_Window *win, const SDL_Point *pt, v
   return SDL_HITTEST_NORMAL;
 }
 
+#include "mods/coop/coop_runtime.h"
+
 void RtlDrawPpuFrame(uint8 *pixel_buffer, size_t pitch, uint32 render_flags) {
   PpuSetExtraSpace(g_ppu, 0);
   PpuBeginDrawing(g_ppu, g_my_pixels, 256 * 4, render_flags);
   smw_falcon_presentation_prepare_ppu(g_ppu);
-  g_rtl_game_info->draw_ppu_frame();
+  if (!SmwCoopFrozen()) g_rtl_game_info->draw_ppu_frame();
   if (g_smw_video.enabled) {
     SmwRendererDraw(pixel_buffer, pitch, g_my_pixels);
   } else {
@@ -1572,6 +1574,10 @@ int main(int argc, char** argv) {
       return 1;
     }
     snes_mod_runtime_activate_plugins_c();
+    if (SmwCoopEnabled() && snes_foreign_active()) {
+      fprintf(stderr, "Native co-op cannot run with a character replacement. Disable one of these mods before Play.\n");
+      return 1;
+    }
   }
   if (!mods_ready)
     g_config.msu1_enabled = false;
@@ -1608,6 +1614,10 @@ int main(int argc, char** argv) {
   g_snes_width = g_smw_viewport.width;
   extern void SmwRendererInstallHooks(void);
   SmwRendererInstallHooks();
+  if (!SmwCoopInstallHooks()) {
+    fprintf(stderr, "Unable to install native co-op guest hooks.\n");
+    return 1;
+  }
   // The host compositor has no hardware sprite cap. The native 4:3 fallback
   // continues to honor the user's ordinary PPU settings.
   g_ppu_render_flags = g_config.new_renderer * kPpuRenderFlags_NewRenderer |
@@ -1863,7 +1873,7 @@ error_reading:;
 
   MkDir("saves");
     
-  RtlReadSram();
+  if (SmwCoopPrepareStorage()) RtlReadSram();
 
   {
 #if SNESRECOMP_SDL3
@@ -1899,7 +1909,7 @@ error_reading:;
     }
   }
 
-  if (g_config.autosave
+  if (g_config.autosave && SmwCoopPersistenceReady()
 #ifdef SMW_COOP_BUILD
       && !g_netplay_pending
 #endif
@@ -2147,7 +2157,7 @@ error_reading:;
       inputs = lua_bridge_frame_start(inputs);
 #endif
       uint64_t guest_phase = BenchmarkPhaseBegin();
-      RtlRunFrame(inputs);
+      if (SmwCoopHostFrame(inputs)) RtlRunFrame(inputs);
       BenchmarkPhaseEnd(kSnesRecompBenchmarkPhase_GuestFrame, guest_phase);
 #if SNESRECOMP_ENABLE_LUA
       smw_fire_stream_tick();
@@ -2349,7 +2359,7 @@ error_reading:;
                   stall_t_draw, SDL_GetPerformanceCounter());
   }
 
-  if (g_config.autosave
+  if (g_config.autosave && SmwCoopPersistenceReady()
 #ifdef SMW_COOP_BUILD
       && !g_netplay_started &&
       !snes_netplay_return_to_lobby_requested()
@@ -2360,7 +2370,7 @@ error_reading:;
 #ifdef SMW_COOP_BUILD
   snes_netplay_shutdown();
 #endif
-  RtlWriteSram();
+  if (SmwCoopPersistenceReady()) RtlWriteSram();
 
   // clean sdl
   if (g_audio_device) {
@@ -2811,6 +2821,7 @@ static void HandleCommand(uint32 j, bool pressed) {
 
   if (!pressed)
     return;
+  if (j <= kKeys_Save_Last && !SmwCoopPersistenceReady()) return;
   if (j <= kKeys_Load_Last) {
 #ifdef SMW_COOP_BUILD
     if (snes_netplay_request_load(j - kKeys_Load)) return;
@@ -2834,6 +2845,7 @@ static void HandleCommand(uint32 j, bool pressed) {
 #ifdef SMW_COOP_BUILD
       if (snes_netplay_active()) break;
 #endif
+      SmwCoopResetSession();
       RtlReset(1);
       break;
     case kKeys_Pause:

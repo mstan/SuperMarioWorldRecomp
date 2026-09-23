@@ -1,0 +1,4 @@
+/* Audited stock-US boundaries. Keep generated and interpreted coverage equal. */
+COOP_HOOK(0x009CB0) /* EnterFileSelect, before reading any file */
+COOP_HOOK(0x009D22) /* FileSelected.NotValid, after validation/copy */
+COOP_HOOK(0x009E0D) /* Native player-count choice, before loading campaign */
