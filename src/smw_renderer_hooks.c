@@ -146,6 +146,23 @@ void SmwRendererGuestHook(CpuState *c,uint32_t pc) {
     return;
   }
   if(!active(c)) return;
+  if(pc==0x01A7F3) {
+    /* MarioSprInteractRt has ORed its alternating-frame predicate with
+     * $15A0. That byte also supplies native OAM X bit 8, so it must retain
+     * its 256px meaning. Produce this contact decision from the actual
+     * viewport instead; clipping and every interaction outcome stay native.
+     * The tweaker that requests every-frame contact bypasses this site. */
+    unsigned slot=c->X&0xffff;
+    if(slot>=12 || !c->m_flag) return;
+    int x=(int16_t)((r8(c,0xe4+slot)|(r8(c,0x14e0+slot)<<8))-r16(c,0x1a));
+    int left=left_margin(c);
+    unsigned result=((slot^r8(c,c->D+0x13))&1) |
+        (x < -left || x >= g_smw_viewport.width-left);
+    c->A=(c->A&0xff00)|result;
+    c->_flag_Z=result==0;c->_flag_N=0;
+    c->P=(c->P&~0x82)|(c->_flag_Z?0x02:0);
+    return;
+  }
   if(pc==0x00E498) {
     /* The body/cape helper's [-128,384) horizontal test precedes its OAM
      * write. Let it publish the piece at any signed X; host scanout clips
@@ -360,7 +377,7 @@ void SmwRendererInstallHooks(void) {
                         0x019E6D,0x019E93,0x019F5A,0x0180E5,0x02A916,0x02AFB3,
                         0x01A393,0x02D3A6,0x03B78E,
                         0x0180AF,0x0180B2,0x029B0C,0x029B12,0x02A27E,0x02A2BE,
-                        0x00E498,0x00E49A};
+                        0x00E498,0x00E49A,0x01A7F3};
   for(unsigned i=0;i<sizeof(pcs)/sizeof(*pcs);++i)
     interp_bridge_set_pre_opcode_hook(pcs[i],SmwRendererGuestHook);
 }

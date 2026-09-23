@@ -1360,6 +1360,93 @@ co-op hook checks pass; no dispatch misses were recorded. Owner saves and
 settings are restored after testing. This fixes the two reported visibility
 cases; the broader co-op acceptance matrix remains open.
 
+## Player contacts in expanded screen margins (2026-09-23)
+
+The owner reported Mario walking through shells and falling through Koopas,
+especially outside the original screen boundary. Controlled copies of the
+YI2 entrance reproduced all four contact failures at 21:9: stomp, shell kick,
+shell pickup, and side damage. Identical world positions worked with camera
+X=192, and failed with camera X=0. This was a contact eligibility bug before
+clipping or response physics ran.
+
+`MarioSprInteractRt` at `$01:A7E4` tests the every-frame-contact tweaker, then
+combines `(sprite slot XOR $13) AND 1` with `$15A0,X` at `$01:A7F0`.
+`$15A0` still means outside the original 256-pixel window. The wide renderer
+draws those sprites, but the following `BEQ` at `$01:A7F3` rejected contact.
+Pinned ROM bytes at `$01:A7EB` are
+`8A 45 13 29 01 1D A0 15 F0 02 18 60`.
+
+The reader/writer audit covered every `SpriteOffscreenX` reference in the
+pinned `third_party/SMWDisX/bank_*.asm`. Its three generic producers are
+`GetDrawInfoBnk1`, `GetDrawInfo2`, and `GetDrawInfoBnk3`; initialization and
+special boss/bonus routines also write it. Crucially, bank 1 has three OAM
+writers that OR this byte into the X-high/size table. It cannot safely become
+a global widescreen Boolean. Other readers include offscreen despawning,
+enemy attacks, and special-object interactions.
+
+One targeted hook at `$01:A7F3` now computes the shared contact decision using
+the sprite's signed world X minus camera X and the current viewport offset:
+`[-left_margin, viewport_width-left_margin)`. It retains the original frame
+parity, accumulator high byte, and all flags other than the native result's
+N/Z. The every-frame tweaker still follows its original bypass. `$15A0`, OAM,
+collision boxes, previous player Y, velocity, contact cooldown, animation/net
+checks, and native response routines are unchanged. Disabled widescreen and
+native-width rendering leave the original decision untouched.
+
+This belongs to the existing widescreen enhancement, so every actor using the
+native shared contact routine receives the same behavior, including solo
+play. No fixed two-player assumption was added. It does not rewrite custom
+sprite contact routines or claim to complete the wider co-op contact matrix.
+`tools/apply_renderer_hooks.py` installs and requires the one native site in
+generated code; `SmwRendererInstallHooks` registers its interpreted equivalent.
+No generated C was edited manually. The hook installer reports 22 logical
+sites and is idempotent. This is a bespoke change to one guest decision, not
+a compiler class correction or multi-site source sweep.
+
+### Contact replay evidence
+
+Private artifacts live in `build-adaptive/playtest/contact-feedback`.
+`owner.sav`, `prior-saves`, `prior-config.ini`, and `prior-state.toml` preserve
+the owner's state before testing. Fixtures use a copied CNR5 YI2 entrance,
+stock ROM sprite tweakers, one controlled slot, and the normal native update.
+`SMW_COOP_CONTACT_TRACE` records actor-bound state before/after each normal
+sprite update without pausing execution. Its `offscreen_x` column deliberately
+continues to show the native flag, including 1 on successful wide contacts.
+
+| Encounter | First successful session frame | Native outcome |
+|---|---:|---|
+| Falling onto Koopa | 756 | Sprite status 8 to 9; player Y speed +70 to -48. |
+| Walking into stationary shell | 766 | Status 9 to 10 (kicked). |
+| Holding run while contacting shell | 766 | Status 9 to 11 (carried). |
+| Walking into live Koopa | 760 | Player animation 0 to 9; Y speed +6 to -112 (small-player death). |
+
+All 24 combinations passed: Mario/Luigi, four encounters, and center/right/left
+of the native window (camera 192/0/384). Before the fix, all four right-margin
+cases failed the contact oracle while all four center cases passed. The same
+oracle verifies the fixed cases. Eight additional forced-interpreter runs
+(Mario/right and Luigi/left, all encounters) produce byte-identical complete
+contact/gameplay CSVs and 16 matching BMPs. The normal sprite dispatcher itself
+already uses the interpreter; this comparison also checks the surrounding
+execution paths. Eight center-case BMPs match the pre-fix captures exactly.
+The build passes and every run was checked for dispatch misses: none recorded.
+
+Recreate an encounter with `tools/make_coop_contact_fixture.py SOURCE OUTPUT
+--kind stomp|kick|pickup|side --actor 0|1 --camera 0|192|384`, then place the copy
+in backed-up slot 10. Use the adaptive wrapper at 21:9, Screen-based spawning,
+150 benchmark frames, and a script starting `wait 60`, `loadstate 10`.
+For stomp, follow with `wait 80`. Otherwise press the chosen player's right
+for 60 frames (also hold Y for pickup), then `wait 20`. Capture frames 70/80.
+Run `tools/check_coop_contacts.py TRACE --kind KIND --actor ACTOR --region
+center|right|left`; `--expect-miss` checks the original failing control.
+
+**Fixture terrain limitation:** camera relocation changes the saved camera
+and co-op focus without reconstructing streamed terrain/VRAM. Some staged
+windows therefore show a 64-pixel visual gap. The owner confirmed the reported
+gap was in one of these automated windows. These fixtures qualify contacts,
+not streaming or ordinary save-load correctness. Separate unmodified entrance
+and owner-F1 loads were captured at frames 65/80/100/140; the inspected captures
+do not show that gap. Original saves and settings are restored for handoff.
+
 ## Acceptance matrix
 
 | Area | Required evidence |
