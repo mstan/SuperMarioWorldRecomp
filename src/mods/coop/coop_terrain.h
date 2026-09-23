@@ -7,6 +7,7 @@
 typedef struct CoopTerrain {
     const uint8_t *ram, *rom;
     size_t rom_size;
+    const CoopSession *session; /* optional actor-clearance query */
 } CoopTerrain;
 bool coop_terrain_block(const CoopTerrain *t,unsigned layer,int32_t x,int32_t y,
                         uint16_t *block);

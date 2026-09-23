@@ -58,19 +58,19 @@ For future larger rosters, the same rules generalize as follows:
 | Area | Rule |
 |---|---|
 | Characters | Mario and Luigi have identical SMW movement physics and distinct appearances. |
-| Contact | Players pass through; no player bouncing, body blocking, or carrying one another. |
-| Camera | Frame active players equally within room bounds. Follow established travel direction during excessive separation; the primary player breaks ambiguous opposite-direction ties. |
+| Contact | Players pass through; no player bouncing, body blocking, or carrying one another. Mario's complete picture draws in front of Luigi when they overlap on the same fence side; remaining actors use primary/stable ID order. |
+| Camera | Frame active players equally within room bounds. Follow established travel direction during excessive separation; the primary player breaks ambiguous opposite-direction ties. Preserve the survivor's framing when someone dies, and never follow a death pose. Limit focus movement so the native terrain streamer visits every column. |
 | Catch-up | One-second edge warning, then bubble the trailing player. No voluntary bubble. |
 | View changes | Reframe and restart separation grace after window/aspect changes. View changes never damage players. |
 | Manual camera | Disable L/R camera look during co-op. |
 | Autoscroll | Preserve level scrolling, pits, crushing, and hazards. Catch-up is not a rescue from failing the level's scrolling requirements. |
 | Lethal/catch-up tie | Resolve lethal contact first. |
-| Individual death | World and survivors continue during the death animation. After the animation, wait three gameplay seconds before safe recovery. |
+| Individual death | World and survivors continue during the death animation. Play a short native fall sound without interrupting level music. After the animation, show an identified bubble for three gameplay seconds before safe recovery. |
 | Death recovery | Return small, preserve a stored reserve, give two seconds of damage protection; pits and crushing remain lethal. |
 | Catch-up recovery | Preserve equipment and mount, drop held objects at departure, and grant no new protection. |
-| Placement | Prefer safe footing. Permit safe water/supported-air recovery only when the returning actor can survive there. Wait otherwise. |
+| Placement | Return beside a survivor with room for both bodies. Prefer safe footing. Permit safe water/supported-air recovery only when the returning actor can survive there. Keep the bubble visible if no nearby position is safe; never fall back to overlapping the survivor. |
 | Mounted bubble | Wait for clearance for rider and mount together. |
-| Team failure | Bubbles are out of play. No active players means one shared life lost, once, followed by entrance/checkpoint restart. |
+| Team failure | Bubbles are out of play. No active players means one shared life lost, once. Play the original death music and finish the original death animations before entrance/checkpoint restart. Freeze the camera and world during this final death sequence. |
 | Retry | All restart small with stored reserves intact; clear mounts and carried objects from the failed attempt. |
 | Input on return | Held movement applies immediately; jump, fire, grab, and reserve release require fresh presses. |
 | Timers in bubbles | Temporary benefits keep expiring with gameplay time; preserved Yoshi mouth timers are the exception. |
@@ -193,6 +193,10 @@ capabilities belong in the shared framework; SMW rules remain in the game.
 HUD: two labeled reserve slots in this release, shared counters once, readable
 player/bubble identity and separation warnings. Actor draw storage and HUD models
 must accept a roster rather than assume two.
+
+Owner correction, 2026-09-23: use the original reserve-box artwork and original
+item sprites. Only add small red **M** / green **L** corner labels. No replacement
+box drawing. The original-menu requirement continues to apply.
 
 ### Sequence
 
@@ -982,6 +986,114 @@ pointer immediately beyond the table. Regeneration emits 3,237 exact AOT and
 coverage remains outstanding. The owner approved the post-class-fix review
 required by `NES/PRINCIPLES.md` section 8b on 2026-09-23. The framework fix is
 committed as `84177df` on the isolated `feat/native-coop-runtime` branch.
+
+### Owner playtest corrections: terrain, death, recovery and HUD
+
+Tracked as `beads-8wg.3.28` on `feat/native-simultaneous-coop` (2026-09-23).
+These corrections supersede the earlier presentation and immediate-retry
+behavior described in the implementation history above.
+
+**Terrain and camera.** The owner confirmed the grass columns existed before
+either player died. In `owner-bugs-before/wipe.csv`, separation changed the
+camera focus from the group center to its leader, jumping the camera from 58
+to 209 in one frame. The original `05:86F1` terrain streamer updates one column
+at a crossing; that jump skipped columns and left stale VRAM tiles. The older
+`native-coop-recover-luigi-check/frame-000660.swr` contains 56 static tile
+mismatches against the original Map16 definitions, including solid platform
+graphics where Map16 says air.
+
+The native camera now follows a persistent focus, moving at most four pixels
+per axis per frame. Removing a dying actor preserves the current framing and
+then follows survivor movement with that offset. Death poses are excluded
+immediately; a team with no active actors freezes camera streaming deltas.
+Recovery releases the offset gradually. Room initialization resets the focus.
+Original room bounds, parallax and camera routines still apply. This prevents
+the discontinuity that skipped terrain streaming; it does not replace Map16
+or manufacture terrain. The corrected Luigi recovery capture at frame 880
+has all 700 checked visible static tiles matching the native level data.
+
+**Death and retry.** Individual deaths request native `SFX_FALL` (`$1DF9=$23`)
+once, retain level music, and allow survivors/world simulation to continue.
+The committed team-failure outcome charges one shared life, requests original
+death music (`$1DFB=9`) once, and keeps the original actor death timers/motion
+running before the room loader proceeds. Timeout gives all remaining actors
+the same native death pose. Camera/world freeze through the final sequence.
+Zero lives stay zero rather than being reread as 256 from guest `$0DBE=$FF`.
+
+The castle scene was an incorrect retry destination: `$7E:D000`, originally
+the overworld translevel map, is reused as level Map16 RAM. Direct retry had
+reread that overwritten map and selected castle `$101` instead of YI2 `$106`.
+The new `05:D83E` hook supplies the preserved current translevel to the original
+`05:D8A2` translation/submap path. Original entrance/checkpoint loading follows;
+there is no special-case YI2 destination or custom castle scene.
+
+**Recovery and overlap.** Bubbles are now visible during death recovery,
+catch-up, and separation warnings. Death recovery waits three gameplay seconds
+after the native animation; catch-up displays its bubble for at least half a
+second. Placement tries offsets `+24,-24,+40,-40,+56,-56` beside a survivor,
+preserves the feet position across different actor heights, requires support
+under both feet, and checks body/hazard/sprite/active-player clearance. If all
+candidates are unsafe, the bubble remains. Mario's completed native body/cape
+picture masks overlapping secondary pixels at the same PPU priority, using
+primary/stable ID order. Original world and opposite-fence priorities remain.
+
+**Original reserve art.** Each actor gets the original BG3 reserve box decoded
+from VRAM, with original item tiles and palette selection from ROM tables
+`00:8DFA`, `00:8DFE`, and `00:8E02`. Only the red M / green L corner letters are
+new. The original single box/item is captured out of the game picture to avoid
+duplication. At native width the original TIME label/digits move 24 pixels
+right to fit the second box; shared lives, bonus stars, coins and score remain
+visible once. Both the native PPU and wide renderer honor the capture. Storage
+grows with the roster, and additional reserve boxes wrap into rows when needed.
+Normal save-file menus and isolated co-op saves remain the session interface.
+
+**Snapshots.** Machine schema version 4 appends a 32-byte `CAM1` record after
+the existing entity records: focus position, previous group center, active
+count, initialized flag and hold flag. CRC, length, counts and values are
+validated before replacing a live machine. Versions 2 and 3 remain readable
+under their existing ownership restrictions; their focus initializes on the
+next active frame. The core `COOP` schema and normal SRAM namespace are unchanged.
+
+Validation artifacts are local under `build-adaptive/playtest/` and are not
+committed because states/raster captures contain ROM-derived data:
+
+| Evidence | Result |
+|---|---|
+| `tools/test_native_coop.py`, `tools/test_coop_hooks.py` | Roster 2/3/4/17, recovery, camera continuity, atomic snapshots, and compiled/interpreted hook coverage pass. |
+| `owner-feedback/0/trace.csv`, `1/trace-0.csv` | Both individual deaths preserve five lives, request the short cue, leave world unlocked, preserve stationary survivor framing, and recover beside the survivor with 120 protection ticks. |
+| `owner-feedback/1/trace-{0,1}.csv` | 1,480 identical compiled/interpreted actor records. |
+| `owner-feedback/both/trace-{0,1}.csv` | 1,354 identical records; complete native death sequence, one life/music charge, correct `$106` retry, reserves retained. |
+| `owner-feedback/timeout/trace.csv`, `gameover/trace.csv` | Full actor death sequences and single life/music charge; zero-life result preserved through native game-over transition. |
+| `owner-feedback/checkpoint/trace.csv` | Timeout finishes the native death sequence, charges one life, and retries at the original YI2 midway entrance with both actors small and reserves retained. |
+| `owner-feedback/overlap/trace-{0,1}.csv` | 1,480 identical records. Coincident small Mario/big Luigi capture preserves all 197 independently decoded opaque Mario pixels. |
+| `owner-feedback/native`, `owner-feedback/overlap`, frame 100 | Inspected original reserve boxes, mushroom/feather contents, M/L labels, TIME and shared counters at 256 and 342 pixels; Mario overlap pixels also pass at native width. |
+| `owner-feedback/both-replay.csv`, `1-replay.csv` | Actual mid-death version-4 states replay 1,070 and 1,196 identical actor records respectively, including final death/retry or bubble/recovery. |
+| `owner-recovery-luigi`, `owner-recovery-mario` | Natural recorded-input recovery checks pass for either player; inspected visible bubbles and adjacent recovery. |
+
+Reproduction: `tools/make_coop_feedback_fixture.py SOURCE COPY --scenario`
+accepts `0`, `1`, `both`, `timeout`, `gameover`, or `overlap`, starting from an
+unowned version-2 YI2 entrance copy. It clears normal sprites and explicitly
+stages positions, reserves and native Spiny contacts. `--checkpoint` stages
+the native midway flag for a team retry. Run a finite recorded script through
+`tools/run_adaptive_renderer.ps1`, setting `SMW_COOP_TRACE` and optional
+`SMW_RENDER_DIAGNOSTICS` / `SMW_RENDER_CAPTURE_FRAME`. Use
+`tools/check_coop_feedback.py trace`, `terrain`, and `primary` for assertions;
+`--individual`, `--gameover`, and `--compare` select trace expectations. Actual
+mid-sequence replay states come from running `savestate` commands, without
+pausing or patching those saved camera/death fields.
+
+Audio qualification remains open: two 800-frame real-time audio runs with the
+individual-death fixture produced audible-range output at 60.05 FPS and passed
+the cue/music trace checks, but the strict audio-health gate reported 574
+dropped audible samples. Removing the script's mid-run save did not change
+that result. A no-death control reported 1,307 dropped audible samples too.
+All runs had zero output underflows and enqueue failures. This demonstrates
+that sample loss also occurs without the new cue; it does not establish its
+cause or qualify audio health. The audio follow-up is `beads-8wg.3.29`.
+
+This is focused regression evidence, not complete campaign acceptance. Mounts,
+independent projectiles, remaining contacts, exceptional rooms, bosses, bonus
+games and campaign coverage remain under the main implementation issue.
 
 ## Acceptance matrix
 
