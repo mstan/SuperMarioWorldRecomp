@@ -28,6 +28,17 @@ void coop_guest_bind(const CoopGuestPlayer *in,uint8_t *ram) {
     }
 }
 
+bool coop_guest_peek(const CoopGuestPlayer *in,uint16_t address,uint8_t *value) {
+    size_t at=0;
+    for(size_t i=0;i<sizeof(fields)/sizeof(*fields);++i) {
+        if(address>=fields[i].address && address-fields[i].address<fields[i].size) {
+            *value=in->bytes[at+address-fields[i].address];return true;
+        }
+        at+=fields[i].size;
+    }
+    return false;
+}
+
 static unsigned read16(const uint8_t *r,unsigned a) {return r[a]|((unsigned)r[a+1]<<8);}
 static void put16(uint8_t *r,unsigned a,unsigned v) {r[a]=(uint8_t)v;r[a+1]=(uint8_t)(v>>8);}
 

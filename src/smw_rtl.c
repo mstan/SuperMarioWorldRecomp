@@ -63,6 +63,8 @@ void SmwDrawPpuFrame(void) {
   }
 }
 
+#include "mods/coop/coop_simulation.h"
+
 void RunOneFrameOfGame(void) {
   SmwRendererSpawnFrame();
   SmwRendererLatchFrame();
@@ -155,6 +157,7 @@ void RunOneFrameOfGame(void) {
    * available as a convenience override through the shared execution-mode
    * option rather than an SMW-specific scheduler switch. */
   {
+    SmwCoopSimulationBegin();
     if (smw_execution_mode() == SNESRECOMP_EXECUTION_MODE_LLE) {
       waiting_for_vblank = 0xFF;
       /* Bank $00: hardware reset leaves PB=$00 and the `BRA $806B` main loop
@@ -167,5 +170,6 @@ void RunOneFrameOfGame(void) {
     }
   }
   cpu_trace_px_breadcrumb(&g_cpu, 0x2003, "after_Internal");
+  SmwCoopSimulationEnd();
   g_first_frame_done = true;
 }

@@ -1,4 +1,5 @@
 #include "coop_runtime.h"
+#include "coop_simulation.h"
 #include "common_rtl.h"
 #include "snes/interp_bridge.h"
 #include "util.h"
@@ -29,6 +30,7 @@ void SmwCoopEnable(bool on) {
 }
 bool SmwCoopEnabled(void) {return enabled;}
 bool SmwCoopActive(void) {return enabled && selected_count>1;}
+CoopMachine *SmwCoopMachine(void) {return SmwCoopActive()?&machine:NULL;}
 bool SmwCoopPersistenceReady(void) {return !enabled || (selected_count && !choosing);}
 bool SmwCoopFrozen(void) {return enabled && disconnected;}
 
@@ -121,7 +123,7 @@ uint32_t SmwCoopGuestHook(CpuState *cpu,uint32_t pc) {
         }
         break;
     }
-    return 0;
+    return SmwCoopSimulationHook(cpu,pc);
 }
 static void interpreted_hook(CpuState *cpu,uint32_t pc) {
     uint32_t target=SmwCoopGuestHook(cpu,pc);
