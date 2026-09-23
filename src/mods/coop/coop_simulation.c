@@ -48,6 +48,8 @@ static void initialize_room(CoopMachine *m) {
         for(size_t i=0;i<m->session.player_count;++i)m->session.players[i].reserve=0;
         coop_session_restart(&m->session);
     } else if(m->session.outcome==COOP_RETRY)coop_session_restart(&m->session);
+    if(!g_ram[0x141a])
+        m->session.checkpoint=(g_ram[0x1ea2+g_ram[0x13bf]]&0x40)?g_ram[0x13bf]+1u:0;
     CoopGuestPlayer entry;coop_guest_capture(&entry,g_ram);
     for(size_t i=0;i<m->actor_count;++i) {
         CoopActor *a=&m->actors[i];CoopPlayer *p=coop_player(&m->session,a->player);
@@ -318,6 +320,13 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
     pc&=0x7fffff;
     if(pc==0x00a21b) {party_pause(m);return 0x00a242;}
     if(pc==0x00a28a)begin_gameplay_stage(m);
+    if(pc==0x00f2cd && m->session.advancing) {
+        CoopActor *a=bound_actor?bound_actor:primary_actor(m);
+        if(coop_player(&m->session,a->player)->life==COOP_PLAYING &&
+           !coop_session_event(&m->session,(CoopEvent){COOP_EVENT_CHECKPOINT,
+               a->player,COOP_NO_ENTITY,g_ram[0x13cd]?g_ram[0x13bf]+1u:0,0,0}))
+            Die("Native co-op could not record checkpoint contact");
+    }
     if(pc==0x00d273) {
         CoopActor *a=bound_actor?bound_actor:primary_actor(m);
         if(coop_player(&m->session,a->player)->life==COOP_PLAYING &&
@@ -351,6 +360,21 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
 }
 static bool safe_recovery(const CoopPlayer *p,const CoopPlayer *anchor,int32_t *x,int32_t *y,void *context) {
     return coop_terrain_safe(context,p,anchor,x,y);
+}
+static void apply_checkpoint(CoopMachine *m) {
+    bool activated=false;
+    for(size_t i=0;i<m->session.action_count;++i)
+        activated|=m->session.actions[i].kind==COOP_ACTION_CHECKPOINT;
+    if(!activated)return;
+    for(size_t i=0;i<m->actor_count;++i) {
+        CoopActor *a=&m->actors[i];CoopPlayer *p=coop_player(&m->session,a->player);
+        coop_guest_bind(&a->guest,g_ram);
+        /* Death keeps its small pose; checkpoint_upgrade survives in core
+         * state and supplies the big form when that actor safely recovers. */
+        g_ram[0x19]=(uint8_t)(p->life==COOP_DYING?COOP_SMALL:p->power);
+        capture(m,a);
+    }
+    coop_guest_bind(&primary_actor(m)->guest,g_ram);
 }
 static void recover_and_frame(CoopMachine *m) {
     CoopSession *s=&m->session;
@@ -401,6 +425,7 @@ void SmwCoopSimulationEnd(void) {
     capture(m,primary_actor(m));
     m->session.lives=g_ram[0xdbe]+1u;m->session.coins=g_ram[0xdbf];
     if(!coop_session_resolve(&m->session))Die("Native co-op event resolution failed");
+    apply_checkpoint(m);
     if(m->session.outcome==COOP_CONTINUE && room_request!=COOP_NO_PLAYER) {
         CoopActor *entrant=coop_machine_actor(m,room_request);
         /* 05:D796 selects ExitTableLow by the entrant's horizontal/vertical
@@ -418,7 +443,10 @@ void SmwCoopSimulationEnd(void) {
         g_ram[0x9d]=0;g_ram[0x0daf]=1;
         if(m->session.outcome==COOP_RETRY) {
             /* The primary entrance loader (05:D796) reads the shared
-             * overworld checkpoint flag when SublevelCount is zero. */
+             * overworld checkpoint flag when SublevelCount is zero. The
+             * stock overworld return (04:8F35) normally publishes this bit;
+             * immediate team retry does not visit that overworld stage. */
+            if(g_ram[0x13ce])g_ram[0x1ea2+g_ram[0x13bf]]|=0x40;
             g_ram[0x141a]=g_ram[0x141d]=g_ram[0x1b93]=0;
             g_ram[0x100]=0x0f;
         } else {
@@ -431,7 +459,7 @@ void SmwCoopSimulationEnd(void) {
     static FILE *trace;
     if(path && *path && !trace) {
         trace=fopen(path,"w");
-        if(trace)fputs("frame,world_frame,player,x,y,power,animation,input,stack,life,recovery,lives,lock,camera_x,camera_y,protection,separation,reserve,mode,sublevel,level_data,room_request\n",trace);
+        if(trace)fputs("frame,world_frame,player,x,y,power,animation,input,stack,life,recovery,lives,lock,camera_x,camera_y,protection,separation,reserve,mode,sublevel,level_data,room_request,checkpoint,checkpoint_upgrade\n",trace);
     }
     if(trace) {
         for(size_t i=0;i<m->actor_count;++i) {
@@ -440,13 +468,14 @@ void SmwCoopSimulationEnd(void) {
              * binding it into the running game's WRAM. */
             uint8_t animation=0;
             coop_guest_peek(&a->guest,0x71,&animation);
-            fprintf(trace,"%llu,%u,%u,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
+            fprintf(trace,"%llu,%u,%u,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
                 (unsigned long long)m->session.frame,g_ram[0x14],p->id,p->x,p->y,
                 (unsigned)p->power,animation,p->held_input,g_cpu.S,(unsigned)p->life,
                 p->recovery_ticks,m->session.lives,g_ram[0x9d],
                 g_ram[0x1a]|(g_ram[0x1b]<<8),g_ram[0x1c]|(g_ram[0x1d]<<8),
                 p->protection_ticks,p->separation_ticks,p->reserve,g_ram[0x100],
-                g_ram[0x141a],(unsigned)(g_ram[0xce]|(g_ram[0xcf]<<8)|(g_ram[0xd0]<<16)),room_request);
+                g_ram[0x141a],(unsigned)(g_ram[0xce]|(g_ram[0xcf]<<8)|(g_ram[0xd0]<<16)),room_request,
+                m->session.checkpoint,p->checkpoint_upgrade?1u:0u);
         }
         fflush(trace);
     }
