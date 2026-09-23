@@ -20,6 +20,8 @@ static CoopActor *bound_actor;
 static bool level_frame;
 static bool timer_had_time;
 static bool gameplay_stage_started;
+static uint8_t end_timer_at_begin;
+static CoopPlayerId scene_request=COOP_NO_PLAYER;
 /* Room requests are collected and committed within one host frame. The
  * resolved destination lives in ordinary guest loader state at save boundaries. */
 static CoopPlayerId room_request=COOP_NO_PLAYER;
@@ -143,11 +145,13 @@ void SmwCoopSimulationBegin(void) {
     level_frame=gameplay_stage_started=false;room_request=COOP_NO_PLAYER;
     goal_query=goal_commit=goal_contact=false;goal_height=goal_stars=0;
     goal_actor=COOP_NO_PLAYER;goal_entity=COOP_NO_ENTITY;
+    scene_request=COOP_NO_PLAYER;
     CoopMachine *m=SmwCoopMachine();if(!m)return;
     unsigned mode=g_ram[0x100];
     if(mode!=0x14) {m->previous_mode=mode;return;}
     if(!m->room_initialized || m->previous_mode!=0x14)initialize_room(m);
     m->previous_mode=mode;level_frame=true;
+    end_timer_at_begin=g_ram[0x1493];
     timer_had_time=(g_ram[0xf31]|g_ram[0xf32]|g_ram[0xf33])!=0;
     uint32_t shared_pressed=0;
     for(size_t i=0;i<m->actor_count;++i) {
@@ -277,7 +281,9 @@ static void run_player_routines(CpuState *cpu,CoopMachine *m) {
         memcpy(g_ram,scratch,sizeof(scratch));
         cpu_push_jsr_return_frame(cpu);
         bound_actor=a;
+        uint8_t end_timer=g_ram[0x1493];
         if(!interp_bridge_run(cpu,0x00c569))Die("Native co-op player routine failed to return");
+        if(!end_timer && g_ram[0x1493])scene_request=a->player;
         bound_actor=NULL;
         if(cpu->S!=caller.S)Die("Native co-op player routine unbalanced the guest stack");
         capture(m,a);
@@ -472,17 +478,21 @@ static void apply_clear(CoopMachine *m) {
     for(size_t i=0;i<m->session.action_count;++i)
         if(m->session.actions[i].kind==COOP_ACTION_EXIT)exit=&m->session.actions[i];
     if(!exit)return;
-    if(exit->entity>=12)Die("Native co-op clear has no valid goal sprite");
+    if(exit->entity!=COOP_NO_ENTITY && exit->entity>=12)
+        Die("Native co-op clear has no valid goal sprite");
     CoopActor *winner=coop_machine_actor(m,exit->player);
     CpuState caller=g_cpu;uint8_t scratch[16];memcpy(scratch,g_ram,sizeof(scratch));
     uint8_t sprite=g_ram[0x15e9];
     coop_guest_bind(&winner->guest,g_ram);bound_actor=winner;goal_commit=true;
     g_cpu.P|=0x30;g_cpu.P&=(uint8_t)~8u;cpu_p_to_mirrors(&g_cpu);
-    g_cpu.X=exit->entity;g_cpu.Y&=0xff;g_cpu.D=0;g_cpu.DB=g_cpu.PB=1;
-    g_ram[0x15e9]=(uint8_t)exit->entity;
-    uint8_t type=g_ram[0x9e + exit->entity];
-    if(type!=0x7b && type!=0x4a)Die("Native co-op clear has an unsupported source");
-    guest_jsr(&g_cpu,type==0x7b?0x01c0e7:0x018778);
+    g_cpu.Y&=0xff;g_cpu.D=0;g_cpu.DB=g_cpu.PB=1;
+    uint8_t type=0;
+    if(exit->entity!=COOP_NO_ENTITY) {
+        g_cpu.X=exit->entity;g_ram[0x15e9]=(uint8_t)exit->entity;
+        type=g_ram[0x9e + exit->entity];
+        if(type!=0x7b && type!=0x4a)Die("Native co-op clear has an unsupported source");
+        guest_jsr(&g_cpu,type==0x7b?0x01c0e7:0x018778);
+    }
     capture(m,winner);
     if(type!=0x7b && goal_contact) {
         /* Exit ownership and a valid tape reward are independent. If a
@@ -497,7 +507,18 @@ static void apply_clear(CoopMachine *m) {
     goal_commit=false;bound_actor=NULL;
     restore_registers(&g_cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
     g_ram[0x15e9]=sprite;
-    CoopGuestPlayer entry=winner->guest;
+    CoopActor *anchor=winner;
+    if(coop_player(&m->session,winner->player)->life!=COOP_PLAYING) {
+        CoopActor *survivor=NULL;
+        for(size_t i=0;i<m->actor_count;++i) {
+            CoopActor *a=&m->actors[i];
+            if(coop_player(&m->session,a->player)->life==COOP_PLAYING &&
+               (!survivor || coop_player_precedes(&m->session,a->player,survivor->player)))
+                survivor=a;
+        }
+        if(survivor)anchor=survivor;
+    }
+    CoopGuestPlayer entry=anchor->guest;
     for(size_t i=0;i<m->actor_count;++i) {
         CoopActor *a=&m->actors[i];CoopPlayer *p=coop_player(&m->session,a->player);
         CoopPower power=p->power;uint32_t reserve=p->reserve;
@@ -563,6 +584,16 @@ void SmwCoopSimulationEnd(void) {
     CoopMachine *m=SmwCoopMachine();if(!m || !level_frame)return;
     capture(m,primary_actor(m));
     m->session.lives=g_ram[0xdbe]+1u;m->session.coins=g_ram[0xdbf];
+    if(!end_timer_at_begin && g_ram[0x1493] && m->session.outcome==COOP_CONTINUE) {
+        /* Original boss/switch scripts have already produced their shared
+         * scene. Register that transition even when their gameplay is frozen;
+         * no script is replayed and no gameplay clocks advance here. */
+        CoopPlayerId owner=scene_request==COOP_NO_PLAYER?m->session.primary:scene_request;
+        unsigned secret=g_ram[0x141c] || (g_ram[0x13c6] && g_ram[0x13bf]==0x13);
+        if(!coop_session_event(&m->session,(CoopEvent){COOP_EVENT_EXIT,owner,
+                COOP_NO_ENTITY,0,secret?COOP_EVENT_SECRET:0,0}))
+            Die("Native co-op could not record a scripted level clear");
+    }
     if(!coop_session_resolve(&m->session))Die("Native co-op event resolution failed");
     apply_checkpoint(m);
     apply_clear(m);

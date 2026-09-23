@@ -242,9 +242,12 @@ reserves; the original fade and loader still run once.
 
 The request exists only within the current host frame. Snapshots during the
 fade already contain the committed guest loader inputs and all canonical
-actors. The machine's `room` field records the loaded Layer 1 data pointer;
-`LoadingLevelNumber` is reused by the ROM after loading and is not a reliable
-gameplay room identifier. The running CSV includes the data pointer, selected
+actors. The machine's `room` field and CSV `level_data` record `SpriteDataPtr`
+at `$CE..$D0`. This is diagnostic only: empty rooms can share a sprite list.
+It is not a unique room identity. Transitions are detected through native mode
+changes; `LoadingLevelNumber` is reused by the ROM after loading. A persistent
+numeric room identity still needs to be captured at the loader boundary when
+ownership/transport adapters require it. The CSV includes this pointer, selected
 entrant, sublevel count, mode, and each reserve for validation.
 
 This boundary covers the shared pipe/door request routine. Door, vertical-room,
@@ -313,9 +316,31 @@ primary/stable actor. The stock sprite-slot bound is separate from roster size.
 
 Goal collection state is temporary within one host frame; committed scene
 state is already in the guest and native actor snapshot. No snapshot schema
-change or custom UI is needed. Other completion mechanisms (keyhole,
-boss/switch scripts), mounted/carried-object rewards, bonus-room participation,
-and full campaign coverage still require their own adapters and validation.
+change or custom UI is needed. Keyhole arbitration, mounted/carried-object
+rewards, bonus-room participation, and full campaign coverage still require
+their own adapters and validation.
+
+### Native scripted completion
+
+A zero-to-nonzero transition of the original `EndLevelTimer` registers the
+completion already produced by a native boss or switch script. Actor updates
+record the actual initiating player for switch activation; a world-only boss
+script uses the primary party lead. The original script and its shared effects
+are not replayed. Donut Secret House's native boss-secret rule comes from
+`00:C9FE` (`CutsceneID` with translevel `$13`). A pending valid tape contact can
+still supply its reward independently of a scripted exit's ownership.
+
+The policy accepts an explicit exit while gameplay clocks are frozen, provided
+the session is connected and has no committed outcome. Other gameplay events
+remain rejected in that state. Resolving the exit advances no recovery,
+protection, or frame counters and emits one terminal action. If a dead actor
+owns the winning exit, returning actors use a surviving primary/stable actor's
+pose instead of the dead owner's position. Full all-dead/scripted-scene placement
+and per-boss acceptance remain outstanding.
+
+The Yellow Switch Palace was validated in the original room `$0CA`, using
+native falling contact and the original switch tiles. Core scripted-exit tests
+cover completion while frozen; this does not establish every boss as validated.
 
 ### Independent graphics
 
@@ -631,6 +656,33 @@ Goal sphere extension:
   `--sphere` and `--contacts normal --mixed-sphere` reproduce the two cases.
   Build and hook checks pass with 20 compiled and three interpreter sites;
   accepted runs have no dispatch misses or unresolved-abandon messages.
+
+Native switch scene extension:
+
+- `tools/make_coop_palace_fixture.py --entrance` stages a copied state for the
+  original room loader, selecting screen exit `$CA` with the overworld submap
+  selector zero. `05:D796` derives the level's high byte from that selector;
+  a nonzero selector would load `$1CA`, the YI2 underground room. Save the loaded
+  room normally, then use the tool without `--entrance` to stage players above
+  the existing yellow switch. The tool verifies its actual Map16 tile and
+  unpressed switch flags; it adds no switch tiles or replacement scene.
+- `native-coop-palace` starts Mario waiting and lets Luigi fall onto the switch.
+  One exit belongs to Luigi, with native end timer 8. Mario returns small with
+  mushroom reserve; Luigi remains fire with flower reserve. The original yellow
+  flag becomes 1, the stock message is visible at frame 230, and native mode `$0B`
+  is reached with five lives. After the clear, core frame/recovery clocks remain
+  frozen while the original scene progresses. All 1,378 actor records match in
+  `native-coop-palace-compiled`. No dispatch misses occurred.
+- `tools/check_coop_palace_trace.py` checks the one-time activation, complete
+  8-to-0 scene countdown, unchanged shared lives, preserved equipment, waiting
+  actor return, frozen core clock, and scheduler equality. The C core tests also
+  reject ordinary gameplay events while frozen and verify an explicit scripted
+  exit resolves once without advancing recovery/protection clocks.
+- `native-coop-goal-dead-winner` adds same-frame timeout to the normal-goal tie.
+  Mario still owns the winning exit, returns small beside surviving Luigi, and
+  retains his reserve. Luigi's fifty-star reward is preserved. All 1,126 actor
+  records pass the exit/cadence/life checks, including the native TIME 000
+  matching-digit life; no death life is charged.
 
 ### Compiler table-boundary correction found by co-op validation
 
