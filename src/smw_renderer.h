@@ -23,6 +23,7 @@ void SmwRendererBeginFrame(void);
 void SmwRendererCaptureLine(const Ppu *ppu, int line);
 void SmwRendererDraw(uint8_t *pixels, size_t pitch, const uint8_t *stock);
 int SmwRendererNativeOffset(void);
+bool SmwRendererIsLevelScene(void);
 bool SmwRendererMapTile(const uint8_t *ram, unsigned layer, int x, int y, uint16_t *tile);
 /* Signed host coordinates paired with the exact OAM image, latched at NMI. */
 void SmwRendererRecordOam(unsigned slot, int x, uint16_t position, uint16_t attr);

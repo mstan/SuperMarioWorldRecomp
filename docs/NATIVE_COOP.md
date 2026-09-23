@@ -1219,6 +1219,80 @@ mounts. This increment is suitable for testing the reported in-room behavior;
 it does not qualify complete mount support. Audio health remains tracked in
 `beads-8wg.3.29` as described above.
 
+## HUD motion and overworld fade correction (2026-09-23)
+
+The owner's moving HUD report exposed a frame-boundary mismatch. The renderer
+latched the camera before the simulation tick, while co-op placed the reserve
+boxes and TIME using the live camera after that tick. Near a viewport clamp,
+the HUD moved by the difference between those two projections. The original
+movement trace's left HUD origin ranged from 135 to 142 instead of staying at
+139 in a 342-pixel view.
+
+`SmwDrawPpuFrame` now starts the renderer before preparing co-op overlays.
+Co-op uses `SmwRendererNativeOffset()` for all screen-fixed HUD pieces. The
+artwork, corner badges, reserve contents and ordinary save menus are unchanged.
+The corrected trace keeps the HUD origin at 139 through all 300 gameplay
+frames of the same camera traversal (camera 0 through 117).
+
+A separate natural overworld re-entry test found a crash after leaving Yoshi's
+House and entering Yoshi's Island 2. Fade modes are shared by levels and the
+overworld. Co-op classified every fade as a level once a room had initialized,
+so it captured the overworld border's decorative Mario as an actor. That
+native drawing path deliberately sets `$13F9` (PlayerBehindNet) to 3; the level
+actor schema correctly rejects that value. The failure was `Invalid native
+co-op fence side` at the next stage's fade, not the owner's continuing gameplay
+with silent sound.
+
+The renderer's existing scene classification now supplies both co-op latching
+and presentation. `RunOneFrameOfGame` latches the renderer before co-op, and the
+scene classifier reads the current mode even when widescreen is disabled.
+Actual outgoing level pictures persist through their fades; overworld fades do
+not create level bodies or reserve overlays. No actor validation was weakened.
+
+### Reproduction and validation
+
+Local ROM-derived captures are in `build-adaptive/playtest/av-feedback/`:
+
+| Evidence | Result |
+|---|---|
+| `hud-before` | Pixel checker rejects the old build: reserve borders and TIME move during camera traversal. |
+| `hud-after`, `hud-native` | At 342 and 256 pixels, 13 captures each preserve all 468 original blue reserve-border pixels and 70 TIME-label pixels at identical screen positions. |
+| `stage-before` | Natural re-entry terminates at frame 3756 with the invalid fence selector. |
+| `stage-after` | The 4600-frame route completes; captures at 3900/4200/4550 show YI2 after overworld entry. |
+
+The build, `tools/test_native_coop.py`, `tools/test_coop_hooks.py`, and the
+following pixel regression pass. The checker requires camera movement and, at
+wide width, a changing viewport offset; stationary captures cannot pass it.
+The old capture is also checked as a negative control. No dispatch misses
+were recorded.
+
+```powershell
+python tools/check_coop_hud_motion.py `
+  build-adaptive/playtest/av-feedback/hud-after `
+  build-adaptive/playtest/av-feedback/hud-native
+```
+
+For a new motion capture, back up the owner settings and slots 10/11, place the
+actual `mount-feedback/two-mounted.sav` fixture in co-op slot 10, and run
+`tools/coop_hud_motion.script` for 360 benchmark frames through
+`tools/run_adaptive_renderer.ps1`. Enable `SMW_RENDER_DIAGNOSTICS` with an
+existing output directory and set `SMW_RENDER_CAPTURE_FRAME` to
+`100,110,120,130,140,150,160,170,180,200,210,220,230`. Run at adaptive 16:9 and at
+the widescreen mod's `4_3` setting. Restore owner settings and saves afterward.
+`tools/coop_overworld_reentry.script` records the 4600-frame natural route
+through the original menus, with co-op enabled and save A at the starting
+Yoshi's House node; it does not load a state. Back up SRAM before this route.
+
+**Audio status:** the owner confirmed that persistent silence occurred entering
+YI2 while gameplay continued, then asked to set it aside as a possible turbo
+fluke on this fork. The scripted re-entry still produced DSP music samples;
+it did not reproduce persistent silence. No turbo or silence fix is claimed.
+Temporary APU and device-output probes were removed. The earlier strict audio
+sample-loss issue (`beads-8wg.3.29`) remains unresolved; the instrumented
+4600-frame run also failed that gate (66,992 audible samples dropped, two
+underflows), despite reaching the stage. HUD/transition validation does not
+qualify audio health.
+
 ## Acceptance matrix
 
 | Area | Required evidence |

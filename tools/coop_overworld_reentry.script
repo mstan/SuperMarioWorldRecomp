@@ -1,0 +1,24 @@
+wait 300
+press start 1
+wait 60
+press down 1
+wait 60
+press start 1
+wait 120
+press start 1
+wait 1500
+press b 1
+wait 300
+press right 90
+wait 90
+press b 1
+wait 400
+press p1.right+p2.right 180
+wait 60
+wait 400
+press right 90
+wait 90
+press b 1
+wait 400
+press p1.right+p2.right 150
+wait 60
