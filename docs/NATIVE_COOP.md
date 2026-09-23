@@ -214,6 +214,7 @@ following audited boundaries. The world update is not replayed for each actor.
 |---|---|
 | NMI, input polling and overworld | Original once-per-frame path. |
 | Level entry | Seed each actor from the original entrance state; retain its own equipment on later room entries. |
+| `00:D273` room request | Collect entrant IDs, resolve primary/stable priority once, publish the selected actor's coordinates to the original room loader. |
 | `00:C47E` before `00:C569` | Original world/keyhole/effective-frame/shared timer work runs once. |
 | `00:C569` through `00:C592` | Scoped original player animation/motion/terrain, reserve-release and note-block state run for each actor. |
 | Secondary timer fields | Advance only the audited per-player timer bytes, with the original cadence. |
@@ -227,6 +228,28 @@ routines can produce shared effects: room changes, transformations, projectiles
 and terrain rewards still require their event/ownership adapters. Individual
 death and recovery adapters are under live validation as described below.
 The initial motion result does not establish those behaviors as correct.
+
+### Shared pipe and door destination
+
+`00:D273` normally increments `SublevelCount` and starts the level fade
+immediately. The adapter records a request from the bound actor, leaving both
+actor updates able to submit requests. After resolving gameplay events, it
+commits at most one request using the roster's primary/stable-ID priority.
+`05:D796` chooses the exit table entry from `$95` or `$97` (horizontal/vertical
+screen). Only the selected entrant's `$94..$97` coordinates are published into
+guest loader state. Canonical actor images retain separate equipment and
+reserves; the original fade and loader still run once.
+
+The request exists only within the current host frame. Snapshots during the
+fade already contain the committed guest loader inputs and all canonical
+actors. The machine's `room` field records the loaded Layer 1 data pointer;
+`LoadingLevelNumber` is reused by the ROM after loading and is not a reliable
+gameplay room identifier. The running CSV includes the data pointer, selected
+entrant, sublevel count, mode, and each reserve for validation.
+
+This boundary covers the shared pipe/door request routine. Door, vertical-room,
+mount/object transport, waiting-bubble, conflicting room/clear, and other exit
+paths still need their own live acceptance evidence and remaining adapters.
 
 The regular launcher exposes both input seats. `[GamepadMap] KeyboardPlayers`
 persists its keyboard assignments (bits 0 and 1 are the current two host seats);
@@ -441,6 +464,80 @@ the interior hook must appear in the generated blocks or the build fails.
   show the native message and a stationary world counter; frame 2440 shows the
   message closed and gameplay resumed. The fresh menu run also verifies the
   unchanged original count/file screens. No dispatch misses were recorded.
+- `tools/make_coop_pipe_fixture.py` makes an explicitly staged **copy** of a
+  local schema-2 YI2 entrance state (slot 9). It places one actor on the open
+  pipe in screen F and the other on screen E, or places both on the pipe. It
+  assigns distinct big/fire power-ups and mushroom/flower reserves. This is an
+  offline test fixture, not evidence of naturally reaching that location.
+  The source state is unchanged; the live run uses ordinary Down input and the
+  original collision, pipe animation, fade and loader.
+- `native-coop-pipe-mario.csv` and `native-coop-pipe-luigi-fixed.csv` each verify
+  either actor can take the team from Layer 1 data `$07C532` to `$07C57F` (YI2's
+  underground room), with exactly one sublevel increment, five lives, balanced
+  stack 511, and independent equipment/reserves retained. The Luigi run has
+  582 destination actor records and is byte-identical with scheduler bounce
+  disabled/enabled (`native-coop-pipe-luigi-floor.csv` versus `-fixed.csv`).
+- `native-coop-pipe-both-fixed` verifies simultaneous entry selects primary ID
+  0 and increments the sublevel count once. Slot 15 is saved during the outgoing
+  fade, then restored; all 398 destination actor records from the first pass
+  match the replay in order, including the frozen entrance animation and
+  later independent movement. Frame 610 shows both actors in the underground
+  room. `tools/check_coop_pipe_trace.py` checks these invariants. Counters freeze
+  during pipe animations, so replay validation compares ordered records rather
+  than treating gameplay/world counters as a unique frame key.
+- Those pipe runs use the dispatch-boundary correction below. The earlier
+  `native-coop-pipe-both.csv` run exposed a skipped compiled sprite handler and
+  is not acceptance evidence. Corrected runs recorded no dispatch misses or
+  unresolved-abandon messages. Hook coverage is now 12 compiled sites and
+  three interpreter sites.
+
+### Compiler table-boundary correction found by co-op validation
+
+The compiled simultaneous-entry test exposed an existing dispatch decoder bug
+at `01:85C8`: the sprite-main table was inferred as 54 entries. Unused sprite
+`$36` points to declared data at `01:E41F`, but valid sprites `$37..$C8` follow
+it. The emitted out-of-range path skipped their handlers. The authoritative
+inline table occupies `01:85CC..875E`, already declared in `recomp/bank01.cfg`.
+
+The framework decoder now uses an aligned data region beginning exactly at an
+inline dispatch table as its byte boundary. Within that boundary, an unused
+data-target slot retains its index and target; data targets remain ineligible
+for compilation and use the interpreter if reached. Without an exact table
+boundary, the existing conservative inference remains in effect. This also
+prevents reading adjacent data as additional table entries. No ROM bytes or
+generated C were hand-edited.
+
+An audit of 86 stock-ROM inline `ExecutePtr`/`ExecutePtrLong` sites found these
+17 changed entry counts. The other 69 are unchanged. The byte boundaries come
+from existing game metadata, not new per-sprite exceptions.
+
+| Dispatch site | Containing label | Previous entries | Corrected entries |
+|---|---|---:|---:|
+| `01:8133` | HandleSprite | 14 | 13 |
+| `01:8179` | CallSpriteInit | 203 | 201 |
+| `01:85C8` | CallSpriteMain | 54 | 201 |
+| `01:BDE6` | Magikoopa | 7 | 4 |
+| `01:C550` | TouchedPowerUp | 10 | 6 |
+| `01:D119` | CODE_01D116 | 3 | 2 |
+| `01:D75E` | CODE_01D75C | 4 | 3 |
+| `02:B008` | CallGenerator | 16 | 15 |
+| `02:B3AC` | CODE_02B3AB | 7 | 3 |
+| `02:D40B` | Layer3SmashMain | 7 | 5 |
+| `02:DCDD` | CODE_02DCB7 | 6 | 4 |
+| `02:DFBE` | CODE_02DF93 | 4 | 3 |
+| `02:E132` | CODE_02E0CD | 4 | 3 |
+| `03:8A48` | BowserStatue | 5 | 4 |
+| `03:9244` | FallingSpike | 3 | 2 |
+| `0C:C9BC` | CODE_0CC9B3 | 7 | 6 |
+| `0C:CA45` | CODE_0CCA2F | 5 | 4 |
+
+The 17 focused decoder/padding/PHK-PER-dispatch tests pass, including new short
+and long table regressions with an interior unused data target and a plausible
+pointer immediately beyond the table. Regeneration emits 3,237 exact AOT and
+622 interpreter variants; the Windows release build passes. Full campaign
+coverage remains outstanding. The owner approved the post-class-fix review
+required by `NES/PRINCIPLES.md` section 8b on 2026-09-23. The framework fix is
+committed as `84177df` on the isolated `feat/native-coop-runtime` branch.
 
 ## Acceptance matrix
 

@@ -20,6 +20,9 @@ static CoopActor *bound_actor;
 static bool level_frame;
 static bool timer_had_time;
 static bool gameplay_stage_started;
+/* Room requests are collected and committed within one host frame. The
+ * resolved destination lives in ordinary guest loader state at save boundaries. */
+static CoopPlayerId room_request=COOP_NO_PLAYER;
 static unsigned read16(unsigned at) {return g_ram[at]|(g_ram[at+1]<<8);}
 static void put16(unsigned at,unsigned value) {g_ram[at]=(uint8_t)value;g_ram[at+1]=(uint8_t)(value>>8);}
 
@@ -57,11 +60,12 @@ static void initialize_room(CoopMachine *m) {
         capture(m,a);
         a->pending.count=a->visible.count=0;
     }
+    m->room=(uint32_t)g_ram[0xce]|((uint32_t)g_ram[0xcf]<<8)|((uint32_t)g_ram[0xd0]<<16);
     m->room_initialized=true;
     coop_guest_bind(&primary_actor(m)->guest,g_ram);
 }
 void SmwCoopSimulationBegin(void) {
-    level_frame=gameplay_stage_started=false;
+    level_frame=gameplay_stage_started=false;room_request=COOP_NO_PLAYER;
     CoopMachine *m=SmwCoopMachine();if(!m)return;
     unsigned mode=g_ram[0x100];
     if(mode!=0x14) {m->previous_mode=mode;return;}
@@ -314,6 +318,13 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
     pc&=0x7fffff;
     if(pc==0x00a21b) {party_pause(m);return 0x00a242;}
     if(pc==0x00a28a)begin_gameplay_stage(m);
+    if(pc==0x00d273) {
+        CoopActor *a=bound_actor?bound_actor:primary_actor(m);
+        if(coop_player(&m->session,a->player)->life==COOP_PLAYING &&
+           (room_request==COOP_NO_PLAYER || coop_player_precedes(&m->session,a->player,room_request)))
+            room_request=a->player;
+        return 0x00c592; /* defer the original SublevelCount/GameMode commit */
+    }
     if(pc==0x00f606 || pc==0x00f60a || pc==0x00d0b6)return death_hook(cpu,m,pc);
     if(pc==0x00e9a1 && g_ram[0x1411]) {
         /* The original E9A1 edge clamp prevents separation grace. Keep real
@@ -390,7 +401,17 @@ void SmwCoopSimulationEnd(void) {
     capture(m,primary_actor(m));
     m->session.lives=g_ram[0xdbe]+1u;m->session.coins=g_ram[0xdbf];
     if(!coop_session_resolve(&m->session))Die("Native co-op event resolution failed");
-    if(m->session.outcome==COOP_CONTINUE)recover_and_frame(m);
+    if(m->session.outcome==COOP_CONTINUE && room_request!=COOP_NO_PLAYER) {
+        CoopActor *entrant=coop_machine_actor(m,room_request);
+        /* 05:D796 selects ExitTableLow by the entrant's horizontal/vertical
+         * screen. Publish only these loader inputs; each actor keeps its own
+         * canonical image and equipment through the fade. */
+        for(unsigned at=0x94;at<0x98;++at) {
+            uint8_t value=0;coop_guest_peek(&entrant->guest,(uint16_t)at,&value);
+            g_ram[at]=value;
+        }
+        ++g_ram[0x141a];g_ram[0x100]=0x0f;
+    } else if(m->session.outcome==COOP_CONTINUE)recover_and_frame(m);
     if(m->session.outcome==COOP_RETRY || m->session.outcome==COOP_GAME_OVER) {
         g_ram[0xdbe]=(uint8_t)(m->session.lives-1u);
         g_ram[0xdc1]=0; /* no mount carried out of the failed attempt */
@@ -410,7 +431,7 @@ void SmwCoopSimulationEnd(void) {
     static FILE *trace;
     if(path && *path && !trace) {
         trace=fopen(path,"w");
-        if(trace)fputs("frame,world_frame,player,x,y,power,animation,input,stack,life,recovery,lives,lock,camera_x,camera_y,protection,separation\n",trace);
+        if(trace)fputs("frame,world_frame,player,x,y,power,animation,input,stack,life,recovery,lives,lock,camera_x,camera_y,protection,separation,reserve,mode,sublevel,level_data,room_request\n",trace);
     }
     if(trace) {
         for(size_t i=0;i<m->actor_count;++i) {
@@ -419,12 +440,13 @@ void SmwCoopSimulationEnd(void) {
              * binding it into the running game's WRAM. */
             uint8_t animation=0;
             coop_guest_peek(&a->guest,0x71,&animation);
-            fprintf(trace,"%llu,%u,%u,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
+            fprintf(trace,"%llu,%u,%u,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
                 (unsigned long long)m->session.frame,g_ram[0x14],p->id,p->x,p->y,
                 (unsigned)p->power,animation,p->held_input,g_cpu.S,(unsigned)p->life,
                 p->recovery_ticks,m->session.lives,g_ram[0x9d],
                 g_ram[0x1a]|(g_ram[0x1b]<<8),g_ram[0x1c]|(g_ram[0x1d]<<8),
-                p->protection_ticks,p->separation_ticks);
+                p->protection_ticks,p->separation_ticks,p->reserve,g_ram[0x100],
+                g_ram[0x141a],(unsigned)(g_ram[0xce]|(g_ram[0xcf]<<8)|(g_ram[0xd0]<<16)),room_request);
         }
         fflush(trace);
     }
