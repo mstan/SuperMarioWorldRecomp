@@ -28,7 +28,7 @@ typedef struct CoopMachine {
     CoopSession session;
     CoopActor *actors;
     size_t actor_count;
-    uint32_t room;
+    uint32_t room; /* diagnostic SpriteDataPtr; empty rooms may share it */
     uint32_t previous_mode;
     bool room_initialized;
 } CoopMachine;

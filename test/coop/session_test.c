@@ -92,6 +92,23 @@ static void priorities(void) {
     CoopAction last=s.actions[s.action_count-1];
     assert(last.kind==COOP_ACTION_EXIT && last.player==2 && (last.value>>8)==20);
     coop_session_destroy(&s);
+
+    /* Native boss/switch scenes can finish while gameplay clocks are frozen.
+     * Only their explicit terminal event is accepted; recovery stays frozen. */
+    assert(coop_session_init(&s,3,60));
+    s.players[1].life=COOP_DEATH_BUBBLE;s.players[1].recovery_ticks=60;
+    s.players[2].protection_ticks=100;
+    assert(coop_session_begin_frame(&s,false));
+    assert(coop_session_resolve(&s) && s.outcome==COOP_CONTINUE);
+    assert(!coop_session_event(&s,(CoopEvent){COOP_EVENT_TIMEOUT,COOP_NO_PLAYER,0,0,0,0}));
+    event(&s,COOP_EVENT_EXIT,0,COOP_NO_ENTITY,0,0,0);
+    assert(coop_session_resolve(&s));
+    assert(s.outcome==COOP_CLEAR && s.frame==0 && s.lives==5);
+    assert(s.players[1].recovery_ticks==60 && s.players[2].protection_ticks==100);
+    assert(actions(&s,COOP_ACTION_EXIT)==1);
+    assert(coop_session_resolve(&s) && actions(&s,COOP_ACTION_EXIT)==1);
+    assert(!coop_session_event(&s,(CoopEvent){COOP_EVENT_EXIT,0,COOP_NO_ENTITY,0,0,0}));
+    coop_session_destroy(&s);
 }
 
 static void camera_and_recovery(void) {

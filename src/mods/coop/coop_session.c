@@ -100,7 +100,9 @@ bool coop_session_begin_frame(CoopSession *s, bool advances) {
 }
 
 bool coop_session_event(CoopSession *s, CoopEvent event) {
-    if (!s || !s->advancing || s->failed || s->resolved ||
+    if (!s || s->input_blocked || s->failed || s->resolved ||
+        s->outcome != COOP_CONTINUE ||
+        (!s->advancing && event.kind != COOP_EVENT_EXIT) ||
         (event.player != COOP_NO_PLAYER && !coop_player(s, event.player)) ||
         event.kind > COOP_EVENT_EXIT || event.kind < COOP_EVENT_PICKUP)
         return false;
@@ -168,7 +170,8 @@ static void die(CoopSession *s, CoopPlayer *p) {
 
 bool coop_session_resolve(CoopSession *s) {
     if (!s || s->failed) return false;
-    if (!s->advancing || s->outcome != COOP_CONTINUE || s->resolved) return true;
+    if (s->outcome != COOP_CONTINUE || s->resolved) return true;
+    if (!s->advancing && !s->event_count) return true;
     s->resolved = true;
     if (s->event_count > 1)
         qsort(s->events, s->event_count, sizeof(*s->events), compare_event);
