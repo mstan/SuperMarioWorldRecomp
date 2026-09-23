@@ -23,6 +23,8 @@ static bool gameplay_stage_started;
 /* Room requests are collected and committed within one host frame. The
  * resolved destination lives in ordinary guest loader state at save boundaries. */
 static CoopPlayerId room_request=COOP_NO_PLAYER;
+static bool goal_query,goal_commit,goal_contact;
+static uint8_t goal_height,goal_stars;
 static unsigned read16(unsigned at) {return g_ram[at]|(g_ram[at+1]<<8);}
 static void put16(unsigned at,unsigned value) {g_ram[at]=(uint8_t)value;g_ram[at+1]=(uint8_t)(value>>8);}
 
@@ -43,11 +45,78 @@ static void capture(CoopMachine *m,CoopActor *a) {
     coop_guest_capture(&a->guest,g_ram);
     coop_guest_read_player(coop_player(&m->session,a->player),g_ram);
 }
+static void guest_jsr(CpuState *cpu,uint32_t entry) {
+    unsigned stack=cpu->S;
+    cpu_push_jsr_return_frame(cpu);
+    if(!interp_bridge_run(cpu,entry) || cpu->S!=stack)
+        Die("Native co-op scoped guest routine failed its return contract");
+}
+static void collect_goal(CpuState *cpu,CoopMachine *m) {
+    if(!m->session.advancing)return;
+    CoopActor *original=bound_actor?bound_actor:primary_actor(m);
+    CoopActor *previous=bound_actor;capture(m,original);
+    CpuState caller=*cpu;uint8_t scratch[16];memcpy(scratch,g_ram,sizeof(scratch));
+    goal_query=true;
+    for(size_t i=0;i<m->actor_count;++i) {
+        CoopActor *a=&m->actors[i];
+        if(coop_player(&m->session,a->player)->life!=COOP_PLAYING)continue;
+        coop_guest_bind(&a->guest,g_ram);bound_actor=a;
+        restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
+        /* Run the ROM's post X / bottom Y tests for every candidate. The
+         * C0E7 observer records an event before any shared effects execute. */
+        guest_jsr(cpu,0x01c0c2);
+    }
+    goal_query=false;bound_actor=previous;
+    restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
+    coop_guest_bind(&original->guest,g_ram);
+}
+static void record_goal(CpuState *cpu,CoopMachine *m) {
+    unsigned slot=cpu->X&0xff;
+    CpuState caller=*cpu;uint8_t scratch[16];memcpy(scratch,g_ram,sizeof(scratch));
+    /* Goal tape's tweaker D has bit 7 set: this native interaction call is
+     * the contact query, returning before default damage/stomp processing. */
+    if(slot>=12 || !(g_ram[0x167a+slot]&0x80))
+        Die("Native co-op goal query requires the stock custom-contact sprite");
+    guest_jsr(cpu,0x01a7e4);
+    uint8_t height=(uint8_t)(g_ram[0x1528+slot]-g_ram[0xd8+slot]);
+    uint8_t stars=cpu->_flag_C?g_rom[0x3f1aa+(height>>2)]:0;
+    if(cpu->_flag_C && (!goal_contact || stars>goal_stars)) {
+        goal_contact=true;goal_height=height;goal_stars=stars;
+    }
+    if(!coop_session_event(&m->session,(CoopEvent){COOP_EVENT_EXIT,bound_actor->player,
+            slot,stars,(g_ram[0x187b+slot]&4)?COOP_EVENT_SECRET:0,0}))
+        Die("Native co-op could not record a goal crossing");
+    restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
+}
+static uint32_t follow_victory(CpuState *cpu,CoopMachine *m) {
+    CoopActor *primary=primary_actor(m);
+    if(!bound_actor || bound_actor==primary)return 0;
+    /* C915 owns shared palette fading, score conversion, spotlight, music,
+     * and scene changes. Followers use its actor-only motion/pose routines. */
+    g_ram[0x15]=g_ram[0x16]=g_ram[0x17]=g_ram[0x18]=0;
+    g_ram[0x18c2]=g_ram[0x13de]=g_ram[0x13ed]=0;
+    uint8_t peace=0;coop_guest_peek(&primary->guest,0x1492,&peace);
+    if(g_ram[0x1b99] && peace)return 0x00ca31;
+    if((g_ram[0x5b]&1) || g_ram[0x13c6] || g_ram[0x13d2])return 0x00c96a;
+    if(!g_ram[0x1b99]) {
+        if(g_ram[0x1493]>=0x28) {g_ram[0x76]=g_ram[0x15]=1;g_ram[0x7b]=5;}
+        if(g_ram[0x72])guest_jsr(cpu,0x00d76b);
+    } else g_ram[0x15]=1;
+    return 0x00cd24;
+}
 static void initialize_room(CoopMachine *m) {
     if(m->session.outcome==COOP_GAME_OVER) {
         for(size_t i=0;i<m->session.player_count;++i)m->session.players[i].reserve=0;
         coop_session_restart(&m->session);
     } else if(m->session.outcome==COOP_RETRY)coop_session_restart(&m->session);
+    else if(m->session.outcome==COOP_CLEAR) {
+        m->session.outcome=COOP_CONTINUE;m->session.camera.initialized=false;
+        for(size_t i=0;i<m->session.player_count;++i) {
+            CoopPlayer *p=&m->session.players[i];
+            p->life=COOP_PLAYING;p->recovery_ticks=p->separation_ticks=0;
+            p->checkpoint_upgrade=false;
+        }
+    }
     if(!g_ram[0x141a])
         m->session.checkpoint=(g_ram[0x1ea2+g_ram[0x13bf]]&0x40)?g_ram[0x13bf]+1u:0;
     CoopGuestPlayer entry;coop_guest_capture(&entry,g_ram);
@@ -68,6 +137,7 @@ static void initialize_room(CoopMachine *m) {
 }
 void SmwCoopSimulationBegin(void) {
     level_frame=gameplay_stage_started=false;room_request=COOP_NO_PLAYER;
+    goal_query=goal_commit=goal_contact=false;goal_height=goal_stars=0;
     CoopMachine *m=SmwCoopMachine();if(!m)return;
     unsigned mode=g_ram[0x100];
     if(mode!=0x14) {m->previous_mode=mode;return;}
@@ -183,8 +253,10 @@ static void run_player_routines(CpuState *cpu,CoopMachine *m) {
     }
     capture(m,primary);
     ++player_call_depth;
-    for(size_t i=0;i<m->actor_count;++i) {
-        CoopActor *a=&m->actors[i];CoopPlayer *p=coop_player(&m->session,a->player);
+    for(size_t i=0;i<=m->actor_count;++i) {
+        CoopActor *a=i?&m->actors[i-1]:primary;
+        if(i && a==primary)continue;
+        CoopPlayer *p=coop_player(&m->session,a->player);
         if(p->life!=COOP_PLAYING && p->life!=COOP_DYING)continue;
         coop_guest_bind(&a->guest,g_ram);
         if(a!=primary) {
@@ -318,6 +390,13 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
     if(!level_frame)return 0;
     CoopMachine *m=SmwCoopMachine();if(!m)return 0;
     pc&=0x7fffff;
+    if(pc==0x01c0c2 && !goal_query) {collect_goal(cpu,m);return 0x01c12c;}
+    if(pc==0x01c0e7 && goal_query) {record_goal(cpu,m);return 0x01c12c;}
+    if(pc==0x01c107 && goal_commit) {
+        cpu->_flag_C=goal_contact;cpu->P=(uint8_t)((cpu->P&~1u)|(goal_contact?1u:0u));
+    }
+    if(pc==0x07f252 && goal_commit)g_ram[0x1594+(cpu->X&0xff)]=goal_height;
+    if(pc==0x00c915)return follow_victory(cpu,m);
     if(pc==0x00a21b) {party_pause(m);return 0x00a242;}
     if(pc==0x00a28a)begin_gameplay_stage(m);
     if(pc==0x00f2cd && m->session.advancing) {
@@ -376,6 +455,41 @@ static void apply_checkpoint(CoopMachine *m) {
     }
     coop_guest_bind(&primary_actor(m)->guest,g_ram);
 }
+static void apply_clear(CoopMachine *m) {
+    const CoopAction *exit=NULL;
+    for(size_t i=0;i<m->session.action_count;++i)
+        if(m->session.actions[i].kind==COOP_ACTION_EXIT)exit=&m->session.actions[i];
+    if(!exit)return;
+    if(exit->entity>=12)Die("Native co-op clear has no valid goal sprite");
+    CoopActor *winner=coop_machine_actor(m,exit->player);
+    CpuState caller=g_cpu;uint8_t scratch[16];memcpy(scratch,g_ram,sizeof(scratch));
+    uint8_t sprite=g_ram[0x15e9];
+    coop_guest_bind(&winner->guest,g_ram);bound_actor=winner;goal_commit=true;
+    g_cpu.P|=0x30;g_cpu.P&=(uint8_t)~8u;cpu_p_to_mirrors(&g_cpu);
+    g_cpu.X=exit->entity;g_cpu.Y&=0xff;g_cpu.D=0;g_cpu.DB=g_cpu.PB=1;
+    g_ram[0x15e9]=(uint8_t)exit->entity;
+    guest_jsr(&g_cpu,0x01c0e7);
+    goal_commit=false;bound_actor=NULL;capture(m,winner);
+    restore_registers(&g_cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
+    g_ram[0x15e9]=sprite;
+    CoopGuestPlayer entry=winner->guest;
+    for(size_t i=0;i<m->actor_count;++i) {
+        CoopActor *a=&m->actors[i];CoopPlayer *p=coop_player(&m->session,a->player);
+        CoopPower power=p->power;uint32_t reserve=p->reserve;
+        bool returning=p->life!=COOP_PLAYING;
+        if(p->life==COOP_DYING || p->life==COOP_DEATH_BUBBLE)power=COOP_SMALL;
+        coop_guest_bind(returning?&entry:&a->guest,g_ram);
+        g_ram[0x19]=(uint8_t)power;g_ram[0xdc2]=(uint8_t)reserve;
+        g_ram[0x71]=g_ram[0x78]=g_ram[0x1490]=g_ram[0x1496]=g_ram[0x1497]=0;
+        if(returning) {
+            g_ram[0x187a]=g_ram[0x1470]=g_ram[0x1471]=g_ram[0x148f]=0;
+            p->mount=p->held_object=COOP_NO_ENTITY;
+        }
+        p->life=COOP_PLAYING;p->recovery_ticks=p->separation_ticks=0;
+        p->checkpoint_upgrade=false;capture(m,a);
+    }
+    coop_guest_bind(&primary_actor(m)->guest,g_ram);
+}
 static void recover_and_frame(CoopMachine *m) {
     CoopSession *s=&m->session;
     bool resized=s->camera.width!=g_smw_viewport.width || s->camera.height!=224;
@@ -426,6 +540,7 @@ void SmwCoopSimulationEnd(void) {
     m->session.lives=g_ram[0xdbe]+1u;m->session.coins=g_ram[0xdbf];
     if(!coop_session_resolve(&m->session))Die("Native co-op event resolution failed");
     apply_checkpoint(m);
+    apply_clear(m);
     if(m->session.outcome==COOP_CONTINUE && room_request!=COOP_NO_PLAYER) {
         CoopActor *entrant=coop_machine_actor(m,room_request);
         /* 05:D796 selects ExitTableLow by the entrant's horizontal/vertical
@@ -459,7 +574,7 @@ void SmwCoopSimulationEnd(void) {
     static FILE *trace;
     if(path && *path && !trace) {
         trace=fopen(path,"w");
-        if(trace)fputs("frame,world_frame,player,x,y,power,animation,input,stack,life,recovery,lives,lock,camera_x,camera_y,protection,separation,reserve,mode,sublevel,level_data,room_request,checkpoint,checkpoint_upgrade\n",trace);
+        if(trace)fputs("frame,world_frame,player,x,y,power,animation,input,stack,life,recovery,lives,lock,camera_x,camera_y,protection,separation,reserve,mode,sublevel,level_data,room_request,checkpoint,checkpoint_upgrade,outcome,end_timer,peace,spotlight,goal_stars,exit_player,exit_flags\n",trace);
     }
     if(trace) {
         for(size_t i=0;i<m->actor_count;++i) {
@@ -468,14 +583,20 @@ void SmwCoopSimulationEnd(void) {
              * binding it into the running game's WRAM. */
             uint8_t animation=0;
             coop_guest_peek(&a->guest,0x71,&animation);
-            fprintf(trace,"%llu,%u,%u,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
+            CoopPlayerId exit_player=COOP_NO_PLAYER;unsigned exit_flags=0;
+            for(size_t j=0;j<m->session.action_count;++j)
+                if(m->session.actions[j].kind==COOP_ACTION_EXIT) {
+                    exit_player=m->session.actions[j].player;exit_flags=m->session.actions[j].value;
+                }
+            fprintf(trace,"%llu,%u,%u,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
                 (unsigned long long)m->session.frame,g_ram[0x14],p->id,p->x,p->y,
                 (unsigned)p->power,animation,p->held_input,g_cpu.S,(unsigned)p->life,
                 p->recovery_ticks,m->session.lives,g_ram[0x9d],
                 g_ram[0x1a]|(g_ram[0x1b]<<8),g_ram[0x1c]|(g_ram[0x1d]<<8),
                 p->protection_ticks,p->separation_ticks,p->reserve,g_ram[0x100],
                 g_ram[0x141a],(unsigned)(g_ram[0xce]|(g_ram[0xcf]<<8)|(g_ram[0xd0]<<16)),room_request,
-                m->session.checkpoint,p->checkpoint_upgrade?1u:0u);
+                m->session.checkpoint,p->checkpoint_upgrade?1u:0u,(unsigned)m->session.outcome,
+                g_ram[0x1493],g_ram[0x1b99],g_ram[0x1433],g_ram[0x1900],exit_player,exit_flags);
         }
         fflush(trace);
     }
