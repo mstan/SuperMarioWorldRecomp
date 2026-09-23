@@ -19,6 +19,7 @@ static unsigned camera_call_depth;
 static CoopActor *bound_actor;
 static bool level_frame;
 static bool timer_had_time;
+static bool gameplay_stage_started;
 static unsigned read16(unsigned at) {return g_ram[at]|(g_ram[at+1]<<8);}
 static void put16(unsigned at,unsigned value) {g_ram[at]=(uint8_t)value;g_ram[at+1]=(uint8_t)(value>>8);}
 
@@ -40,7 +41,10 @@ static void capture(CoopMachine *m,CoopActor *a) {
     coop_guest_read_player(coop_player(&m->session,a->player),g_ram);
 }
 static void initialize_room(CoopMachine *m) {
-    if(m->session.outcome==COOP_RETRY)coop_session_restart(&m->session);
+    if(m->session.outcome==COOP_GAME_OVER) {
+        for(size_t i=0;i<m->session.player_count;++i)m->session.players[i].reserve=0;
+        coop_session_restart(&m->session);
+    } else if(m->session.outcome==COOP_RETRY)coop_session_restart(&m->session);
     CoopGuestPlayer entry;coop_guest_capture(&entry,g_ram);
     for(size_t i=0;i<m->actor_count;++i) {
         CoopActor *a=&m->actors[i];CoopPlayer *p=coop_player(&m->session,a->player);
@@ -57,21 +61,55 @@ static void initialize_room(CoopMachine *m) {
     coop_guest_bind(&primary_actor(m)->guest,g_ram);
 }
 void SmwCoopSimulationBegin(void) {
-    level_frame=false;
+    level_frame=gameplay_stage_started=false;
     CoopMachine *m=SmwCoopMachine();if(!m)return;
     unsigned mode=g_ram[0x100];
     if(mode!=0x14) {m->previous_mode=mode;return;}
     if(!m->room_initialized || m->previous_mode!=0x14)initialize_room(m);
     m->previous_mode=mode;level_frame=true;
     timer_had_time=(g_ram[0xf31]|g_ram[0xf32]|g_ram[0xf33])!=0;
+    uint32_t shared_pressed=0;
     for(size_t i=0;i<m->actor_count;++i) {
         CoopActor *a=&m->actors[i];CoopPlayer *p=coop_player(&m->session,a->player);
         uint32_t actions=SNES_PAD_A|SNES_PAD_B|SNES_PAD_X|SNES_PAD_Y|SNES_PAD_SELECT;
         coop_player_input(p,RtlGetPadState((int)a->input_seat),actions);
+        shared_pressed|=p->pressed_input;
     }
-    bool advances=!g_ram[0x13d4] && !g_ram[0x1426] && !g_ram[0x9d] && !g_ram[0x13fb];
-    if(!coop_session_begin_frame(&m->session,advances))Die("Unable to begin native co-op frame");
+    if(g_ram[0x1426]) {
+        uint32_t menu=shared_pressed&(SNES_PAD_A|SNES_PAD_B|SNES_PAD_X|SNES_PAD_Y|SNES_PAD_START|SNES_PAD_SELECT);
+        uint16_t serial=SwapInputBits((uint16_t)menu);
+        coop_guest_set_input(g_ram,serial,serial);
+    } else if(shared_pressed&SNES_PAD_START)g_ram[0x16]|=0x10;
+    /* The original pause handler runs next. Advance timers only when its
+     * actual gameplay branch is reached, including the unpause frame. */
+    if(!coop_session_begin_frame(&m->session,false))Die("Unable to begin native co-op frame");
     capture(m,primary_actor(m));
+}
+
+static void begin_gameplay_stage(CoopMachine *m) {
+    if(gameplay_stage_started)return;
+    gameplay_stage_started=true;
+    bool scene=true;
+    for(size_t i=0;i<m->actor_count;++i) {
+        CoopActor *a=&m->actors[i];CoopPlayer *p=coop_player(&m->session,a->player);
+        uint8_t animation=0;coop_guest_peek(&a->guest,0x71,&animation);
+        if(p->life==COOP_PLAYING && animation<5)scene=false;
+    }
+    bool advances=!scene && !g_ram[0x1426] && !g_ram[0x9d] && !g_ram[0x13fb];
+    if(!coop_session_begin_frame(&m->session,advances))Die("Unable to begin native co-op gameplay stage");
+}
+
+static void party_pause(CoopMachine *m) {
+    if(!(g_ram[0x16]&0x10) || g_ram[0x1493])return;
+    bool eligible=false;
+    for(size_t i=0;i<m->actor_count;++i) {
+        uint8_t animation=0;CoopActor *a=&m->actors[i];
+        coop_guest_peek(&a->guest,0x71,&animation);
+        eligible|=coop_player(&m->session,a->player)->life==COOP_PLAYING && animation<9;
+    }
+    if(!eligible)return;
+    g_ram[0x13d3]=0x3c;g_ram[0x13d4]^=1;
+    g_ram[0x1df9]=g_ram[0x13d4]?0x11:0x12;
 }
 
 static void tick_secondary_timers(void) {
@@ -274,6 +312,8 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
     if(!level_frame)return 0;
     CoopMachine *m=SmwCoopMachine();if(!m)return 0;
     pc&=0x7fffff;
+    if(pc==0x00a21b) {party_pause(m);return 0x00a242;}
+    if(pc==0x00a28a)begin_gameplay_stage(m);
     if(pc==0x00f606 || pc==0x00f60a || pc==0x00d0b6)return death_hook(cpu,m,pc);
     if(pc==0x00e9a1 && g_ram[0x1411]) {
         /* The original E9A1 edge clamp prevents separation grace. Keep real

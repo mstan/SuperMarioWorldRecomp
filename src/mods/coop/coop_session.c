@@ -276,7 +276,9 @@ void coop_player_input(CoopPlayer *p, uint32_t held, uint32_t action_mask) {
     p->held_input = effective;
     if (p->life != COOP_PLAYING) {
         p->action_latch |= held & action_mask;
-        p->pressed_input = 0;
+        /* Session controls outside action_mask (for example Start) remain
+         * available while an actor is dying or waiting to return. */
+        p->pressed_input &= ~action_mask;
     }
 }
 

@@ -13,7 +13,12 @@ MARKER = '/*SMW-NATIVE-COOP*/'
 
 def sites():
     source = (ROOT / 'src/mods/coop/coop_hooks.def').read_text()
-    return {int(s, 16) for s in re.findall(r'COOP_HOOK\((0x[0-9A-Fa-f]+)\)', source)}
+    return {int(s, 16) for s in re.findall(r'COOP_HOOK(?:_INSIDE)?\((0x[0-9A-Fa-f]+)', source)}
+
+def containing_entries():
+    source = (ROOT / 'src/mods/coop/coop_hooks.def').read_text()
+    return {int(pc,16):int(owner,16) for pc,owner in re.findall(
+        r'COOP_HOOK_INSIDE\((0x[0-9A-Fa-f]+),\s*(0x[0-9A-Fa-f]+)\)',source)}
 
 def apply(text, required):
     text = re.sub(r'^.*?/\*SMW-NATIVE-COOP\*/[^\n]*\n', '', text, flags=re.M)
@@ -38,6 +43,13 @@ def interpreted_entries(dispatch):
         r'\{\s*0x([0-9A-Fa-f]+)u?\s*,\s*\{\s*NULL\s*,\s*NULL\s*,\s*NULL\s*,\s*NULL\s*\}',
         dispatch)}
 
+def interpreted_coverage(dispatch,owners):
+    entries=interpreted_entries(dispatch)
+    # Interior boundaries require an audited containing entry in the manifest.
+    # If even one variant of that entry becomes compiled, these interior hooks
+    # must be found in its emitted blocks or the build stops for a new audit.
+    return entries|{pc for pc,owner in owners.items() if owner in entries}
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--gen-dir', type=Path, required=True)
@@ -50,14 +62,14 @@ def main():
         found.update(seen)
         if changed != text:
             updates.append((path, changed))
-    interpreted = interpreted_entries((args.gen_dir / 'dispatch_v2.c').read_text(encoding='utf-8'))
+    interpreted = interpreted_coverage((args.gen_dir / 'dispatch_v2.c').read_text(encoding='utf-8'),containing_entries())
     missing = required - found - interpreted
     if missing:
         raise SystemExit('Missing native co-op boundaries: ' + ', '.join(f'{pc:06X}' for pc in sorted(missing)))
     for path, text in updates:
         path.write_text(text, encoding='utf-8', newline='\n')
     print(f'Native co-op hooks: {len(found)} compiled sites, '
-          f'{len((required-found)&interpreted)} interpreted entries, {len(updates)} banks updated')
+          f'{len((required-found)&interpreted)} interpreter sites, {len(updates)} banks updated')
 
 if __name__ == '__main__':
     main()
