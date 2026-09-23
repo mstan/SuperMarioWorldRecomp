@@ -115,6 +115,7 @@ bool coop_session_init(CoopSession *s, size_t count, uint32_t ticks_per_second);
 void coop_session_destroy(CoopSession *s);
 CoopPlayer *coop_player(CoopSession *s, CoopPlayerId id);
 const CoopPlayer *coop_player_const(const CoopSession *s, CoopPlayerId id);
+bool coop_player_precedes(const CoopSession *s,CoopPlayerId a,CoopPlayerId b);
 size_t coop_active_count(const CoopSession *s);
 bool coop_session_begin_frame(CoopSession *s, bool gameplay_advances);
 bool coop_session_event(CoopSession *s, CoopEvent event);

@@ -121,7 +121,7 @@ static uint64_t distance2(int32_t ax, int32_t ay, int32_t bx, int32_t by) {
     return UINT64_MAX - x < y ? UINT64_MAX : x + y;
 }
 
-static bool player_before(const CoopSession *s, CoopPlayerId a, CoopPlayerId b) {
+bool coop_player_precedes(const CoopSession *s, CoopPlayerId a, CoopPlayerId b) {
     if (a == b) return false;
     if (a == s->primary) return true;
     if (b == s->primary) return false;
@@ -137,7 +137,7 @@ CoopPlayerId coop_nearest_player(const CoopSession *s, int32_t x, int32_t y,
         if (p->life != COOP_PLAYING || (match_fence && p->behind_fence != behind_fence)) continue;
         uint64_t d = distance2(x, y, p->x, p->y);
         if (winner == COOP_NO_PLAYER || d < best ||
-            (d == best && player_before(s, p->id, winner))) {
+            (d == best && coop_player_precedes(s, p->id, winner))) {
             best = d; winner = p->id;
         }
     }
@@ -184,7 +184,7 @@ bool coop_session_resolve(CoopSession *s) {
         if (e->value > goal_stars) goal_stars = e->value;
         if (!exit || ((e->flags & COOP_EVENT_SECRET) > (exit->flags & COOP_EVENT_SECRET)) ||
             ((e->flags & COOP_EVENT_SECRET) == (exit->flags & COOP_EVENT_SECRET) &&
-             player_before(s, e->player, exit->player))) exit = e;
+             coop_player_precedes(s, e->player, exit->player))) exit = e;
     }
     /* Lethal hits precede nonlethal reserve drops and catch-up. */
     for (size_t i = 0; i < s->event_count; ++i) {
@@ -210,7 +210,7 @@ bool coop_session_resolve(CoopSession *s) {
                 if (!actor || actor->life != COOP_PLAYING) continue;
                 if (!winner || v->distance_squared < winner->distance_squared ||
                     (v->distance_squared == winner->distance_squared &&
-                     player_before(s, v->player, winner->player))) winner = v;
+                     coop_player_precedes(s, v->player, winner->player))) winner = v;
                 if (e->kind == COOP_EVENT_ENEMY_CONTACT && (v->flags & COOP_EVENT_STOMP) &&
                     bounced != v->player) {
                     emit(s, COOP_ACTION_STOMP_BOUNCE, v->player, v->entity, 0);
@@ -326,7 +326,7 @@ bool coop_camera_frame(CoopSession *s, int32_t w, int32_t h,
             const CoopPlayer *p = &s->players[i];
             if (p->life != COOP_PLAYING) continue;
             int64_t progress = (int64_t)(horizontal ? p->x : p->y) * travel;
-            if (!leader || progress > best || (progress == best && player_before(s,p->id,leader->id))) {
+            if (!leader || progress > best || (progress == best && coop_player_precedes(s,p->id,leader->id))) {
                 best = progress; leader = p;
             }
         }
@@ -392,7 +392,7 @@ bool coop_session_recover(CoopSession *s, CoopSafePlacement safe, void *context)
             int32_t x = 0, y = 0;
             if (!safe(p, a, &x, &y, context)) continue;
             uint64_t d = distance2(p->x, p->y, x, y);
-            if (winner == COOP_NO_PLAYER || d < best || (d == best && player_before(s,a->id,winner))) {
+            if (winner == COOP_NO_PLAYER || d < best || (d == best && coop_player_precedes(s,a->id,winner))) {
                 winner = a->id; best = d; wx = x; wy = y;
             }
         }
