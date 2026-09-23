@@ -275,6 +275,39 @@ reloading hotkeys preserves those assignments. Recorded input accepts `p1.` and
 retain their existing player-1 meaning. These are host input limits, separate
 from the dynamic simulation roster.
 
+### Goal tape and shared victory sequence
+
+The goal tape moves and draws once. At `01:C0C2`, after motion and before its
+player crossing tests, the adapter runs the original post-X/bottom-Y checks
+against each eligible actor image. `01:C0E7` records accepted crossings before
+music, freeze, sprite conversion, or reward effects. The tape's custom-contact
+flag makes `01:A7E4` a contact query; the original clipping/fence/animation
+rules determine whether the actor also touched the moving tape for stars.
+
+Frame-end core resolution selects secret before normal, then primary/stable
+player ID. The highest valid tape result is retained separately from the exit
+owner. The ROM table at `07:F1AA` stores packed BCD (including `$50` for fifty
+stars); that representation is monotonic and is the adapter's event value.
+The winning tape's original `01:C0E7` effects run once. At `01:C107`, its contact
+branch uses the collected team result; `07:F252` receives the highest valid
+tape height and executes the original star and exceptional three-life reward.
+The original sprite-to-coin conversion also runs once.
+
+Only the primary actor executes the shared `00:C915` victory director: palette
+fade, score conversion, music, peace-sign phase, spotlight, and game-mode change.
+Other actors use the original actor motion and peace-pose routines, keeping
+their own equipment and positions. Primary executes first even if serialized
+actor records are reordered. Dead/waiting actors return small with their own
+reserves; catch-up actors retain their equipment. A valid clear overrides
+same-frame death/timeout without charging a life. The next gameplay entry
+returns the core outcome to normal and preserves the surviving equipment.
+
+Goal collection state is temporary within one host frame; committed scene
+state is already in the guest and native actor snapshot. No snapshot schema
+change or custom UI is needed. Other completion mechanisms (sphere, keyhole,
+boss/switch scripts), mounted/carried-object rewards, bonus-room participation,
+and full campaign coverage still require their own adapters and validation.
+
 ### Independent graphics
 
 `coop_presentation.c` captures the ROM's body/cape pieces after selecting each
@@ -528,6 +561,48 @@ the interior hook must appear in the generated blocks or the build fails.
   stronger power, pending recovery upgrades, exact state replay, and midpoint
   retry invariants. No dispatch misses or unresolved-abandon messages occurred
   in these runs. Hook coverage is now 13 compiled and three interpreter sites.
+
+### Goal tape validation (2026-09-23)
+
+- `native-coop-goal` stages positions near YI2's original goal and uses real
+  controller input. Luigi owns the single exit while Mario remains behind;
+  powers big/fire, reserves mushroom/flower, five lives and stack 511 persist.
+  Frame 550 shows both actors in the original course-clear walk. The complete
+  victory trace reaches mode `$0C` with one shared timer decrement every two
+  frames, one peace phase, and one spotlight close.
+- `native-coop-goal-contacts` uses an explicit offline fixture with a second
+  copy of the naturally loaded goal sprite. Simultaneous normal exits choose
+  Mario, while Luigi's fifty-star contact wins the reward over Mario's six.
+  The original fifty-star graphic is visible at frame 140; exactly three lives
+  are awarded (five to eight). This synthetic conflict is not campaign evidence.
+- `native-coop-goal-secret-timeout` makes Luigi's tape secret and expires TIME
+  on the contact frame. The result is Luigi's secret exit and fifty stars;
+  Mario returns small, Luigi stays fire, both retain reserves, and no life is
+  charged. Captured WRAM confirms TIME 000 and `SecretGoalTape=1`. Both scheduler
+  settings produce identical 1,126 actor records. The final life total is nine:
+  native `05:CC77` independently grants one life when the existing bonus-star
+  tens digit matches both final time digits (zero/00), in addition to the tape's
+  three lives. The checker explicitly accounts for this original rule.
+- `native-coop-goal-waiting` starts Mario in a recovery bubble. Luigi's clear
+  brings Mario back small immediately for the scene, preserving his mushroom
+  reserve and awarding the same single fifty-star reward.
+- `native-coop-goal-state` restores the same mid-victory snapshot twice;
+  all 936 actor records through the scene transition match exactly.
+  `native-coop-goal-reenter` finishes the clear, returns to the overworld, and
+  enters YI3 using the normal selection button. Its 1,246 subsequent actor
+  records resume normal gameplay with big Mario/fire Luigi and separate
+  reserves; a fresh Luigi input moves only Luigi. Frame 1410 shows both actors
+  in that next level.
+- `tools/make_coop_goal_fixture.py` stages an entrance copy near the goal or,
+  with `--contacts normal|secret`, copies a naturally loaded goal into an empty
+  stock sprite slot for conflict tests. Capture that source with a normal
+  scripted save before crossing; script state slots are 0..15. `--timeout`
+  sets the divider to 0, because `UpdateStatusBar` decrements it before its BPL
+  test. These tools never modify or pause a running guest.
+  `tools/check_coop_goal_trace.py` validates owner/reward priority, single scene
+  cadence, equipment, stack, life totals, replay, and execution-mode equality.
+  No dispatch misses or unresolved-abandon messages occurred in accepted runs.
+  Hook coverage is 18 compiled and three interpreter sites.
 
 ### Compiler table-boundary correction found by co-op validation
 

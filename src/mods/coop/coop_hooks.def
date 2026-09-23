@@ -15,3 +15,8 @@ COOP_HOOK_INSIDE(0x00A21B,0x00A1DA) /* Shared pause, inside GM14Level */
 COOP_HOOK_INSIDE(0x00A28A,0x00A1DA) /* GM14 gameplay after pause/messages */
 COOP_HOOK(0x00D273) /* Collect pipe/door room requests before one team commit */
 COOP_HOOK(0x00F2CD) /* Valid midway tape contact before native removal/effects */
+COOP_HOOK(0x01C0C2) /* Goal tape after movement, before player crossing tests */
+COOP_HOOK(0x01C0E7) /* Goal crossing accepted, before shared clear effects */
+COOP_HOOK(0x01C107) /* Goal bonus contact result before shared award */
+COOP_HOOK(0x07F252) /* Native goal star lookup and exceptional 3-up award */
+COOP_HOOK(0x00C915) /* Shared victory director; followers run only actor motion */
