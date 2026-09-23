@@ -22,3 +22,6 @@ COOP_HOOK(0x07F252) /* Native goal star lookup and exceptional 3-up award */
 COOP_HOOK(0x00C915) /* Shared victory director; followers run only actor motion */
 COOP_HOOK(0x018773) /* Goal sphere after graphics/sparkles, before contact */
 COOP_HOOK(0x018778) /* Goal sphere contact before native shared clear effects */
+COOP_HOOK(0x07F722) /* Sprite initialization retires the previous slot identity */
+COOP_HOOK(0x05D8B7) /* Native loader has resolved the complete 9-bit room number */
+COOP_HOOK(0x02ABF2) /* Room sprite cleanup preserves every owned carried object */

@@ -62,6 +62,20 @@ void SpawnBounceSprite(CpuState *cpu)
 {
     (void)consume_native_frame(cpu, 3, 2);
 }
+void SpawnBrickPieces(CpuState *cpu)
+{
+    (void)consume_native_frame(cpu, 3, 2);
+}
+void GetPlayerLevelCollisionMap16ID_Entry2(CpuState *cpu)
+{
+    if (!consume_native_frame(cpu, 2, 0)) return;
+    cpu->A = 0x25; /* This sprite-contact fixture has empty terrain. */
+    cpu->ram[0x1693] = 0;
+}
+void GenerateTile(CpuState *cpu)
+{
+    (void)consume_native_frame(cpu, 3, 0);
+}
 void KillNormalSprite_AcceptedConsequence(CpuState *cpu)
 {
     const unsigned slot = cpu != NULL ? cpu->X & 0xffu : 12u;
@@ -130,6 +144,23 @@ int main(void)
 {
     CpuState cpu;
 
+    memset(g_ram, 0, sizeof(g_ram));
+    /* Inert hooks must preserve every native controller bit, including
+     * Y/Down, through the compiled sprite seam and native state restore. */
+    misc_game_mode = 0x14;
+    for (unsigned buttons = 0; buttons < 256; ++buttons) {
+        io_controller_hold1 = io_controller_press1 = (uint8_t)buttons;
+        io_controller_hold2 = io_controller_press2 = (uint8_t)~buttons;
+        SmwFalconBeforePlayerPhysics(NULL);
+        SmwFalconBeforePhysics(NULL);
+        SmwFalconAfterPhysics(NULL);
+        SmwFalconBeforeNormalSprites(NULL);
+        SmwFalconOnStateLoaded();
+        if (io_controller_hold1 != buttons || io_controller_press1 != buttons ||
+            io_controller_hold2 != (uint8_t)~buttons ||
+            io_controller_press2 != (uint8_t)~buttons)
+            return fail("disabled Falcon preserves native controller input");
+    }
     memset(g_ram, 0, sizeof(g_ram));
     if (!smw_captain_falcon_register() ||
         !snes_foreign_select(SMW_CAPTAIN_FALCON_ID))

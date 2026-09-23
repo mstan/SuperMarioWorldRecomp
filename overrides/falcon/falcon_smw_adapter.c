@@ -526,6 +526,10 @@ static void smw_falcon_clear_carry_bridge(void)
     s_foreign_pad.carry_down = 0;
     s_foreign_pad.carry_valid = 0;
 
+    /* Disabled hooks still run at compiled sprite boundaries and state load.
+     * Native Y/Down belongs to the current native player in that mode. */
+    if (!snes_foreign_active()) return;
+
     /* These bits were emitted only after native player physics. Remove them
      * when a scripted handoff preempts the normal next-frame input refresh. */
     io_controller_hold1 &= (uint8_t)~0x44;  /* translated Y and Down */

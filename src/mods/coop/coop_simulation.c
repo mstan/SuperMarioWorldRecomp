@@ -16,6 +16,7 @@
 static unsigned player_call_depth;
 static unsigned sprite_call_depth;
 static unsigned camera_call_depth;
+static unsigned room_sprite_depth;
 static CoopActor *bound_actor;
 static bool level_frame;
 static bool timer_had_time;
@@ -49,11 +50,79 @@ static void capture(CoopMachine *m,CoopActor *a) {
     coop_guest_capture(&a->guest,g_ram);
     coop_guest_read_player(coop_player(&m->session,a->player),g_ram);
 }
+static CoopEntity *normal_entity(CoopMachine *m,unsigned slot,bool reset) {
+    CoopEntity *e=reset?NULL:coop_machine_entity_slot(m,COOP_ENTITY_NORMAL,slot);
+    if(!e)e=coop_machine_spawn_entity(m,COOP_ENTITY_NORMAL,slot,g_ram[0x9e + slot]);
+    if(!e)Die("Native co-op could not allocate a sprite identity");
+    e->type=g_ram[0x9e + slot];return e;
+}
+static void release_owner(CoopMachine *m,CoopEntity *e) {
+    CoopPlayer *p=coop_player(&m->session,e->owner);
+    if(p && p->held_object==e->id)p->held_object=COOP_NO_ENTITY;
+    e->owner=COOP_NO_PLAYER;e->flags=0;
+}
+static void claim_carried(CoopMachine *m,CoopEntity *e,CoopActor *a) {
+    if(e->owner!=COOP_NO_PLAYER && e->owner!=a->player)
+        Die("Native co-op attempted to transfer an owned carried sprite");
+    CoopPlayer *p=coop_player(&m->session,a->player);
+    if(e->type==0x7d) {e->owner=p->id;e->flags=COOP_ENTITY_ATTACHED;return;}
+    if(p->held_object!=COOP_NO_ENTITY && p->held_object!=e->id)
+        Die("Native co-op actor attempted to carry two exclusive objects");
+    e->owner=p->id;e->flags=COOP_ENTITY_HELD;p->held_object=e->id;
+}
+static void retire_released_objects(CoopMachine *m) {
+    for(size_t i=0;i<m->entity_count;) {
+        CoopEntity *e=&m->entities[i];
+        if(e->kind==COOP_ENTITY_NORMAL) {
+            if(!g_ram[0x14c8+e->slot]) {coop_machine_forget_entity(m,e->id);continue;}
+            if(g_ram[0x14c8+e->slot]!=0x0b &&
+               (e->flags&(COOP_ENTITY_HELD|COOP_ENTITY_ATTACHED)))release_owner(m,e);
+        }
+        ++i;
+    }
+}
 static void guest_jsr(CpuState *cpu,uint32_t entry) {
     unsigned stack=cpu->S;
     cpu_push_jsr_return_frame(cpu);
     if(!interp_bridge_run(cpu,entry) || cpu->S!=stack)
         Die("Native co-op scoped guest routine failed its return contract");
+}
+static void carry_through_room(CpuState *cpu,CoopMachine *m) {
+    /* 02:ABF2 normally keeps one carried sprite and moves it to slot zero.
+     * Preserve every owned carried sprite across that same cleanup, then
+     * initialize each exactly as the native carried-sprite entrance does.
+     * Twelve is the original normal-sprite capacity, not a roster limit. */
+    struct Transport {CoopEntity entity;unsigned x,y;uint8_t palette;} carried[12];
+    size_t count=0;
+    for(unsigned slot=0;slot<12;++slot)if(g_ram[0x14c8+slot]==0x0b) {
+        CoopEntity *e=coop_machine_entity_slot(m,COOP_ENTITY_NORMAL,slot);
+        if(!e || e->owner==COOP_NO_PLAYER)
+            Die("Native co-op room entrance has an unowned carried sprite");
+        carried[count++]=(struct Transport){*e,
+            g_ram[0xe4+slot]|(g_ram[0x14e0+slot]<<8),
+            g_ram[0xd8+slot]|(g_ram[0x14d4+slot]<<8),g_ram[0x15f6+slot]};
+        g_ram[0x14c8+slot]=0;
+    }
+    ++room_sprite_depth;guest_jsr(cpu,0x02abf2);
+    CpuState completed=*cpu;uint8_t scratch[16];memcpy(scratch,g_ram,sizeof(scratch));
+    while(m->entity_count)coop_machine_forget_entity(m,m->entities[0].id);
+    /* Capacity already held these records before cleanup. Stable identities
+     * survive transport even though the native slot numbers change. */
+    for(size_t i=0;i<count;++i) {
+        struct Transport *t=&carried[i];unsigned slot=(unsigned)i;
+        g_ram[0x14c8+slot]=0x0b;g_ram[0x9e + slot]=(uint8_t)t->entity.type;
+        g_ram[0xe4+slot]=(uint8_t)t->x;g_ram[0x14e0+slot]=(uint8_t)(t->x>>8);
+        g_ram[0xd8+slot]=(uint8_t)t->y;g_ram[0x14d4+slot]=(uint8_t)(t->y>>8);
+        restore_registers(cpu,&completed);cpu->X=(uint16_t)slot;
+        unsigned stack=cpu->S;cpu_push_jsl_return_frame(cpu);
+        if(!interp_bridge_run(cpu,0x07f7d2) || cpu->S!=stack)
+            Die("Native co-op carried entrance failed its return contract");
+        g_ram[0x15f6+slot]=t->palette;
+        t->entity.slot=slot;m->entities[m->entity_count++]=t->entity;
+        CoopPlayer *p=coop_player(&m->session,t->entity.owner);
+        if(t->entity.flags==COOP_ENTITY_HELD)p->held_object=t->entity.id;
+    }
+    --room_sprite_depth;restore_registers(cpu,&completed);memcpy(g_ram,scratch,sizeof(scratch));
 }
 static void collect_goal(CpuState *cpu,CoopMachine *m,uint32_t query) {
     if(!m->session.advancing)return;
@@ -111,6 +180,7 @@ static uint32_t follow_victory(CpuState *cpu,CoopMachine *m) {
     return 0x00cd24;
 }
 static void initialize_room(CoopMachine *m) {
+    retire_released_objects(m);
     if(m->session.outcome==COOP_GAME_OVER) {
         for(size_t i=0;i<m->session.player_count;++i)m->session.players[i].reserve=0;
         coop_session_restart(&m->session);
@@ -134,6 +204,7 @@ static void initialize_room(CoopMachine *m) {
         if(m->room_initialized || a->player!=m->session.primary) {
             g_ram[0x19]=(uint8_t)p->power;g_ram[0xdc2]=(uint8_t)p->reserve;
         }
+        g_ram[0x1470]=g_ram[0x148f]=(uint8_t)(p->held_object!=COOP_NO_ENTITY);
         capture(m,a);
         a->pending.count=a->visible.count=0;
     }
@@ -295,13 +366,23 @@ static void run_player_routines(CpuState *cpu,CoopMachine *m) {
     coop_guest_bind(&primary->guest,g_ram);
 }
 static bool run_normal_sprite(CpuState *cpu,CoopMachine *m) {
-    unsigned slot=cpu->X&0xff;if(slot>=12 || !g_ram[0x14c8+slot])return false;
+    unsigned slot=cpu->X&0xff;if(slot>=12)return false;
+    CoopEntity *e=coop_machine_entity_slot(m,COOP_ENTITY_NORMAL,slot);
+    if(!g_ram[0x14c8+slot]) {
+        if(e)coop_machine_forget_entity(m,e->id);
+        return false;
+    }
+    e=normal_entity(m,slot,false);
     CoopActor *primary=primary_actor(m);capture(m,primary);
     int x=(g_ram[0xe4+slot]|(g_ram[0x14e0+slot]<<8))+8;
     int y=(g_ram[0xd8+slot]|(g_ram[0x14d4+slot]<<8))+8;
-    CoopPlayerId target=coop_nearest_player(&m->session,x,y,false,false);
+    CoopPlayerId target=e->owner!=COOP_NO_PLAYER?e->owner:
+        coop_nearest_player(&m->session,x,y,false,false);
     CoopActor *a=coop_machine_actor(m,target);
-    if(!a || a==primary)return false;
+    if(!a)a=primary;
+    unsigned previous_status=g_ram[0x14c8+slot];
+    if(previous_status==0x0b && e->owner==COOP_NO_PLAYER)
+        Die("Native co-op encountered a carried sprite without an owner");
     CpuState caller=*cpu;uint8_t scratch[16];memcpy(scratch,g_ram,sizeof(scratch));
     coop_guest_bind(&a->guest,g_ram);
     bound_actor=a;
@@ -309,6 +390,10 @@ static bool run_normal_sprite(CpuState *cpu,CoopMachine *m) {
     if(!interp_bridge_run(cpu,0x018127) || cpu->S!=caller.S)
         Die("Native co-op sprite routine failed its guest return contract");
     --sprite_call_depth;bound_actor=NULL;capture(m,a);
+    e=normal_entity(m,slot,false);
+    if(!g_ram[0x14c8+slot])coop_machine_forget_entity(m,e->id);
+    else if(g_ram[0x14c8+slot]==0x0b)claim_carried(m,e,a);
+    else if(e->flags&(COOP_ENTITY_HELD|COOP_ENTITY_ATTACHED))release_owner(m,e);
     restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
     coop_guest_bind(&primary->guest,g_ram);
     return true;
@@ -320,7 +405,7 @@ static void prepare_world_contacts(CoopMachine *m) {
         coop_guest_bind(&a->guest,g_ram);
         /* Per-actor occupancy bookkeeping at CODE_01808C. World Yoshi-slot
          * bookkeeping is separate and requires the mount ownership adapter. */
-        g_ram[0x148f]=g_ram[0x1470];g_ram[0x1470]=0;
+        g_ram[0x1470]=g_ram[0x148f];g_ram[0x148f]=0;
         g_ram[0x1471]=0;g_ram[0x18c2]=0;
         capture(m,a);
     }
@@ -398,9 +483,20 @@ static void run_team_camera(CpuState *cpu,CoopMachine *m) {
     coop_guest_bind(&primary->guest,g_ram);
 }
 uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
-    if(!level_frame)return 0;
     CoopMachine *m=SmwCoopMachine();if(!m)return 0;
     pc&=0x7fffff;
+    if(pc==0x05d8b7) {m->level=read16(0x0e);return 0;}
+    if(pc==0x02abf2 && !room_sprite_depth) {
+        carry_through_room(cpu,m);return 0x02ac5b;
+    }
+    if(!level_frame)return 0;
+    if(pc==0x07f722 && !room_sprite_depth) {
+        unsigned slot=cpu->X&0xff;
+        if(slot<12) {
+            CoopEntity *e=normal_entity(m,slot,true);
+            if(g_ram[0x14c8+slot]==0x0b && bound_actor)claim_carried(m,e,bound_actor);
+        }
+    }
     if(pc==0x01c0c2 && !goal_query) {collect_goal(cpu,m,pc);return 0x01c12c;}
     if(pc==0x01c0e7 && goal_query) {record_goal(cpu,m);return 0x01c12c;}
     if(pc==0x018773 && !goal_query) {collect_goal(cpu,m,pc);return 0x018788;}
@@ -457,6 +553,34 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
 }
 static bool safe_recovery(const CoopPlayer *p,const CoopPlayer *anchor,int32_t *x,int32_t *y,void *context) {
     return coop_terrain_safe(context,p,anchor,x,y);
+}
+static void apply_object_drops(CoopMachine *m) {
+    CpuState caller=g_cpu;uint8_t scratch[16];memcpy(scratch,g_ram,sizeof(scratch));
+    uint8_t sprite=g_ram[0x15e9];
+    for(size_t i=0;i<m->session.action_count;++i) {
+        const CoopAction *action=&m->session.actions[i];
+        if(action->kind!=COOP_ACTION_DROP_OBJECT)continue;
+        CoopEntity *e=coop_machine_entity(m,action->entity);
+        if(!e || e->owner!=action->player || e->flags!=COOP_ENTITY_HELD)continue;
+        unsigned slot=e->slot;CoopActor *a=coop_machine_actor(m,action->player);
+        coop_guest_bind(&a->guest,g_ram);bound_actor=a;
+        if(g_ram[0x14c8+slot]==0x0b) {
+            uint8_t input[4];memcpy(input,g_ram+0x15,sizeof(input));
+            g_ram[0x15]=4;g_ram[0x16]=g_ram[0x17]=g_ram[0x18]=0;
+            g_ram[0x15e9]=(uint8_t)slot;
+            restore_registers(&g_cpu,&caller);g_cpu.P|=0x30;g_cpu.P&=(uint8_t)~8u;
+            cpu_p_to_mirrors(&g_cpu);g_cpu.D=0;g_cpu.DB=g_cpu.PB=1;
+            g_cpu.X=(uint16_t)slot;g_cpu.Y&=0xff;
+            /* Native release with Down held: drop rather than throw/kick. */
+            guest_jsr(&g_cpu,0x01a015);
+            memcpy(g_ram+0x15,input,sizeof(input));
+        }
+        g_ram[0x1470]=g_ram[0x148f]=0;capture(m,a);
+        e=coop_machine_entity(m,action->entity);if(e)release_owner(m,e);
+    }
+    bound_actor=NULL;restore_registers(&g_cpu,&caller);
+    memcpy(g_ram,scratch,sizeof(scratch));g_ram[0x15e9]=sprite;
+    coop_guest_bind(&primary_actor(m)->guest,g_ram);
 }
 static void apply_checkpoint(CoopMachine *m) {
     bool activated=false;
@@ -547,6 +671,8 @@ static void recover_and_frame(CoopMachine *m) {
     s->camera.x=(int)read16(0x1a)-SmwViewOffset(g_smw_viewport,(int)read16(0x1a),(g_ram[0x5e]+1)*256);
     s->camera.y=(int)read16(0x1c);
     if(!coop_camera_check_separation(s,resized))Die("Native co-op separation check failed");
+    /* Drop before recovery binds a new position: objects stay at departure. */
+    apply_object_drops(m);
     CoopTerrain terrain={g_ram,g_rom,0x80000}; /* validated stock-US ROM */
     if(!coop_session_recover(s,safe_recovery,&terrain))Die("Native co-op recovery failed");
     for(size_t i=0;i<s->action_count;++i) {
@@ -595,6 +721,7 @@ void SmwCoopSimulationEnd(void) {
             Die("Native co-op could not record a scripted level clear");
     }
     if(!coop_session_resolve(&m->session))Die("Native co-op event resolution failed");
+    apply_object_drops(m);
     apply_checkpoint(m);
     apply_clear(m);
     if(m->session.outcome==COOP_CONTINUE && room_request!=COOP_NO_PLAYER) {
@@ -607,8 +734,25 @@ void SmwCoopSimulationEnd(void) {
             g_ram[at]=value;
         }
         ++g_ram[0x141a];g_ram[0x100]=0x0f;
-    } else if(m->session.outcome==COOP_CONTINUE)recover_and_frame(m);
+    } else if(m->session.outcome==COOP_CONTINUE) {
+        recover_and_frame(m);
+    }
     if(m->session.outcome==COOP_RETRY || m->session.outcome==COOP_GAME_OVER) {
+        /* Timeout can end the attempt while a survivor is still carrying.
+         * No owned entity from that attempt may enter the native room loader. */
+        for(size_t i=0;i<m->entity_count;) {
+            CoopEntity *e=&m->entities[i];
+            if(e->owner==COOP_NO_PLAYER) {++i;continue;}
+            if(e->kind==COOP_ENTITY_NORMAL)g_ram[0x14c8+e->slot]=0;
+            else g_ram[0x170b+e->slot]=0;
+            coop_machine_forget_entity(m,e->id);
+        }
+        for(size_t i=0;i<m->actor_count;++i) {
+            CoopActor *a=&m->actors[i];coop_guest_bind(&a->guest,g_ram);
+            g_ram[0x1470]=g_ram[0x148f]=g_ram[0x187a]=0;
+            g_ram[0x13f3]=g_ram[0x1891]=0;capture(m,a);
+        }
+        coop_guest_bind(&primary_actor(m)->guest,g_ram);
         g_ram[0xdbe]=(uint8_t)(m->session.lives-1u);
         g_ram[0xdc1]=0; /* no mount carried out of the failed attempt */
         g_ram[0x9d]=0;g_ram[0x0daf]=1;
@@ -625,12 +769,13 @@ void SmwCoopSimulationEnd(void) {
             g_ram[0x143c]=0xc0;g_ram[0x143d]=0xff;g_ram[0x100]=0x15;
         }
     }
+    retire_released_objects(m);
     /* Read-only running trace for proving per-actor motion and world cadence. */
     const char *path=getenv("SMW_COOP_TRACE");
     static FILE *trace;
     if(path && *path && !trace) {
         trace=fopen(path,"w");
-        if(trace)fputs("frame,world_frame,player,x,y,power,animation,input,stack,life,recovery,lives,lock,camera_x,camera_y,protection,separation,reserve,mode,sublevel,level_data,room_request,checkpoint,checkpoint_upgrade,outcome,end_timer,peace,spotlight,goal_stars,exit_player,exit_flags\n",trace);
+        if(trace)fputs("frame,world_frame,player,x,y,power,animation,input,stack,life,recovery,lives,lock,camera_x,camera_y,protection,separation,reserve,mode,sublevel,level_data,room_request,checkpoint,checkpoint_upgrade,outcome,end_timer,peace,spotlight,goal_stars,exit_player,exit_flags,held_object,held_slot,held_status,held_x,held_y,level,drop_entity,drop_x,drop_y\n",trace);
     }
     if(trace) {
         for(size_t i=0;i<m->actor_count;++i) {
@@ -644,7 +789,15 @@ void SmwCoopSimulationEnd(void) {
                 if(m->session.actions[j].kind==COOP_ACTION_EXIT) {
                     exit_player=m->session.actions[j].player;exit_flags=m->session.actions[j].value;
                 }
-            fprintf(trace,"%llu,%u,%u,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
+            const CoopEntity *held=coop_machine_entity(m,p->held_object);
+            const CoopEntity *dropped=NULL;
+            for(size_t j=0;j<m->session.action_count;++j) {
+                const CoopAction *action=&m->session.actions[j];
+                if(action->kind==COOP_ACTION_DROP_OBJECT && action->player==p->id)
+                    dropped=coop_machine_entity(m,action->entity);
+            }
+            unsigned slot=held?held->slot:12;
+            fprintf(trace,"%llu,%u,%u,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
                 (unsigned long long)m->session.frame,g_ram[0x14],p->id,p->x,p->y,
                 (unsigned)p->power,animation,p->held_input,g_cpu.S,(unsigned)p->life,
                 p->recovery_ticks,m->session.lives,g_ram[0x9d],
@@ -652,7 +805,13 @@ void SmwCoopSimulationEnd(void) {
                 p->protection_ticks,p->separation_ticks,p->reserve,g_ram[0x100],
                 g_ram[0x141a],(unsigned)(g_ram[0xce]|(g_ram[0xcf]<<8)|(g_ram[0xd0]<<16)),room_request,
                 m->session.checkpoint,p->checkpoint_upgrade?1u:0u,(unsigned)m->session.outcome,
-                g_ram[0x1493],g_ram[0x1b99],g_ram[0x1433],g_ram[0x1900],exit_player,exit_flags);
+                g_ram[0x1493],g_ram[0x1b99],g_ram[0x1433],g_ram[0x1900],exit_player,exit_flags,
+                p->held_object,slot,held?g_ram[0x14c8+slot]:0,
+                held?(g_ram[0xe4+slot]|(g_ram[0x14e0+slot]<<8)):0,
+                held?(g_ram[0xd8+slot]|(g_ram[0x14d4+slot]<<8)):0,m->level,
+                dropped?dropped->id:COOP_NO_ENTITY,
+                dropped?(g_ram[0xe4+dropped->slot]|(g_ram[0x14e0+dropped->slot]<<8)):0,
+                dropped?(g_ram[0xd8+dropped->slot]|(g_ram[0x14d4+dropped->slot]<<8)):0);
         }
         fflush(trace);
     }

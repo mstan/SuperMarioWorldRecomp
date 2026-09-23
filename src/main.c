@@ -410,6 +410,16 @@ static uint32 TickScript(void) {
     }
     // hold done â€” advance
     g_script_index++;
+    /* A snapshot directly after a press captures its last held frame. Do
+     * not synthesize a release frame first (that drops carried objects).
+     * Delayed snapshots keep their explicit wait; normal input cadence is
+     * otherwise unchanged. Snapshot commands are consumed exactly once. */
+    while (g_script_index < g_script_count &&
+           g_script_entries[g_script_index].wait_frames == 0 &&
+           (g_script_entries[g_script_index].mask & 0x40000000u)) {
+      RtlSaveLoad(kSaveLoad_Save, g_script_entries[g_script_index].mask & 0xF);
+      g_script_index++;
+    }
     if (g_script_index < g_script_count) {
       e = &g_script_entries[g_script_index];
       g_script_phase = 1;
