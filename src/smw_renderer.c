@@ -398,6 +398,8 @@ static void sprite_piece(const Ppu *p,const RasterLine *l,int y,unsigned slot,
    * Verify its native position and current tile before moving it. */
   static const uint8_t item_tiles[4]={0x24,0x26,0x48,0x0e};
   unsigned item=frame_ram[0xdc2];
+  /* Overlay regions use native coordinates, before HUD relocation. */
+  int capture_x=x;
   if ((slot==56 || slot==0) && pos==0x0f78 && item>=1 && item<=4 &&
       (attr&255)==item_tiles[item-1]) x += g_smw_viewport.extra-native_x;
   if(attr&0x8000) row=size-1-row;
@@ -407,7 +409,7 @@ static void sprite_piece(const Ppu *p,const RasterLine *l,int y,unsigned slot,
   unsigned priority=((attr>>12)&3)*4+2;
   unsigned layer=attr&0x800?4:6;
   for(int col=0;col<size;++col) {
-    if(remove && x+col >= capture->x0 && x+col < capture->x1) continue;
+    if(remove && capture_x+col >= capture->x0 && capture_x+col < capture->x1) continue;
     int dest=x+col+native_x;
     if(dest<0 || dest>=g_smw_viewport.width) continue;
     int cx=attr&0x4000?size-1-col:col;

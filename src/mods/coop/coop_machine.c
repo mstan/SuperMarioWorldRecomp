@@ -4,6 +4,36 @@
 
 enum { HEADER = 64, ACTOR_HEADER = 16, PIECE_BYTES = 28+COOP_PIECE_PIXELS*2,
        ENTITY_HEADER = 16, ENTITY_BYTES = 28, FOCUS_BYTES = 32, TRAILER = 4 };
+/* Singleton native globals become mount-owned, including an unoccupied mount's
+ * mouth and berry state. Sprite-indexed tables already have native ownership. */
+static const uint16_t mount_fields[COOP_MOUNT_BYTES]={
+    0xdc1,0x13c7,0x1410,0x141e,0x14a3,0x18ac,0x18ad,0x18ae,0x18af,
+    0x18b0,0x18b1,0x18b2,0x18b3,0x18d4,0x18d5,0x18d6,0x18da,0x18de,
+    0x18e7,0x18e8,0x191c
+};
+void coop_mount_capture(CoopEntity *e,const uint8_t *ram) {
+    for(size_t i=0;i<COOP_MOUNT_BYTES;++i)e->mount[i]=ram[mount_fields[i]];
+    e->mount_valid=true;
+}
+void coop_mount_bind(const CoopEntity *e,uint8_t *ram) {
+    for(size_t i=0;i<COOP_MOUNT_BYTES;++i)ram[mount_fields[i]]=e&&e->mount_valid?e->mount[i]:0;
+    ram[0x18df]=ram[0x18e2]=e?(uint8_t)(e->slot+1):0;
+}
+CoopYoshiSource *coop_yoshi_source(CoopMachine *m,unsigned level,unsigned layer,
+                                 unsigned x,unsigned y,unsigned tile) {
+    for(size_t i=0;i<m->source_count;++i) {
+        CoopYoshiSource *s=&m->sources[i];
+        if(s->level==level && s->layer==layer && s->x==x && s->y==y)return s;
+    }
+    if(m->source_count==m->source_capacity) {
+        size_t n=m->source_capacity?m->source_capacity*2:8;
+        if(n<m->source_capacity || n>SIZE_MAX/sizeof(*m->sources))return NULL;
+        CoopYoshiSource *p=realloc(m->sources,n*sizeof(*p));if(!p)return NULL;
+        m->sources=p;m->source_capacity=n;
+    }
+    CoopYoshiSource *s=&m->sources[m->source_count++];
+    *s=(CoopYoshiSource){level,layer,x,y,tile,0};return s;
+}
 /* Stock US ROM SHA-256. A native session can never restore into a patched ROM. */
 static const uint8_t rom_id[32] = {
     0x08,0x38,0xe5,0x31,0xfe,0x22,0xc0,0x77,0x52,0x8f,0xeb,0xe1,0x4c,0xb3,0xff,0x7c,
@@ -42,7 +72,7 @@ bool coop_machine_init(CoopMachine *m,size_t count) {
 }
 void coop_machine_destroy(CoopMachine *m) {
     if(!m)return;
-    coop_session_destroy(&m->session);free(m->actors);free(m->entities);memset(m,0,sizeof(*m));
+    coop_session_destroy(&m->session);free(m->actors);free(m->entities);free(m->sources);memset(m,0,sizeof(*m));
 }
 CoopActor *coop_machine_actor(CoopMachine *m,CoopPlayerId player) {
     for(size_t i=0;i<m->actor_count;++i)if(m->actors[i].player==player)return &m->actors[i];
@@ -81,7 +111,8 @@ CoopEntity *coop_machine_spawn_entity(CoopMachine *m,unsigned kind,unsigned slot
     CoopEntity *old=coop_machine_entity_slot(m,kind,slot);
     if(old)coop_machine_forget_entity(m,old->id);
     CoopEntity *e=&m->entities[m->entity_count++];
-    *e=(CoopEntity){m->next_entity++,kind,slot,type,COOP_NO_PLAYER,COOP_NO_PLAYER,0};
+    *e=(CoopEntity){.id=m->next_entity++,.kind=kind,.slot=slot,.type=type,
+                   .owner=COOP_NO_PLAYER,.target=COOP_NO_PLAYER};
     return e;
 }
 static int32_t focus_step(int64_t value) {return value < -4 ? -4 : value > 4 ? 4 : (int32_t)value;}
@@ -122,12 +153,22 @@ size_t coop_machine_save_size(const CoopMachine *m) {
     n+=ENTITY_HEADER+m->entity_count*ENTITY_BYTES;
     if(n>SIZE_MAX-FOCUS_BYTES)return 0;
     n+=FOCUS_BYTES;
+    if(n>SIZE_MAX-16 || m->source_count>UINT32_MAX || m->source_count>(SIZE_MAX-n-16)/24)return 0;
+    n+=16+m->source_count*24;
+    for(size_t i=0;i<m->entity_count;++i)if(m->entities[i].mount_valid) {
+        const CoopEntity *e=&m->entities[i];
+        if(e->pending.count>COOP_MOUNT_PIECES || e->visible.count>COOP_MOUNT_PIECES)return 0;
+        size_t bytes=12+COOP_MOUNT_BYTES+(e->pending.count+e->visible.count)*PIECE_BYTES;
+        if(bytes>SIZE_MAX-n)return 0;
+        n+=bytes;
+    }
     return n;
 }
 static bool entities_valid(const CoopMachine *m) {
     if(m->entity_count>22 || !m->next_entity || (m->level!=UINT32_MAX && m->level>=512))return false;
     for(size_t i=0;i<m->entity_count;++i) {
         const CoopEntity *e=&m->entities[i];
+        if(e->mount_valid && (e->kind!=COOP_ENTITY_NORMAL || e->type!=0x35))return false;
         if(!e->id || e->id>=m->next_entity || !entity_slot_valid(e->kind,e->slot) ||
            e->type>255 || (e->flags&~15u) ||
            (e->owner!=COOP_NO_PLAYER && !coop_player_const(&m->session,e->owner)) ||
@@ -142,6 +183,15 @@ static bool entities_valid(const CoopMachine *m) {
         for(size_t j=0;j<i;++j)
             if(e->id==m->entities[j].id ||
                (e->kind==m->entities[j].kind && e->slot==m->entities[j].slot))return false;
+    }
+    for(size_t i=0;i<m->source_count;++i) {
+        const CoopYoshiSource *s=&m->sources[i];
+        if(s->level>=512 || s->layer>1 || s->x>65535 || s->y>65535 ||
+           ((s->x|s->y)&15) || s->tile<256 || s->tile>=512 || s->uses>m->actor_count)return false;
+        for(size_t j=0;j<i;++j) {
+            const CoopYoshiSource *t=&m->sources[j];
+            if(s->level==t->level && s->layer==t->layer && s->x==t->x && s->y==t->y)return false;
+        }
     }
     for(size_t i=0;i<m->session.player_count;++i) {
         const CoopPlayer *p=&m->session.players[i];
@@ -179,7 +229,7 @@ static bool load_piece(CoopVisualPiece *v,const uint8_t *p) {
 bool coop_machine_save(const CoopMachine *m,void *data,size_t capacity) {
     size_t n=coop_machine_save_size(m);if(!data || !n || capacity<n || !entities_valid(m))return false;
     uint8_t *p=data;memset(p,0,HEADER);
-    memcpy(p,"CNR1",4);put32(p+4,4);memcpy(p+8,rom_id,32);
+    memcpy(p,"CNR1",4);put32(p+4,5);memcpy(p+8,rom_id,32);
     size_t core=coop_session_save_size(&m->session);
     put32(p+40,(uint32_t)core);put32(p+44,(uint32_t)m->actor_count);
     put32(p+48,layout_id());put32(p+52,m->room);put32(p+56,m->previous_mode);
@@ -210,13 +260,31 @@ bool coop_machine_save(const CoopMachine *m,void *data,size_t capacity) {
     put32(p+at+12,(uint32_t)m->focus_center_x);put32(p+at+16,(uint32_t)m->focus_center_y);
     put32(p+at+20,m->focus_count);put32(p+at+24,m->focus_initialized);
     put32(p+at+28,m->focus_hold);at+=FOCUS_BYTES;
+    size_t mounts=0;for(size_t i=0;i<m->entity_count;++i)mounts+=m->entities[i].mount_valid;
+    memcpy(p+at,"YSH1",4);put32(p+at+4,(uint32_t)mounts);
+    put32(p+at+8,(uint32_t)m->source_count);put32(p+at+12,m->mounts_initialized);at+=16;
+    for(size_t i=0;i<m->entity_count;++i)if(m->entities[i].mount_valid) {
+        const CoopEntity *e=&m->entities[i];
+        put32(p+at,e->id);put32(p+at+4,e->pending.count);put32(p+at+8,e->visible.count);
+        memcpy(p+at+12,e->mount,COOP_MOUNT_BYTES);at+=12+COOP_MOUNT_BYTES;
+        const CoopMountVisual *v[]={&e->pending,&e->visible};
+        for(unsigned phase=0;phase<2;++phase)for(unsigned j=0;j<v[phase]->count;++j) {
+            if(!piece_valid(&v[phase]->pieces[j]))return false;
+            save_piece(p+at,&v[phase]->pieces[j]);at+=PIECE_BYTES;
+        }
+    }
+    for(size_t i=0;i<m->source_count;++i) {
+        const CoopYoshiSource *s=&m->sources[i];
+        put32(p+at,s->level);put32(p+at+4,s->layer);put32(p+at+8,s->x);
+        put32(p+at+12,s->y);put32(p+at+16,s->tile);put32(p+at+20,s->uses);at+=24;
+    }
     put32(p+at,crc(p,at));return true;
 }
 bool coop_machine_load(CoopMachine *m,const void *data,size_t size) {
     if(!m || !data || size<HEADER+TRAILER)return false;
     const uint8_t *p=data;
     uint32_t version=u32(p+4);
-    if(memcmp(p,"CNR1",4)||(version<2 || version>4)||memcmp(p+8,rom_id,32)||u32(p+48)!=layout_id()||
+    if(memcmp(p,"CNR1",4)||(version<2 || version>5)||memcmp(p+8,rom_id,32)||u32(p+48)!=layout_id()||
         u32(p+60)>1||u32(p+56)>0x29||u32(p+size-4)!=crc(p,size-4))return false;
     size_t core=u32(p+40),count=u32(p+44);
     if(core>size-HEADER-TRAILER || count>(size-HEADER-TRAILER-core)/(ACTOR_HEADER+COOP_GUEST_BYTES))return false;
@@ -257,19 +325,18 @@ bool coop_machine_load(CoopMachine *m,const void *data,size_t size) {
         tmp.next_entity=u32(p+at+8);tmp.level=u32(p+at+12);at+=ENTITY_HEADER;
         size_t tail=version>=4?FOCUS_BYTES:0;
         if(size-TRAILER-at<tail || tmp.entity_count>22 ||
-           tmp.entity_count!=(size-TRAILER-at-tail)/ENTITY_BYTES ||
-           (size-TRAILER-at-tail)%ENTITY_BYTES)goto fail;
+           tmp.entity_count>(size-TRAILER-at-tail)/ENTITY_BYTES)goto fail;
         if(tmp.entity_count) {
             tmp.entities=calloc(tmp.entity_count,sizeof(*tmp.entities));if(!tmp.entities)goto fail;
         }
         for(size_t i=0;i<tmp.entity_count;++i) {
-            tmp.entities[i]=(CoopEntity){u32(p+at),u32(p+at+4),u32(p+at+8),u32(p+at+12),
-                u32(p+at+16),u32(p+at+20),u32(p+at+24)};
+            tmp.entities[i]=(CoopEntity){.id=u32(p+at),.kind=u32(p+at+4),.slot=u32(p+at+8),
+                .type=u32(p+at+12),.owner=u32(p+at+16),.target=u32(p+at+20),.flags=u32(p+at+24)};
             at+=ENTITY_BYTES;
         }
     }
     if(version>=4) {
-        if(size-TRAILER-at!=FOCUS_BYTES || memcmp(p+at,"CAM1",4) ||
+        if(size-TRAILER-at<FOCUS_BYTES || memcmp(p+at,"CAM1",4) ||
            u32(p+at+20)>count || u32(p+at+24)>1 || u32(p+at+28)>1)goto fail;
         tmp.focus_x=(int32_t)u32(p+at+4);tmp.focus_y=(int32_t)u32(p+at+8);
         tmp.focus_center_x=(int32_t)u32(p+at+12);tmp.focus_center_y=(int32_t)u32(p+at+16);
@@ -278,6 +345,33 @@ bool coop_machine_load(CoopMachine *m,const void *data,size_t size) {
         if(tmp.focus_x<0 || tmp.focus_x>65535 || tmp.focus_y<0 || tmp.focus_y>65535 ||
            tmp.focus_center_x<0 || tmp.focus_center_x>65535 ||
            tmp.focus_center_y<0 || tmp.focus_center_y>65535)goto fail;
+    }
+    if(version>=5) {
+        if(size-TRAILER-at<16 || memcmp(p+at,"YSH1",4) || u32(p+at+12)>1)goto fail;
+        size_t mounts=u32(p+at+4),sources=u32(p+at+8);
+        tmp.mounts_initialized=u32(p+at+12)!=0;at+=16;
+        if(mounts>12 || mounts>tmp.entity_count)goto fail;
+        for(size_t i=0;i<mounts;++i) {
+            if(size-TRAILER-at<12+COOP_MOUNT_BYTES)goto fail;
+            CoopEntity *e=coop_machine_entity(&tmp,u32(p+at));
+            if(!e || e->mount_valid)goto fail;
+            e->mount_valid=true;e->pending.count=u32(p+at+4);e->visible.count=u32(p+at+8);
+            if(e->pending.count>COOP_MOUNT_PIECES || e->visible.count>COOP_MOUNT_PIECES)goto fail;
+            memcpy(e->mount,p+at+12,COOP_MOUNT_BYTES);at+=12+COOP_MOUNT_BYTES;
+            CoopMountVisual *v[]={&e->pending,&e->visible};
+            for(unsigned phase=0;phase<2;++phase)for(unsigned j=0;j<v[phase]->count;++j) {
+                if(size-TRAILER-at<PIECE_BYTES || !load_piece(&v[phase]->pieces[j],p+at))goto fail;
+                at+=PIECE_BYTES;
+            }
+        }
+        if(sources!=(size-TRAILER-at)/24 || (size-TRAILER-at)%24 ||
+           sources>SIZE_MAX/sizeof(*tmp.sources))goto fail;
+        if(sources) {tmp.sources=calloc(sources,sizeof(*tmp.sources));if(!tmp.sources)goto fail;}
+        tmp.source_count=tmp.source_capacity=sources;
+        for(size_t i=0;i<sources;++i) {
+            tmp.sources[i]=(CoopYoshiSource){u32(p+at),u32(p+at+4),u32(p+at+8),
+                u32(p+at+12),u32(p+at+16),u32(p+at+20)};at+=24;
+        }
     }
     if(at!=size-TRAILER || !entities_valid(&tmp))goto fail;
     coop_machine_destroy(m);*m=tmp;return true;

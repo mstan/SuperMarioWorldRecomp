@@ -5,6 +5,7 @@
 /* The ROM body/cape draw stage emits at most seven 8x8/16x16 pieces. This is
  * an audited graphics-stage bound, independent of the session roster size. */
 enum { COOP_BODY_PIECES=7, COOP_PIECE_PIXELS=16*16 };
+enum { COOP_MOUNT_PIECES=16, COOP_MOUNT_BYTES=21 };
 typedef struct CoopVisualPiece {
     int32_t x,y;
     uint32_t width,height,priority,math,slot;
@@ -14,6 +15,10 @@ typedef struct CoopVisual {
     uint32_t count;
     CoopVisualPiece pieces[COOP_BODY_PIECES];
 } CoopVisual;
+typedef struct CoopMountVisual {
+    uint32_t count;
+    CoopVisualPiece pieces[COOP_MOUNT_PIECES];
+} CoopMountVisual;
 
 /* Native guest images have explicit owners. Input seats and character choice
  * are separate identities; neither indexes the roster implicitly. */
@@ -34,7 +39,13 @@ typedef struct CoopEntity {
     uint32_t kind,slot,type;
     CoopPlayerId owner,target;
     uint32_t flags;
+    bool mount_valid;
+    uint8_t mount[COOP_MOUNT_BYTES];
+    CoopMountVisual pending,visible;
 } CoopEntity;
+typedef struct CoopYoshiSource {
+    uint32_t level,layer,x,y,tile,uses;
+} CoopYoshiSource;
 
 typedef struct CoopMachine {
     CoopSession session;
@@ -51,6 +62,9 @@ typedef struct CoopMachine {
     int32_t focus_x,focus_y,focus_center_x,focus_center_y;
     uint32_t focus_count;
     bool focus_initialized,focus_hold;
+    bool mounts_initialized;
+    CoopYoshiSource *sources;
+    size_t source_count,source_capacity;
 } CoopMachine;
 
 bool coop_machine_init(CoopMachine *m, size_t players);
@@ -61,6 +75,10 @@ CoopEntity *coop_machine_entity_slot(CoopMachine *m,unsigned kind,unsigned slot)
 CoopEntity *coop_machine_spawn_entity(CoopMachine *m,unsigned kind,unsigned slot,unsigned type);
 void coop_machine_forget_entity(CoopMachine *m,CoopEntityId id);
 void coop_machine_focus(CoopMachine *m,int32_t x,int32_t y,uint32_t active);
+void coop_mount_capture(CoopEntity *e,const uint8_t *ram);
+void coop_mount_bind(const CoopEntity *e,uint8_t *ram);
+CoopYoshiSource *coop_yoshi_source(CoopMachine *m,unsigned level,unsigned layer,
+                                 unsigned x,unsigned y,unsigned tile);
 size_t coop_machine_save_size(const CoopMachine *m);
 bool coop_machine_save(const CoopMachine *m, void *data, size_t capacity);
 /* Transactional: failure leaves both policy and native images untouched. */
