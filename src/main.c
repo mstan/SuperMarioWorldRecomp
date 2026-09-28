@@ -555,6 +555,10 @@ static void DrawPpuFrameWithPerf(void) {
 #if SNESRECOMP_ENABLE_LUA
   smw_fire_stream_draw(g_ppu, pixel_buffer, pitch, g_snes_width, g_snes_height);
 #endif
+  /* Match the WRAM dump's completed simulation frame, without pausing. */
+  const uint32 dump_frame = snes_frame_counter ? snes_frame_counter - 1 : 0;
+  FrameDump_Present(dump_frame, pixel_buffer, pitch, g_snes_width, g_snes_height);
+  FrameDump_Ppu(dump_frame, g_ppu);
   g_renderer_funcs.EndDraw();
   BenchmarkPhaseEnd(kSnesRecompBenchmarkPhase_HostPresent, host_phase);
 }

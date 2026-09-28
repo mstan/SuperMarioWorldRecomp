@@ -82,8 +82,10 @@ if(SMW_BUNDLE_FALCON_CACHE_HELPER)
     add_custom_target(smw_falcon_cache_helper DEPENDS ${SMW_FALCON_HELPER})
 endif()
 
+set(SMW_GEN_DIR "${CMAKE_SOURCE_DIR}/src/gen" CACHE PATH
+    "Generated stock program directory (allows isolated coverage comparisons)")
 file(GLOB SMW_STOCK_GEN_SOURCES CONFIGURE_DEPENDS
-    ${CMAKE_SOURCE_DIR}/src/gen/*.c)
+    ${SMW_GEN_DIR}/*.c)
 if(NOT SMW_STOCK_GEN_SOURCES)
     message(FATAL_ERROR
         "src/gen/ is empty - run `bash tools/regen.sh --stock` with a "
@@ -93,9 +95,9 @@ endif()
 set(SMW_RENDERER_HOOK_STAMP ${CMAKE_CURRENT_BINARY_DIR}/smw_renderer_hooks.stamp)
 add_custom_command(OUTPUT ${SMW_RENDERER_HOOK_STAMP}
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/apply_renderer_hooks.py
-            --gen-dir ${CMAKE_SOURCE_DIR}/src/gen
+            --gen-dir ${SMW_GEN_DIR}
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/apply_overrides.py
-            --check --gen-dir ${CMAKE_SOURCE_DIR}/src/gen
+            --check --gen-dir ${SMW_GEN_DIR}
             --manifest ${CMAKE_SOURCE_DIR}/overrides/falcon/overrides.manifest
     COMMAND ${CMAKE_COMMAND} -E touch ${SMW_RENDERER_HOOK_STAMP}
     DEPENDS ${CMAKE_SOURCE_DIR}/tools/apply_renderer_hooks.py
