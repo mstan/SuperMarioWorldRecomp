@@ -117,4 +117,6 @@ bool coop_machine_placed_eggs_valid(const CoopMachine *m,const uint8_t *ram);
 /* Adults retain mouth indices; babies reserve food while their native eat
  * timer is above $20. At $20 the original routine consumes it. */
 bool coop_mount_mouth_active(const uint8_t *ram,unsigned slot);
+bool coop_mount_pending_berry(const CoopEntity *mount,const uint8_t *ram,
+                             unsigned *x,unsigned *y);
 #endif

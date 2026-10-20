@@ -36,6 +36,16 @@ typedef struct MouthContact {
 static MouthContact *mouth_contacts;
 static size_t mouth_contact_count,mouth_contact_capacity;
 static bool collecting_mouth_contacts;
+typedef struct BerryContact {
+    CoopEntityId mount;
+    CoopPlayerId actor;
+    unsigned tile,x,y;
+    uint64_t distance;
+    CpuState cpu;
+    uint8_t scratch[16];
+} BerryContact;
+static BerryContact *berry_contacts;
+static size_t berry_contact_count,berry_contact_capacity;
 static bool owned_boss_bank;
 static bool contact_query,contact_bounce_only,powerup_query;
 typedef enum NativeContactKind {
@@ -710,6 +720,72 @@ static bool mouth_candidate_available(CoopMachine *m,unsigned mouth,unsigned slo
            g_ram[0x160e + other]==slot)return false;
     return true;
 }
+static bool berry_reserved(CoopMachine *m,unsigned mouth,unsigned x,unsigned y) {
+    /* Body bites keep the tile until the native gulp animation. Their private
+     * type/coordinates and native timer already survive snapshots. Do not let
+     * another mouth claim that same pending tile. */
+    for(size_t i=0;i<m->entity_count;++i) {
+        const CoopEntity *e=&m->entities[i];
+        unsigned bx,by;
+        if(e->slot!=mouth && coop_mount_pending_berry(e,g_ram,&bx,&by) &&
+           bx==(x&~15u) && by==(y&~15u))return true;
+    }
+    return false;
+}
+static void record_body_berry(CpuState *cpu,CoopMachine *m) {
+    unsigned slot=cpu->X&255;
+    if(slot>=12 || !bound_actor || g_ram[0x9e + slot]!=0x35)
+        Die("Native co-op berry contact has no mount context");
+    unsigned x=read16(0x18b0),y=read16(0x18b2);
+    if(berry_reserved(m,slot,x,y))return;
+    if(berry_contact_count==berry_contact_capacity) {
+        size_t n=berry_contact_capacity?berry_contact_capacity*2:8;
+        if(n<berry_contact_capacity || n>SIZE_MAX/sizeof(*berry_contacts))
+            Die("Native co-op berry candidate capacity overflow");
+        BerryContact *p=realloc(berry_contacts,n*sizeof(*p));
+        if(!p)Die("Native co-op could not collect berry candidates");
+        berry_contacts=p;berry_contact_capacity=n;
+    }
+    BerryContact *c=&berry_contacts[berry_contact_count++];
+    *c=(BerryContact){.mount=normal_entity(m,slot,false)->id,.actor=bound_actor->player,
+                     .tile=read16(5),.x=x,.y=y,.cpu=*cpu};
+    memcpy(c->scratch,g_ram,sizeof(c->scratch));
+    const CoopPlayer *p=coop_player_const(&m->session,c->actor);
+    int64_t dx=(int64_t)p->x-((x&~15u)+8),dy=(int64_t)p->y-((y&~15u)+8);
+    c->distance=(uint64_t)(dx*dx+dy*dy);
+}
+static void resolve_body_berries(CpuState *cpu,CoopMachine *m,const CpuState *caller) {
+    uint8_t sprite=g_ram[0x15e9];
+    for(size_t i=0;i<berry_contact_count;++i) {
+        BerryContact *c=&berry_contacts[i],*winner=c;
+        for(size_t j=0;j<berry_contact_count;++j) {
+            BerryContact *other=&berry_contacts[j];
+            if(other->tile!=c->tile)continue;
+            if(other->distance<winner->distance || (other->distance==winner->distance &&
+               (coop_player_precedes(&m->session,other->actor,winner->actor) ||
+                (other->actor==winner->actor && other->mount<winner->mount))))winner=other;
+        }
+        if(winner!=c)continue;
+        CoopEntity *mount=coop_machine_entity(m,c->mount);
+        if(!mount || mount->type!=0x35 || g_ram[0x14c8+mount->slot]!=8 ||
+           g_ram[0x1564+mount->slot] || g_ram[0x160e + mount->slot]<0x80 ||
+           berry_reserved(m,mount->slot,c->x,c->y))continue;
+        /* A tongue may already have removed this world tile. Never begin a
+         * delayed bite against the replacement or an unrelated tile. */
+        if(c->tile<0xc800 || c->tile>0xffff || g_ram[c->tile+0x10000] ||
+           g_ram[c->tile]!=(c->cpu.A&255))continue;
+        CoopActor *a=coop_machine_actor(m,c->actor);
+        coop_guest_bind(&a->guest,g_ram);coop_mount_bind(mount,g_ram);bound_actor=a;
+        memcpy(g_ram,c->scratch,sizeof(c->scratch));restore_registers(cpu,&c->cpu);
+        cpu->S=caller->S;g_ram[0x15e9]=(uint8_t)mount->slot;
+        put16(0x18b0,c->x);put16(0x18b2,c->y);
+        /* Original type, animation and rider alignment; the later original
+         * gulp still removes the tile and performs its one shared reward. */
+        guest_jsr(cpu,0x02d1ca);
+        coop_mount_capture(mount,g_ram);capture(m,a);
+    }
+    g_ram[0x15e9]=sprite;
+}
 static void trace_mouth_contact(CoopMachine *m,const MouthContact *c,unsigned phase) {
     static bool initialized;static FILE *file;
     if(!initialized) {
@@ -792,7 +868,7 @@ static void draw_mounts(CpuState *cpu,CoopMachine *m) {
     CpuState caller=*cpu;uint8_t scratch[16],oam[0x2a0];
     memcpy(scratch,g_ram,sizeof(scratch));memcpy(oam,g_ram+0x200,sizeof(oam));
     CoopActor *primary=primary_actor(m);capture(m,primary);
-    ++mount_draw_depth;mouth_contact_count=0;collecting_mouth_contacts=true;
+    ++mount_draw_depth;mouth_contact_count=berry_contact_count=0;collecting_mouth_contacts=true;
     for(unsigned slot=0;slot<12;++slot) {
         CoopEntity *e=coop_machine_entity_slot(m,COOP_ENTITY_NORMAL,slot);
         if(!e || e->type!=0x35 || !g_ram[0x14c8+slot])continue;
@@ -825,6 +901,7 @@ static void draw_mounts(CpuState *cpu,CoopMachine *m) {
         if(!unrelated) {mount_owner(m,e,a);capture(m,a);}
     }
     collecting_mouth_contacts=false;
+    resolve_body_berries(cpu,m,&caller);
     resolve_mouth_contacts(cpu,m,&caller);
     --mount_draw_depth;bound_actor=NULL;
     restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));memcpy(g_ram+0x200,oam,sizeof(oam));
@@ -1403,6 +1480,11 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
         carry_through_room(cpu,m);return 0x02ac5b;
     }
     if(!level_frame)return 0;
+    if(pc==0x02d1ca && collecting_mouth_contacts) {
+        record_body_berry(cpu,m);return 0x02d1f0;
+    }
+    if(pc==0x02baaf && berry_reserved(m,cpu->X&255,
+            g_ram[0]|(g_ram[8]<<8),g_ram[1]|(g_ram[9]<<8)))return 0x02babf;
     if(pc==0x01f78a) {
         unsigned slot=cpu->X&255;
         if(slot>=12)Die("Native co-op placed egg has no native slot");

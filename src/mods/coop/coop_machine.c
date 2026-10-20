@@ -556,6 +556,14 @@ bool coop_mount_mouth_active(const uint8_t *ram,unsigned slot) {
     return (status==8 && type==0x35) ||
            (status>=9 && status<=11 && type==0x2d && ram[0x163e + slot]>0x20);
 }
+bool coop_mount_pending_berry(const CoopEntity *e,const uint8_t *ram,unsigned *x,unsigned *y) {
+    if(!e || !ram || e->kind!=COOP_ENTITY_NORMAL || e->type!=0x35 || e->slot>=12 ||
+       !e->mount_valid || ram[0x14c8+e->slot]!=8 || !ram[0x1564+e->slot] ||
+       !e->mount[15])return false;
+    if(x)*x=(e->mount[9]|(e->mount[10]<<8))&~15u;
+    if(y)*y=(e->mount[11]|(e->mount[12]<<8))&~15u;
+    return true;
+}
 bool coop_machine_placed_eggs_valid(const CoopMachine *m,const uint8_t *ram) {
     if(!m || !ram)return false;
     for(size_t i=0;i<m->placed_count;++i) {
@@ -575,6 +583,17 @@ bool coop_machine_placed_eggs_valid(const CoopMachine *m,const uint8_t *ram) {
 }
 bool coop_machine_mouths_valid(const CoopMachine *m,const uint8_t *ram) {
     if(!m || !ram)return false;
+    /* Old co-op states can contain two delayed body bites of one world tile.
+     * Reject atomically instead of crediting both after the loaded animation. */
+    for(size_t i=0;i<m->entity_count;++i) {
+        unsigned x,y;
+        if(!coop_mount_pending_berry(&m->entities[i],ram,&x,&y))continue;
+        for(size_t j=0;j<i;++j) {
+            unsigned other_x,other_y;
+            if(coop_mount_pending_berry(&m->entities[j],ram,&other_x,&other_y) &&
+               x==other_x && y==other_y)return false;
+        }
+    }
     bool referenced[12]={false};
     for(unsigned slot=0;slot<12;++slot) {
         /* Initialization, death and a baby's completed meal can retain

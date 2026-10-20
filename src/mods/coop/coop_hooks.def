@@ -65,6 +65,8 @@ COOP_HOOK(0x00FB00) /* Convert each carried goal reward using its own carrier */
 COOP_HOOK(0x01EA70) /* Singleton Yoshi draw replaced by one scoped draw per mount */
 COOP_HOOK(0x01F58E) /* Tongue candidate must respect carrier and other-mouth ownership */
 COOP_HOOK(0x01F59B) /* Accepted edible tongue contact, before claim or Pokey response */
+COOP_HOOK(0x02D1CA) /* Accepted body berry, before delayed mouth claim */
+COOP_HOOK(0x02BAAF) /* Tongue berry cannot steal another mount's pending body bite */
 COOP_HOOK_INSIDE(0x01F78A,0x01F764) /* Placed egg's baby/1-up result uses the roster cap */
 COOP_HOOK(0x02EA8A) /* Baby food contact respects held and other-mouth ownership */
 COOP_HOOK(0x0289E1) /* A Yoshi-block egg has a real allocated native sprite slot */

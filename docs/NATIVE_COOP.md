@@ -2,8 +2,33 @@
 
 ## Current integration checkpoint (2026-10-20)
 
-Implementation and campaign acceptance remain incomplete. The October goal
-continues the approved contract below; it does not narrow that contract.
+Implementation and campaign acceptance remain incomplete. On 2026-10-20 the
+owner changed the immediate delivery target to an alpha with a high-level
+first pass. The product rules below remain the intended behavior; exhaustive
+interaction matrices and full stock-content acceptance are later work.
+The [acceptance burndown](NATIVE_COOP_STATUS.md) summarizes completed milestones,
+the alpha checks, deferred work and known defects.
+
+### Alpha acceptance and testing scope (owner direction, 2026-10-20)
+
+Make a broad first pass through the major systems. Test a handful of common
+interactions, fix obvious blockers, record the result, and move on. Ordinary
+movement/collisions, pickups/reserves, common Yoshi use, death/recovery,
+room/stage transitions and saves/input should receive representative checks.
+Use existing valid evidence where it covers the behavior; after a change, rerun
+the checks needed for its concrete risks. Keep automated launches muted.
+
+The owner accepts some bugs in unusual combinations for the alpha and expects
+user reports to guide follow-up work. Record known defects and unverified
+features plainly. Save corruption, routine crashes/softlocks and common
+interactions that prevent ordinary co-op play remain blockers.
+
+Do not make the alpha depend on extreme Yoshi matrices, every permutation of
+player/backend/aspect/save timing, or the full stock-game coverage inventory.
+Retain existing tests and evidence for later targeted use. Continue the
+inventory-driven campaign audit after the alpha as follow-up qualification.
+The immediate delivery gate is the documented common-interaction first pass,
+required build/CI checks and an owner build with preserved saves/settings.
 
 The 19 game commits have been rebased onto game main `8dedb28`, retaining the
 newer Falcon/cache-helper, isolated generation, disassembly-authority, capture
@@ -23,8 +48,9 @@ The reproducible [stock content inventory](validation/SMW_STOCK_CONTENT.md)
 derives indexed rooms, overworld nodes, special variants and screen routes from
 the original ROM. Its coverage seed starts unverified; it does not grant passes
 for gameplay mechanics or transitions.
-PR #19 remains the delivery PR and stays in draft until the full contract and
-required acceptance coverage are satisfied.
+PR #19 remains the delivery PR. It stays in draft until the alpha first pass
+and required build checks are complete; its review description must identify
+known limitations and the remaining full-contract work.
 
 The October projectile milestone adds an original two-fireball allowance per
 actor, native motion/drawing, shared fire-damage arbitration, direct boss
@@ -92,6 +118,13 @@ checks, including both riders and isolation from another mount's empty mouth.
 Ordinary carried-key exits and competing goal arbitration retain identical
 native/bounce traces. Exact snapshot replay passes. Actual stock destinations,
 fresh acquisition beside a hole and full campaign mechanics remain open.
+
+The [body-berry alpha check](validation/native-coop-berries-alpha-2026-10-20.md)
+fixes two riders receiving credit for one berry. Three common cases pass:
+single rider, contested berry with primary priority, and two independent
+berries. Pending duplicate bites are rejected during snapshot preflight.
+Interrupted bites during bubble recovery are a known deferred defect; broader
+berry permutations and threshold rewards remain unverified for the alpha.
 
 Owner-approved specification, 2026-09-22. Implementation tracking:
 `beads-8wg.3.26`, branch `feat/native-simultaneous-coop`.

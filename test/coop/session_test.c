@@ -532,11 +532,41 @@ static void terrain(void) {
     free(before);free(rom);free(r);
 }
 
+static void berry_reservations(size_t players) {
+    CoopMachine m={0};assert(coop_machine_init(&m,players));
+    uint8_t *ram=calloc(0x20000,1),*before=malloc(0x20000);assert(ram&&before);
+    CoopEntityId ids[2];
+    for(unsigned i=0;i<2;++i) {
+        unsigned slot=i?9:4;
+        CoopEntity *e=coop_machine_spawn_entity(&m,COOP_ENTITY_NORMAL,slot,0x35);
+        assert(e);ids[i]=e->id;e->mount_valid=true;
+        e->mount[9]=(uint8_t)(48+i*15);e->mount[11]=104;e->mount[12]=1;
+        e->mount[15]=(uint8_t)(i+1);
+        ram[0x14c8+slot]=8;ram[0x9e + slot]=0x35;
+        ram[0x160e + slot]=255;ram[0x1564+slot]=0x20;
+    }
+    memcpy(before,ram,0x20000);
+    assert(!coop_machine_mouths_valid(&m,ram)); /* different points, same tile */
+    assert(!memcmp(before,ram,0x20000));
+    CoopEntity *second=coop_machine_entity(&m,ids[1]);
+    second->mount[9]=64;assert(coop_machine_mouths_valid(&m,ram));
+    second->mount[9]=48;second->mount[10]=1;
+    assert(coop_machine_mouths_valid(&m,ram)); /* high coordinate byte matters */
+    second->mount[10]=0;assert(!coop_machine_mouths_valid(&m,ram));
+    second->mount[15]=0;assert(coop_machine_mouths_valid(&m,ram));
+    second->mount[15]=1;ram[0x1564+9]=0;
+    assert(coop_machine_mouths_valid(&m,ram)); /* no delayed bite */
+    ram[0x1564+9]=0x20;ram[0x14c8+9]=0;
+    assert(coop_machine_mouths_valid(&m,ram)); /* retired mount cannot reserve */
+    free(before);free(ram);coop_machine_destroy(&m);
+}
+
 int main(void) {
     roster(2);roster(3);roster(4);roster(17);
     arbitration();priorities();camera_and_recovery();checkpoint_disconnect_input();states();guest_ownership();
     native_states(2);native_states(3);native_states(4);native_states(17);
     placed_egg_states(2);placed_egg_states(3);placed_egg_states(4);placed_egg_states(17);
+    berry_reservations(2);berry_reservations(3);berry_reservations(4);berry_reservations(17);
     terrain();
     puts("co-op: roster 2/3/4/17, recovery, arbitration, camera, input, checkpoint and atomic state validation passed");
     return 0;
