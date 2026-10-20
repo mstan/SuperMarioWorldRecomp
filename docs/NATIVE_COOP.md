@@ -70,6 +70,13 @@ growth, actual carried babies, replay and native/bounce parity. Repeated
 placed-source grants, fresh mouth competition, full abilities and mount
 acceptance remain open.
 
+The [shell ability matrix](validation/native-coop-shell-abilities-2026-10-20.md)
+qualifies each actor's sixteen Yoshi/shell color combinations through original
+tongue acquisition, spitting, repeated wing motion and landing-effect creation.
+All 128 execution cases pass with exact replay and native/bounce parity.
+Damage outcomes, shared effect-pool pressure, berries, wing destinations and
+mounted keyholes still require acceptance.
+
 Owner-approved specification, 2026-09-22. Implementation tracking:
 `beads-8wg.3.26`, branch `feat/native-simultaneous-coop`.
 
