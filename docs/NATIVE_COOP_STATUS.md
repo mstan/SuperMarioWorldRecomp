@@ -8,6 +8,13 @@ The [playable-alpha first pass](validation/native-coop-alpha-2026-10-20.md)
 adds representative boss/bonus completion and current inactive-mode/presentation
 checks to the existing common-path evidence.
 
+The owner requested a bounded enemy/ability/hazard and recovery/transition
+follow-up after that handoff. See the [follow-up audit](validation/native-coop-common-followup-2026-10-20.md)
+for reproduced failures, implementation and current validation. This does not
+reopen the exhaustive campaign or combination matrices.
+The owner accepts one normal overworld party sprite and one normal lead in
+special scenes; drawing both participants there is no longer required.
+
 ## Immediate target: alpha first pass
 
 Owner direction, 2026-10-20: test a handful of common interactions, make a
@@ -46,12 +53,12 @@ Close an area only when its remaining implementation and evidence are complete.
 
 | Acceptance area | Landed and qualified in focused checks | Work remaining |
 |---|---|---|
-| Contacts and enemy targeting | Ordinary contact/pickup arbitration, shared stomps/rewards, extended hazards, primary ties | Custom contacts/platforms, mixed attacks, committed targeting, Boos |
-| Projectiles and abilities | Per-actor fireballs, direct boss fireball contacts, shell ability matrix | Full cape/star/spin/swim behavior, minor hazards, effect damage and shared pool pressure |
+| Contacts and enemy targeting | Ordinary contact/pickup arbitration, shared stomps/rewards, extended hazards, primary ties; Chuck custom side/stomp contacts and committed charge target, two Boo facing arrangements, common platform riders | Other custom contacts/platforms, mixed attacks and remaining committed/aimed producers |
+| Projectiles and abilities | Per-actor fireballs, direct boss fireball contacts, shell ability matrix; independent native cape contact, common star/spin/swim and hazard samples | Broader ability combinations, minor hazards, effect damage and shared pool pressure |
 | Mounts | Independent riders/mouths, tongue arbitration, block/placed grants, baby growth, transport/parking, mounted recovery/keyholes, ordinary body berries | Interrupted bites/rare berry combinations, wings destinations, fresh baby/adult competition, source locations and special scenes |
-| Recovery and camera | Individual/team death, bubbles, adjacent placement, mounted clearance, widescreen visibility | Slopes/platforms, water/air, vertical rooms, Layer 2, autoscroll and live viewport changes |
+| Recovery and camera | Individual/team death, bubbles, adjacent placement, mounted clearance, widescreen visibility; common moving-platform and water recovery, stationary survivor framing | Slopes/special platforms, supported air, vertical rooms, Layer 2, autoscroll and live viewport changes |
 | Transitions and progression | Focused pipes, checkpoints, retry, goal/keyhole arbitration and rewards | Every entrance/transition variant, conflicting events, game-over/continue and actual exit destinations |
-| Special scenes and presentation | Original reserve artwork/badges, focused native/wide drawing and Mode 7 contacts; one actual Morton defeat/castle completion and one two-player bonus completion | Other bosses/targeting and bonus variants, overworld follower, castle/ending breadth, fences/darkness |
+| Special scenes and presentation | Original reserve artwork/badges, focused native/wide drawing and Mode 7 contacts; one actual Morton defeat/castle completion and one two-player bonus completion; single-lead overworld/scenes accepted | Other bosses/targeting and bonus variants, scene state-continuity breadth, fences/darkness |
 | Persistence, input and inert modes | Separate SRAM/state namespaces, atomic preflight, legacy migration, focused replay and solo/disabled controls | Campaign round trips, controller disconnect/reassignment, broad solo/disabled parity |
 | Audio health | Reproduced sample-loss/menu-stall fixes, fresh YI2 and post-turbo captured checks | Broader campaign/device/platform qualification |
 | Integration and release | Rebase preserving newer main, Windows build, both Linux core/storage jobs, tested owner build and normal-window UI handoff | Additional framework PR review, complete platform/package/performance checks, campaign audit |
@@ -102,9 +109,9 @@ it grants **zero gameplay passes**. See the
 [stock inventory](validation/SMW_STOCK_CONTENT.md). Actual mechanic checks must
 exercise outcomes and transitions without setting their success flags.
 
-All 27 preserved owner save/settings files and the additional local input override
-match their original hashes after the owner handoff. The tested executable remains
-SHA256 `3006dcd4a3306a1001445c2a6a9da8788f7398a1167c8aa505fc2c5c267c5c46`.
-Its recomp UI is open in a normal window with normal audio configuration.
-PR #19 is ready for alpha review and remains unmerged. See the alpha report for
-build location, launch command, CI links and the retained preservation evidence.
+The original alpha handoff preserved all 27 owner save/settings files and the
+additional local input override. The current follow-up build is SHA256
+`22d47a4951281435e538e61b714233f2143767592ecdb7bdb62ecb92a79aa93b`;
+its [follow-up report](validation/native-coop-common-followup-2026-10-20.md)
+records the focused checks and refreshed delivery. PR #19 remains the alpha
+review PR and is unmerged.

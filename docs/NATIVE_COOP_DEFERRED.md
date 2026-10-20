@@ -10,6 +10,19 @@ ordinary-play blocker or risks saves, or the owner requests it.
 a coverage gap, rather than a claim that the behavior is broken. Keep existing
 evidence and add concise reproduction notes when a new case is encountered.
 
+Owner follow-up, 2026-10-20: enemy interactions, abilities/hazards and a small
+recovery/camera/transition pass are active again, with a few representative
+checks. See the [follow-up audit](validation/native-coop-common-followup-2026-10-20.md).
+The original single party sprite on the overworld and single lead in special
+scenes are accepted; adding a visible second participant is no longer required.
+
+The follow-up qualifies Chuck side/stomp contacts and one committed charge,
+two Boo facing arrangements, both cape users, common star/spin/swim/hazard
+samples, ordinary `$55..$59` platform handling with a live `$55` rider/recovery
+sample, water recovery, and rudimentary pipe/door transitions. D07-D10 below
+retain the remaining combinations and special families, rather than erasing
+those narrower passes or implying their full area is now complete.
+
 ## Corner cases
 
 | ID | Status | Deferred case | Existing reference |
@@ -24,7 +37,7 @@ evidence and add concise reproduction notes when a new case is encountered.
 | D08 | Unverified | Exact simultaneous reactive-platform/ON-OFF/custom-contact conflicts and target changes during committed enemy attacks. | [Contact implementation/status](NATIVE_COOP.md) |
 | D09 | Unverified | Recovery with combined slopes, moving platforms, water/air, Layer 2, vertical/autoscroll rooms and live viewport changes; every mounted-clearance permutation. | [Recovery evidence](validation/native-coop-mount-transport-2026-10-20.md#ownership-aware-mounted-recovery) |
 | D10 | Unverified | Conflicting room/clear requests and all carried-object, bubble, mount, death and secret-exit combinations at transition boundaries. | [Transition contract and evidence](NATIVE_COOP.md) |
-| D11 | Unverified | Remaining boss targeting, simultaneous-hit and all-dead timing; every bonus pattern/reward and castle/ending participation combination. One ordinary Morton defeat/transition and one two-player bonus completion pass. | [Alpha evidence](validation/native-coop-alpha-2026-10-20.md), [full-contract backlog](NATIVE_COOP_STATUS.md) |
+| D11 | Unverified | Remaining boss targeting, simultaneous-hit and all-dead timing; every bonus pattern/reward and castle/ending gameplay-state continuity combination. Single-lead scene presentation is accepted. One ordinary Morton defeat/transition and one two-player bonus completion pass. | [Alpha evidence](validation/native-coop-alpha-2026-10-20.md), [full-contract backlog](NATIVE_COOP_STATUS.md) |
 | D12 | Unverified | Every fence-side/darkness/Mode 7 overlap and expanded-margin cape-smoke/presentation permutation. | [Presentation status](NATIVE_COOP_STATUS.md) |
 | D13 | Unverified | Save/load at every intermediate frame of mouths, bubbles, transformations, bosses, exits and queued rewards; all legacy/corrupt variants. | Existing atomic preflight and focused replay evidence in [the contract](NATIVE_COOP.md) |
 | D14 | Unverified | Controller disconnect/reassignment during exceptional transitions, held-input timing and repeated device churn. | [Input/lifecycle status](NATIVE_COOP_STATUS.md) |

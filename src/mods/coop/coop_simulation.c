@@ -22,6 +22,8 @@ static bool spawning_room_mount;
 static unsigned carried_reward_depth;
 static unsigned mount_draw_depth;
 static unsigned contact_call_depth;
+static unsigned chuck_contact_depth,cape_contact_depth;
+static unsigned platform_contact_depth;
 static unsigned fireball_spawn_depth,extended_call_depth;
 static unsigned boss_fireball_depth;
 static unsigned extended_contact_depth;
@@ -1195,6 +1197,119 @@ static bool collect_native_contacts(CpuState *cpu,CoopMachine *m,bool powerup) {
     bound_actor=original;
     return true;
 }
+
+/* Chuck uses the custom carry-return contact API, followed by its own stomp
+ * counter and side damage. Run the original clipping for every actor before
+ * any response; replaying the whole sprite would also advance its AI/motion. */
+static void collect_chuck_contacts(CpuState *cpu,CoopMachine *m) {
+    unsigned slot=cpu->X&255;
+    if(slot>=12 || !bound_actor)Die("Native co-op Chuck contact has no sprite context");
+    if(g_ram[0x1564+slot])return;
+    CoopActor *original=bound_actor;capture(m,original);
+    CpuState caller=*cpu;uint8_t scratch[16];memcpy(scratch,g_ram,sizeof(scratch));
+    NativeContact *contacts=calloc(m->actor_count,sizeof(*contacts)),*winner=NULL;
+    if(!contacts)Die("Native co-op could not collect Chuck contacts");
+    size_t count=0;uint8_t *audit=contact_audit_buffer();
+    int x=(g_ram[0xe4+slot]|(g_ram[0x14e0+slot]<<8))+8;
+    int y=(g_ram[0xd8+slot]|(g_ram[0x14d4+slot]<<8))+16;
+    ++chuck_contact_depth;
+    for(size_t i=0;i<m->actor_count;++i) {
+        CoopActor *a=&m->actors[i];const CoopPlayer *p=coop_player_const(&m->session,a->player);
+        if(p->life!=COOP_PLAYING)continue;
+        restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
+        coop_guest_bind(&a->guest,g_ram);coop_mount_bind(actor_mount(m,a),g_ram);bound_actor=a;
+        if(audit)memcpy(audit,g_ram,0x20000);
+        guest_jsr(cpu,0x01a7e4); /* custom clipping returns carry, no response */
+        audit_contact_query(audit,slot);
+        if(!cpu->_flag_C)continue;
+        NativeContact *c=&contacts[count++];c->actor=a;
+        if(g_ram[0x1490])c->kind=CONTACT_STAR;
+        else {
+            guest_jsr(cpu,0x02d50c); /* Chuck's original vertical-position query */
+            c->kind=((uint8_t)(g_ram[14]-0xec)&0x80)?CONTACT_STOMP:CONTACT_SIDE;
+        }
+        memcpy(c->scratch,g_ram,sizeof(c->scratch));
+        int64_t dx=(int64_t)p->x-x,dy=(int64_t)p->y-y;
+        c->distance=(uint64_t)(dx*dx+dy*dy);
+        if(c->kind!=CONTACT_SIDE && (!winner || c->distance<winner->distance ||
+           (c->distance==winner->distance && coop_player_precedes(&m->session,a->player,winner->actor->player))))winner=c;
+        trace_arbitration(m,slot,c,2,false);
+    }
+    /* A side hit belongs to each touching actor. Winning attacks mutate the
+     * shared enemy once; all valid stompers retain the native jump response. */
+    for(unsigned pass=0;pass<3;++pass)for(size_t i=0;i<count;++i) {
+        NativeContact *c=&contacts[i];
+        bool side=c->kind==CONTACT_SIDE,win=c==winner;
+        if((pass==0 && !side) || (pass==1 && !win) ||
+           (pass==2 && (side || win || c->kind!=CONTACT_STOMP)))continue;
+        CoopEntityId id=normal_entity(m,slot,false)->id;
+        bool duplicate=!side && (!win || damaged_entity[slot]==id);
+        if(duplicate && c->kind==CONTACT_STAR)continue;
+        restore_registers(cpu,&caller);memcpy(g_ram,c->scratch,sizeof(c->scratch));
+        coop_guest_bind(&c->actor->guest,g_ram);coop_mount_bind(actor_mount(m,c->actor),g_ram);
+        bound_actor=c->actor;
+        uint8_t state=g_ram[0xc2+slot],cooldown=g_ram[0x1564+slot];
+        if(duplicate) {
+            /* The native hurt-state guard is after DisplayContactGfx and
+             * BoostMarioSpeed, before its counter/reward. Scope it to this
+             * extra bounce, including a simultaneous final killing stomp. */
+            g_ram[0xc2+slot]=3;g_ram[0x1564+slot]=0;
+        }
+        trace_normal_contact(m,c->actor,slot,0);
+        trace_arbitration(m,slot,c,0,win);
+        guest_jsr(cpu,side?0x02c810:0x02c79d);
+        if(duplicate) {g_ram[0xc2+slot]=state;g_ram[0x1564+slot]=cooldown;}
+        else if(!side)damaged_entity[slot]=id;
+        trace_arbitration(m,slot,c,1,win);
+        trace_normal_contact(m,c->actor,slot,1);
+        capture(m,c->actor);
+        CoopEntity *mount=actor_mount(m,c->actor);if(mount)coop_mount_capture(mount,g_ram);
+    }
+    free(contacts);--chuck_contact_depth;
+    restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
+    coop_guest_bind(&original->guest,g_ram);coop_mount_bind(actor_mount(m,original),g_ram);
+    bound_actor=original;
+}
+
+static void run_cape_contacts(CpuState *cpu,CoopMachine *m) {
+    CoopActor *saved_actor=bound_actor;
+    CoopActor *original=bound_actor?bound_actor:primary_actor(m);capture(m,original);
+    CpuState caller=*cpu;uint8_t scratch[16];memcpy(scratch,g_ram,sizeof(scratch));
+    ++cape_contact_depth;
+    CoopPlayerId previous=COOP_NO_PLAYER;
+    for(size_t i=0;i<m->actor_count;++i) {
+        CoopActor *a=next_ordered_actor(m,previous);previous=a->player;
+        if(coop_player_const(&m->session,a->player)->life!=COOP_PLAYING)continue;
+        restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
+        coop_guest_bind(&a->guest,g_ram);coop_mount_bind(actor_mount(m,a),g_ram);bound_actor=a;
+        guest_jsr(cpu,0x0294f5); /* original enemy, extended-object and block work */
+        capture(m,a);
+        CoopEntity *mount=actor_mount(m,a);if(mount)coop_mount_capture(mount,g_ram);
+    }
+    --cape_contact_depth;restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
+    coop_guest_bind(&original->guest,g_ram);coop_mount_bind(actor_mount(m,original),g_ram);
+    bound_actor=saved_actor;
+}
+
+static bool run_platform_contacts(CpuState *cpu,CoopMachine *m) {
+    CoopActor *original=bound_actor;capture(m,original);
+    CpuState caller=*cpu;uint8_t scratch[16];memcpy(scratch,g_ram,sizeof(scratch));
+    bool occupied=false;++platform_contact_depth;
+    for(size_t i=0;i<m->actor_count;++i) {
+        CoopActor *a=&m->actors[i];
+        if(coop_player_const(&m->session,a->player)->life!=COOP_PLAYING)continue;
+        restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
+        coop_guest_bind(&a->guest,g_ram);coop_mount_bind(actor_mount(m,a),g_ram);bound_actor=a;
+        guest_jsr(cpu,0x01b457); /* native placement and platform-motion delta */
+        occupied|=cpu->_flag_C!=0;capture(m,a);
+        CoopEntity *mount=actor_mount(m,a);if(mount)coop_mount_capture(mount,g_ram);
+    }
+    --platform_contact_depth;restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
+    coop_guest_bind(&original->guest,g_ram);coop_mount_bind(actor_mount(m,original),g_ram);
+    bound_actor=original;cpu->_flag_C=occupied;
+    cpu->P=(uint8_t)((cpu->P&~1u)|(occupied?1u:0u));
+    return occupied;
+}
 typedef struct ExtendedContact {
     CoopActor *actor;
     uint64_t distance;
@@ -1294,6 +1409,15 @@ static void collect_extended_contacts(CpuState *cpu,CoopMachine *m) {
     coop_guest_bind(&original->guest,g_ram);coop_mount_bind(actor_mount(m,original),g_ram);
     bound_actor=saved_actor;
 }
+static bool committed_enemy_attack(unsigned slot) {
+    if(g_ram[0x14c8+slot]!=8)return false;
+    unsigned type=g_ram[0x9e + slot],state=g_ram[0xc2+slot];
+    /* Stock Thwomp fall/return and charging Chuck windup/run states. Other
+     * aimed producers remain separately qualified, rather than locking every
+     * nonzero state of enemies whose states are permanent behavior modes. */
+    return type==0x26?state!=0:
+        (type==0x91 || type==0x96) && (state==1 || state==2);
+}
 static bool run_normal_sprite(CpuState *cpu,CoopMachine *m) {
     unsigned slot=cpu->X&0xff;if(slot>=12)return false;
     CoopEntity *e=coop_machine_entity_slot(m,COOP_ENTITY_NORMAL,slot);
@@ -1311,7 +1435,9 @@ static bool run_normal_sprite(CpuState *cpu,CoopMachine *m) {
     CoopActor *primary=primary_actor(m);capture(m,primary);
     int x=(g_ram[0xe4+slot]|(g_ram[0x14e0+slot]<<8))+8;
     int y=(g_ram[0xd8+slot]|(g_ram[0x14d4+slot]<<8))+8;
+    const CoopPlayer *committed=coop_player_const(&m->session,e->target);
     CoopPlayerId target=e->owner!=COOP_NO_PLAYER?e->owner:
+        committed_enemy_attack(slot) && committed && committed->life==COOP_PLAYING?e->target:
         coop_nearest_player(&m->session,x,y,false,false);
     CoopActor *a=coop_machine_actor(m,target);
     if(yoshi)a=mount_target(m,e);
@@ -1334,6 +1460,7 @@ static bool run_normal_sprite(CpuState *cpu,CoopMachine *m) {
     --sprite_call_depth;bound_actor=NULL;
     trace_normal_contact(m,a,slot,1);
     e=normal_entity(m,slot,false);
+    e->target=e->owner==COOP_NO_PLAYER && committed_enemy_attack(slot)?target:COOP_NO_PLAYER;
     if(e->type==0x35 && g_ram[0x14c8+slot]) {
         coop_mount_capture(e,g_ram);
         if(!unrelated_mount)mount_owner(m,e,a);
@@ -1480,6 +1607,28 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
         carry_through_room(cpu,m);return 0x02ac5b;
     }
     if(!level_frame)return 0;
+    if(pc==0x01b457 && !platform_contact_depth && bound_actor) {
+        unsigned slot=cpu->X&255;
+        /* This ordinary moving-platform family shares one audited contact
+         * body. Do not imply qualification of chained/falling/special solids. */
+        if(slot<12 && g_ram[0x9e + slot]>=0x55 && g_ram[0x9e + slot]<=0x59) {
+            return run_platform_contacts(cpu,m)?0x01b4b0:0x01b4b2; /* native carry-return exits */
+        }
+    }
+    if(pc==0x02c79d && !chuck_contact_depth) {
+        collect_chuck_contacts(cpu,m);return 0x02c80f;
+    }
+    if(pc==0x0294f5 && !cape_contact_depth) {
+        run_cape_contacts(cpu,m);return 0x02950a;
+    }
+    if(pc==0x029404 && cape_contact_depth) {
+        unsigned slot=cpu->X&255;
+        if(slot<12) {
+            CoopEntityId id=normal_entity(m,slot,false)->id;
+            if(damaged_entity[slot]==id)return 0x02950a; /* native RTS */
+            damaged_entity[slot]=id;
+        }
+    }
     if(pc==0x02d1ca && collecting_mouth_contacts) {
         record_body_berry(cpu,m);return 0x02d1f0;
     }

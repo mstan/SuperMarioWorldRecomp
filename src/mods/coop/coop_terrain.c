@@ -77,13 +77,25 @@ static bool rider_owns_sprite(const CoopTerrain *t,unsigned slot) {
     }
     return false;
 }
+static bool platform_footing(const CoopTerrain *t,unsigned slot,int left,int right,int feet) {
+    const uint8_t *r=t->ram;
+    if(r[0x14c8+slot]!=8 || r[0x9e + slot]<0x55 || r[0x9e + slot]>0x59)return false;
+    /* CODE_01B457 places an unmounted pose at platform Y-31. Its native
+     * clipping feet are therefore Y+1. Use GetSpriteClippingA's ROM-derived
+     * horizontal bounds; the complete returning body must fit on the top. */
+    if(feet!=(int)(r[0xd8+slot]|(r[0x14d4+slot]<<8))+1)return false;
+    unsigned clip=r[0x1662+slot]&0x3f;uint8_t dx,width;
+    if(!rom8(t,0x03b56c+clip,&dx) || !rom8(t,0x03b5a8+clip,&width))return false;
+    int x=(r[0xe4+slot]|(r[0x14e0+slot]<<8))+(int8_t)dx;
+    return width && left>=x && right<x+width;
+}
 static bool clear_of_sprites(const CoopTerrain *t,int left,int right,int top,int feet) {
     for(unsigned i=0;i<12;++i) {
         if(t->ram[0x14c8+i]<8)continue;
         /* An active rider/mount uses the combined body below. A mount held
          * by an out-of-play bubble is not an obstacle at its stale position.
          * Resolve ownership by stable identity, never by Yoshi type alone. */
-        if(rider_owns_sprite(t,i))continue;
+        if(rider_owns_sprite(t,i) || platform_footing(t,i,left,right,feet))continue;
         int x=t->ram[0xe4+i]|(t->ram[0x14e0+i]<<8);
         int y=t->ram[0xd8+i]|(t->ram[0x14d4+i]<<8);
         /* Conservative clearance while per-type contact shapes are added.
@@ -117,6 +129,7 @@ static bool safe_at(const CoopTerrain *t,const CoopPlayer *returning,
         if(!body_clear(t,layer,left+dx,right+dx,feet-clearance+dy,feet+dy,water))return false;
         support|=footing(t,layer,left+dx,feet+dy) && footing(t,layer,right+dx,feet+dy);
     }
+    for(unsigned i=0;i<12;++i)support|=platform_footing(t,i,left,right,feet);
     if(!support && !water)return false;
     if(!clear_of_sprites(t,left,right,feet-clearance,feet))return false;
     if(t->session)for(size_t i=0;i<t->session->player_count;++i) {

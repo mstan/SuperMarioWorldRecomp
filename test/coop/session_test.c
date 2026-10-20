@@ -532,6 +532,30 @@ static void terrain(void) {
     free(before);free(rom);free(r);
 }
 
+static void platform_recovery(void) {
+    uint8_t *r=calloc(0x20000,1),*rom=calloc(0x80000,1),*before=malloc(0x20000);
+    assert(r && rom && before);
+    rom[0x3a9c]=0xc8;r[0x5d]=1;memset(r+0xc800,0x25,0x1b0);
+    /* Read-only GetSpriteClippingA input, with a wide platform over air. */
+    rom[0x1b5a8]=80;
+    r[0x14c8]=8;r[0x9e]=0x55;r[0xe4]=80;r[0xd8]=64;r[0x14d4]=1;
+    CoopSession s={0};assert(coop_session_init(&s,2,60));
+    CoopPlayer *anchor=&s.players[0],*returning=&s.players[1];
+    anchor->x=96;anchor->y=308;anchor->height=26;anchor->grounded=true;
+    returning->life=COOP_CATCHUP_BUBBLE;returning->power=COOP_SMALL;
+    CoopTerrain t={.ram=r,.rom=rom,.rom_size=0x80000,.session=&s};
+    int32_t x=0,y=0;memcpy(before,r,0x20000);
+    assert(coop_terrain_safe(&t,returning,anchor,&x,&y) && x==120 && y==315);
+    assert(!memcmp(before,r,0x20000));
+    rom[0x1b5a8]=16;
+    assert(!coop_terrain_safe(&t,returning,anchor,&x,&y)); /* full body must fit */
+    rom[0x1b5a8]=80;r[0xd8]=65;
+    assert(!coop_terrain_safe(&t,returning,anchor,&x,&y)); /* exact current surface */
+    r[0xd8]=64;r[0x14c8+1]=8;r[0xe4+1]=128;r[0xd8+1]=48;r[0x14d4+1]=1;
+    assert(!coop_terrain_safe(&t,returning,anchor,&x,&y)); /* nearby enemies still block */
+    coop_session_destroy(&s);free(before);free(rom);free(r);
+}
+
 static void berry_reservations(size_t players) {
     CoopMachine m={0};assert(coop_machine_init(&m,players));
     uint8_t *ram=calloc(0x20000,1),*before=malloc(0x20000);assert(ram&&before);
@@ -568,6 +592,7 @@ int main(void) {
     placed_egg_states(2);placed_egg_states(3);placed_egg_states(4);placed_egg_states(17);
     berry_reservations(2);berry_reservations(3);berry_reservations(4);berry_reservations(17);
     terrain();
+    platform_recovery();
     puts("co-op: roster 2/3/4/17, recovery, arbitration, camera, input, checkpoint and atomic state validation passed");
     return 0;
 }

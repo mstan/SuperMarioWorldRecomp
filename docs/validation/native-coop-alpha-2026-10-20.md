@@ -137,8 +137,11 @@ python tools/test_coop_bonus_alpha.py --room-snapshot build-adaptive/playtest/go
 ## Remaining limitations and delivery
 
 The [deferral list](../NATIVE_COOP_DEFERRED.md) retains the known interrupted
-berry bite and unverified corner cases. The overworld follower and other
-unfinished special-scene behavior remain alpha limitations in the full backlog.
+berry bite and unverified corner cases. In the subsequent
+[bounded follow-up](native-coop-common-followup-2026-10-20.md), the owner accepted
+the normal single overworld party sprite and single lead in special scenes;
+adding a visible second participant there is no longer required. Gameplay-state
+continuity through scenes remains part of the contract.
 Boss/bonus breadth, rare simultaneous events and the complete stock inventory
 are not alpha gates. No full-product completion claim is made.
 

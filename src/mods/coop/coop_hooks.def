@@ -30,6 +30,10 @@ COOP_HOOK(0x01AA74) /* Loose-object kick/solid response, before mutation */
 COOP_HOOK(0x01C4AC) /* Power-up contact: choose among all eligible collectors */
 COOP_HOOK(0x01C4C6) /* Accepted power-up, before consumption or reward */
 COOP_HOOK(0x01C5AE) /* Cape animation must start outside the original viewport */
+COOP_HOOK(0x0294F5) /* Original cape contacts for each actor, shared world once */
+COOP_HOOK(0x029404) /* Accepted cape hit before shared enemy response */
+COOP_HOOK(0x02C79D) /* Chuck custom contacts query all actors before responses */
+COOP_HOOK(0x01B457) /* Common moving platforms carry every active rider */
 COOP_HOOK(0x00F60A) /* Individual lethal damage before shared music/freeze */
 COOP_HOOK(0x00F606) /* Enemy/crush kill entry includes F60A in its AOT block */
 COOP_HOOK(0x00D0B6) /* Death animation before original party-life handling */

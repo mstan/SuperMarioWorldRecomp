@@ -36,6 +36,14 @@ The [playable-alpha evidence](validation/native-coop-alpha-2026-10-20.md)
 records the selected common checks, reused evidence, actual boss/bonus outcomes,
 setup limitations and owner handoff.
 
+Owner follow-up, 2026-10-20: prioritize enemy interactions, abilities and hazards,
+with a small recovery/camera and rudimentary transition pass. Use one or two
+representative variations per area, expanding only to diagnose an observed
+failure. Additional boss/bonus breadth remains deferred. The overworld and
+special scenes may use the original single lead; a visible second participant
+is no longer a required feature. Preserve every participant's gameplay state
+when a scene returns to normal play.
+
 The 19 game commits have been rebased onto game main `8dedb28`, retaining the
 newer Falcon/cache-helper, isolated generation, disassembly-authority, capture
 and launcher changes. Framework pin `fa018f3` contains the merged co-op support
@@ -260,8 +268,9 @@ and frozen entrance/cutscene phases do not consume gameplay countdowns.
 - Bosses retain normal health and timing. Aimed attacks choose the nearest active
   actor at attack start; scripted attacks remain scripted. Repeated recovery
   beside a survivor remains available in bosses.
-- Mario controls one overworld party position and level choice; Luigi visibly
-  follows. Preserve the normal lead in castle destruction and ending scenes;
+- Mario controls one overworld party position and level choice; the normal
+  single party sprite is sufficient. Preserve the normal lead in castle
+  destruction and ending scenes; no second visible participant is required;
   retain all participants' state when gameplay resumes.
 - Power-up/damage transformations briefly freeze the world. Messages freeze it
   and either player can dismiss them after the normal delay with fresh input.
