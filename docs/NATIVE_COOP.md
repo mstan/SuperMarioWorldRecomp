@@ -63,8 +63,12 @@ corrects the singleton hatch decision below the roster cap and prevents babies
 from reserving a partner's held food. Existing baby reservations also exclude
 other mouths and participate in atomic snapshot preflight. Forty-four focused
 execution checks pass, with native/bounce parity, save replay and unchanged
-disabled/One-Player behavior. Repeated placed-source grants, fresh mouth
-competition, growth/abilities and full mount acceptance remain open.
+disabled/One-Player behavior. A follow-up growth adapter starts new adult mount
+state independently and ends baby food claims when growth occurs inside a scan.
+Fifty-six additional growth cases cover both riders, four power-ups, five-food
+growth, actual carried babies, replay and native/bounce parity. Repeated
+placed-source grants, fresh mouth competition, full abilities and mount
+acceptance remain open.
 
 Owner-approved specification, 2026-09-22. Implementation tracking:
 `beads-8wg.3.26`, branch `feat/native-simultaneous-coop`.

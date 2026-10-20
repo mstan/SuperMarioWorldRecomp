@@ -1175,7 +1175,7 @@ static bool run_normal_sprite(CpuState *cpu,CoopMachine *m) {
         return false;
     }
     e=normal_entity(m,slot,false);
-    bool yoshi=e->type==0x35;
+    bool yoshi=e->type==0x35,baby=e->type==0x2d;
     if(yoshi && e->owner!=COOP_NO_PLAYER) {
         const CoopPlayer *rider=coop_player_const(&m->session,e->owner);
         if(rider && rider->life!=COOP_PLAYING) {e->pending.count=0;return true;}
@@ -1209,6 +1209,9 @@ static bool run_normal_sprite(CpuState *cpu,CoopMachine *m) {
     if(e->type==0x35 && g_ram[0x14c8+slot]) {
         coop_mount_capture(e,g_ram);
         if(!unrelated_mount)mount_owner(m,e,a);
+        /* Growth initializes the new adult's globals. Mount binding also
+         * covers actor wing bytes; retain the actual rider's own abilities. */
+        if(baby)coop_mount_bind(actor_mount(m,a),g_ram);
     } else {
         CoopEntity *mount=actor_mount(m,a);if(mount)coop_mount_capture(mount,g_ram);
     }
@@ -1356,8 +1359,14 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
     }
     if(pc==0x02ea8a) {
         unsigned mouth=cpu->X&255,slot=cpu->Y&255;
-        if(mouth>=12 || slot>=12 || g_ram[0x9e + mouth]!=0x2d)
+        if(mouth>=12 || slot>=12 ||
+           (g_ram[0x9e + mouth]!=0x2d &&
+            !(g_ram[0x9e + mouth]==0x35 && g_ram[0x18e8])))
             Die("Native co-op baby food query has no native mouth");
+        /* Finishing an earlier meal can grow the baby inside this descending
+         * scan. Remaining candidates cannot create a baby food reservation on
+         * that adult: its own mouth update takes over on the following frame. */
+        if(g_ram[0x9e + mouth]==0x35)return 0x02eacd;
         if(!mouth_candidate_available(m,mouth,slot))return 0x02eacd;
     }
     if(pc==0x01f58e) {
@@ -1477,6 +1486,14 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
     if(pc==0x07f722 && !room_sprite_depth) {
         unsigned slot=cpu->X&0xff;
         if(slot<12) {
+            const CoopEntity *old=coop_machine_entity_slot(m,COOP_ENTITY_NORMAL,slot);
+            /* Both native baby growth paths enter InitSpriteTables after
+             * changing $2D to $35. Start the new adult's singleton state here;
+             * the surrounding actor-contact queries can bind a nearby rider's
+             * mount earlier in the baby's update. Original growth then sets
+             * its own empty mouth, pose and growth timer after initialization. */
+            if(old && old->type==0x2d && g_ram[0x9e + slot]==0x35)
+                coop_mount_bind(NULL,g_ram);
             CoopEntity *e=normal_entity(m,slot,true);
             if(g_ram[0x14c8+slot]==0x0b && bound_actor && !carried_reward_depth)
                 claim_carried(m,e,bound_actor);
