@@ -399,7 +399,7 @@ static void native_states(size_t players) {
 static void terrain(void) {
     uint8_t *r=calloc(0x20000,1),*rom=calloc(0x80000,1),*before=malloc(0x20000);
     assert(r && rom && before);
-    CoopTerrain t={r,rom,0x80000,NULL};
+    CoopTerrain t={.ram=r,.rom=rom,.rom_size=0x80000};
     /* Two horizontal screen pointers, then a separate layer-2 pointer. */
     rom[0xba60-0x8000]=0;rom[0xba9c-0x8000]=0xc8;
     rom[0xba61-0x8000]=0xb0;rom[0xba9d-0x8000]=0xc9;
@@ -431,6 +431,40 @@ static void terrain(void) {
     assert(!coop_terrain_safe(&t,&returning,&anchor,&x,&y));
     r[0x14ad]=0;assert(coop_terrain_safe(&t,&returning,&anchor,&x,&y));
     t.rom_size=16;assert(!coop_terrain_safe(&t,&returning,&anchor,&x,&y));
+    t.rom_size=0x80000;
+    /* A mounted survivor's native sprite rectangle used to reject every
+     * candidate, including free footing forty pixels to its right. A bubble's
+     * retained mount must not obstruct recovery at its stale native position. */
+    CoopSession s={0};assert(coop_session_init(&s,3,60));
+    s.primary=41;
+    anchor.id=41;anchor.x=24;anchor.y=368;anchor.height=32;anchor.mount=401;
+    returning.id=19;returning.life=COOP_CATCHUP_BUBBLE;returning.power=COOP_BIG;
+    returning.mount=402;
+    s.players[0]=anchor;s.players[1]=returning;
+    s.players[2].id=901;s.players[2].life=COOP_CATCHUP_BUBBLE;
+    t.session=&s;
+    CoopEntity mounts[2]={
+        {.id=401,.kind=COOP_ENTITY_NORMAL,.slot=0,.type=0x35,.owner=41,.flags=COOP_ENTITY_RIDDEN},
+        {.id=402,.kind=COOP_ENTITY_NORMAL,.slot=1,.type=0x35,.owner=19,.flags=COOP_ENTITY_RIDDEN}
+    };
+    for(unsigned slot=0;slot<2;++slot) {
+        r[0x14c8+slot]=8;r[0x9e + slot]=0x35;r[0xe4+slot]=18;
+        r[0xd8+slot]=(uint8_t)(slot?304:352);r[0x14d4+slot]=1;
+    }
+    assert(!coop_terrain_safe(&t,&returning,&anchor,&x,&y)); /* absent ownership stays conservative */
+    t.entities=mounts;t.entity_count=2;
+    memcpy(before,r,0x20000);
+    assert(coop_terrain_safe(&t,&returning,&anchor,&x,&y) && x==64 && y==368);
+    assert(!memcmp(before,r,0x20000));
+    mounts[0].owner=COOP_NO_PLAYER;
+    assert(!coop_terrain_safe(&t,&returning,&anchor,&x,&y)); /* an unoccupied Yoshi still blocks */
+    mounts[0].owner=41;
+    s.players[2].life=COOP_PLAYING;s.players[2].mount=COOP_NO_ENTITY;
+    s.players[2].x=64;s.players[2].y=371;s.players[2].half_width=6;s.players[2].height=26;
+    assert(!coop_terrain_safe(&t,&returning,&anchor,&x,&y)); /* no overlapping another actor */
+    s.players[2].x=120;
+    assert(coop_terrain_safe(&t,&returning,&anchor,&x,&y));
+    coop_session_destroy(&s);
     free(before);free(rom);free(r);
 }
 

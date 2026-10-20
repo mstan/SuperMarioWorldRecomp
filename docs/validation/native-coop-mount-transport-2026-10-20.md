@@ -152,10 +152,71 @@ The exploratory `bubble0-first` carries a waiting mounted Mario through Luigi's
 pipe entry, preserving its countdown and mount. After the delay expires it
 cannot find a position beside the mounted survivor: the generic conservative
 sprite rectangle overlaps every candidate, even where actual rider/mount
-bodies would fit. This is an open recovery defect, not a passed recovery test.
+bodies would fit. This was an open recovery defect at `439c81e`; the correction
+and its bounded acceptance are recorded below.
 
 Other open work includes slot pressure, all entrance forms/special scenes,
 the full baby/source/berry/shell/wing/keyhole matrix, in-room bubble mouth-timer
 preservation, campaign persistence, complex recovery and complete campaign
 mechanics/exit coverage. Native pipe mouth clearing above does not waive the
 contract to preserve mouth contents during in-room catch-up.
+
+## Ownership-aware mounted recovery
+
+The terrain query now receives a read-only view of the stable native entity
+records. A live Yoshi slot is handled as a ridden mount only when its type,
+status, entity kind, owner and owner's mount ID agree.
+
+An active rider and mount use one combined clearance body (32 pixels wide,
+48 tall, aligned to the rider's feet). The candidate also checks this combined
+body for overlap. Its native slot is not additionally counted with the broad
+generic sprite rectangle. A bubble's retained mount is out of play and does
+not obstruct recovery at its old native position. An unowned Yoshi or missing/
+inconsistent ownership still receives conservative sprite clearance. Other
+actors, objects and terrain remain obstacles.
+
+No guest state is written during the safe-placement query. A successful query
+still goes through the existing recovery action and native actor/mount
+placement. No new immunity, forced recovery, changed delay or fallback overlap
+is introduced.
+
+Evidence root: `build-adaptive/playtest/goal-20261019/mount-recovery`.
+`before-recovery.exe` preserves the `439c81e` transport build.
+The same `bubble0-pipe.sav` and input script change from permanently waiting
+at zero delay to Mario recovering at x=70 beside Luigi at x=30, both with
+center y=368 and their original mount IDs. This is room `$1CA`; the original
+pipe entrance has already cleared their mouths.
+
+```text
+python tools/test_coop_mounted_recovery_live.py <two-rider-YI2-state> --out <new-directory>
+python tools/test_native_coop.py
+```
+
+`acceptance-first` passes **32/32 execution cases**, **40 complete WRAM/co-op
+snapshot parity comparisons** and **32 exact save/load replays**:
+
+- Either actor returning beside a mounted survivor in standard/wide and
+  native/bounce execution.
+- Both mounted bodies separated with matching footing, the same mount IDs
+  and equipment, and no added catch-up protection.
+- In-room waiting retains the actual mouth object/status and swallow timer
+  while the survivor's timer keeps advancing. Recovery resumes the returning
+  mount's timer. Sixteen waiting snapshots check that independent behavior.
+- Deliberately obstructed candidates keep the bubble after its delay expires.
+  Removing only those staged obstruction tiles allows the existing recovery
+  code to place the actor safely.
+- A waiting bubble travels through the other actor's actual pipe entry.
+  Prepared entrance state preserves ownership/delay; recovery occurs after
+  arrival. The normal room-entry mouth-clearing rule still applies.
+
+These tests stage the catch-up state and delay; they do not prove the edge
+warning/catch-up trigger. Obstruction tiles are offline collision fixtures,
+not rendered-terrain acceptance. The portable regression covers the original
+failure with absent ownership, corrected placement, unowned-Yoshi exclusion,
+a third actor blocking placement, noncontiguous player IDs and query
+nonmutation. All 27 owner file hashes remain unchanged.
+
+Tested executable SHA256:
+`df4a974bffbede74ba793f0d1f24ea369f50dbe94b1c2c05db722a4217f8b6c8`.
+Broader slope/water/air/Layer 2/autoscroll recovery and mount/campaign acceptance
+remain open.

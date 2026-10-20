@@ -1,4 +1,5 @@
 #include "coop_terrain.h"
+#include "coop_machine.h"
 
 static unsigned r16(const uint8_t *r,unsigned at) {return r[at]|(r[at+1]<<8);}
 static bool rom8(const CoopTerrain *t,unsigned address,uint8_t *out) {
@@ -63,9 +64,26 @@ static bool footing(const CoopTerrain *t,unsigned layer,int x,int feet) {
     if((t->ram[0x1931]==3 || t->ram[0x1931]==14) && b>=0x159 && b<=0x15b)return false;
     return b>=0x100 && b<0x16e && !(feet&15);
 }
+static bool rider_owns_sprite(const CoopTerrain *t,unsigned slot) {
+    if(!t->session || !t->entities || t->ram[0x9e + slot]!=0x35 ||
+       t->ram[0x14c8+slot]!=8)return false;
+    for(size_t i=0;i<t->entity_count;++i) {
+        const CoopEntity *e=&t->entities[i];
+        if(e->kind!=COOP_ENTITY_NORMAL || e->slot!=slot || e->type!=0x35 ||
+           e->flags!=COOP_ENTITY_RIDDEN)continue;
+        const CoopPlayer *p=coop_player_const(t->session,e->owner);
+        if(p && p->mount==e->id && (p->life==COOP_PLAYING ||
+                p->life==COOP_DEATH_BUBBLE || p->life==COOP_CATCHUP_BUBBLE))return true;
+    }
+    return false;
+}
 static bool clear_of_sprites(const CoopTerrain *t,int left,int right,int top,int feet) {
     for(unsigned i=0;i<12;++i) {
         if(t->ram[0x14c8+i]<8)continue;
+        /* An active rider/mount uses the combined body below. A mount held
+         * by an out-of-play bubble is not an obstacle at its stale position.
+         * Resolve ownership by stable identity, never by Yoshi type alone. */
+        if(rider_owns_sprite(t,i))continue;
         int x=t->ram[0xe4+i]|(t->ram[0x14e0+i]<<8);
         int y=t->ram[0xd8+i]|(t->ram[0x14d4+i]<<8);
         /* Conservative clearance while per-type contact shapes are added.
@@ -104,8 +122,11 @@ static bool safe_at(const CoopTerrain *t,const CoopPlayer *returning,
     if(t->session)for(size_t i=0;i<t->session->player_count;++i) {
         const CoopPlayer *p=&t->session->players[i];
         if(p->id==returning->id || p->life!=COOP_PLAYING)continue;
-        if(right>=p->x-p->half_width-4 && left<=p->x+p->half_width+4 &&
-           feet>p->y-p->height/2 && feet-height<p->y+p->height/2)return false;
+        int other_half=p->mount!=COOP_NO_ENTITY?16:p->half_width;
+        int other_height=p->mount!=COOP_NO_ENTITY?48:p->height;
+        int other_feet=p->y+p->height/2;
+        if(right>=p->x-other_half-4 && left<=p->x+other_half+4 &&
+           feet>other_feet-other_height && feet-clearance<other_feet)return false;
     }
     *x=center;*y=feet-height/2;return true;
 }

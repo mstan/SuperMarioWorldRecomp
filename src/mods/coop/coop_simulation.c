@@ -1711,7 +1711,8 @@ static void recover_and_frame(CoopMachine *m) {
     if(!coop_camera_check_separation(s,resized))Die("Native co-op separation check failed");
     /* Drop before recovery binds a new position: objects stay at departure. */
     apply_object_drops(m);
-    CoopTerrain terrain={g_ram,g_rom,0x80000,s}; /* validated stock-US ROM */
+    CoopTerrain terrain={.ram=g_ram,.rom=g_rom,.rom_size=0x80000,.session=s,
+                         .entities=m->entities,.entity_count=m->entity_count};
     if(!coop_session_recover(s,safe_recovery,&terrain))Die("Native co-op recovery failed");
     for(size_t i=0;i<s->action_count;++i) {
         const CoopAction *action=&s->actions[i];
