@@ -54,6 +54,10 @@ KeyboardPlayers=3
     selection = out / 'saves/native-coop-v1'
     selection.mkdir(parents=True)
     (selection / 'last-mode.txt').write_text(str(args.players), encoding='ascii')
+    for source, target in ((args.normal_sram, out/'saves/save.srm'),
+                           (args.coop_sram, selection/'save.srm')):
+        if source:
+            shutil.copy2(source, target)
     saves = selection if args.players > 1 and not args.disabled else out / 'saves'
     if args.snapshot:
         shutil.copy2(args.snapshot, saves / 'save10.sav')
@@ -80,6 +84,8 @@ KeyboardPlayers=3
         env['SMW_AUDIO_FRAME_TRACE'] = str(out / 'audio-frames.csv')
     if args.audit_queries:
         env['SMW_COOP_QUERY_AUDIT'] = '1'
+    if args.storage_trace:
+        env['SMW_COOP_STORAGE_TRACE'] = str(out / 'storage.csv')
     if args.wram_watch:
         lo, hi = (int(value, 16) for value in args.wram_watch.split(':'))
         if not 0 <= lo <= hi <= 0xffff:
@@ -104,8 +110,9 @@ KeyboardPlayers=3
     provenance = {'command': command, 'turbo_burst': args.turbo_burst,
                   'minimal_trace': args.minimal_trace, 'audio_frames': args.audio_frames,
                   'audio_capture': args.audio_capture, 'audit_queries': args.audit_queries,
-                  'wram_watch': args.wram_watch, 'inputs': {}}
-    for name in ('exe', 'rom', 'snapshot', 'script'):
+                  'wram_watch': args.wram_watch, 'storage_trace': args.storage_trace,
+                  'inputs': {}}
+    for name in ('exe', 'rom', 'snapshot', 'script', 'normal_sram', 'coop_sram'):
         path = getattr(args, name)
         if path:
             provenance['inputs'][name] = {
@@ -148,6 +155,8 @@ def main():
     for name in ('exe', 'rom', 'script', 'out'):
         parser.add_argument('--' + name, type=Path, required=True)
     parser.add_argument('--snapshot', type=Path)
+    parser.add_argument('--normal-sram', type=Path, help='Copy normal SRAM into the isolated test directory')
+    parser.add_argument('--coop-sram', type=Path, help='Copy co-op SRAM into the isolated test directory')
     parser.add_argument('--frames', type=int, default=800)
     parser.add_argument('--capture', default='')
     parser.add_argument('--framedump', type=int, help='Capture one completed frame, including native width')
@@ -157,6 +166,8 @@ def main():
                         help='Record audio counters around input/state load and guest execution')
     parser.add_argument('--audit-queries', action='store_true',
                         help='Reject unexpected WRAM changes during native contact queries')
+    parser.add_argument('--storage-trace', action='store_true',
+                        help='Record buffered namespace-selection I/O phase timings')
     parser.add_argument('--wram-watch', help='Passive guest write log, inclusive hex LO:HI')
     parser.add_argument('--audio-capture', action='store_true',
                         help='Capture muted device output to a stereo WAV (audio-paced only)')
@@ -169,7 +180,7 @@ def main():
     args = parser.parse_args()
     if args.audio_capture and not args.audio_paced:
         parser.error('--audio-capture requires --audio-paced')
-    for name in ('exe', 'rom', 'snapshot', 'script', 'out'):
+    for name in ('exe', 'rom', 'snapshot', 'script', 'out', 'normal_sram', 'coop_sram'):
         if getattr(args, name):
             setattr(args, name, getattr(args, name).resolve())
     if args.turbo_burst:

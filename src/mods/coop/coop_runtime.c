@@ -1,4 +1,15 @@
+#if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
+#define _POSIX_C_SOURCE 200809L
+#endif
+#ifdef _WIN32
+#include <windows.h>
+/* types.h defines its own FORCEINLINE. Parse Windows inline helpers first. */
+#undef FORCEINLINE
+#else
+#include <time.h>
+#endif
 #include "coop_runtime.h"
+#include "coop_storage.h"
 #include "coop_simulation.h"
 #include "common_rtl.h"
 #include "snes/interp_bridge.h"
@@ -34,25 +45,67 @@ bool SmwCoopEnabled(void) {return enabled;}
 bool SmwCoopActive(void) {return enabled && selected_count>1;}
 CoopMachine *SmwCoopMachine(void) {return SmwCoopActive()?&machine:NULL;}
 bool SmwCoopPersistenceReady(void) {return !enabled || (selected_count && !choosing);}
+bool SmwCoopStorageSelected(void) {return selected_count!=0;}
 bool SmwCoopFrozen(void) {return enabled && disconnected;}
 
+static void trace_storage(unsigned count,const char *phase) {
+    static bool initialized;static FILE *trace;static uint64_t last;
+    if(!initialized) {
+        initialized=true;const char *path=getenv("SMW_COOP_STORAGE_TRACE");
+        if(path && *path)trace=fopen(path,"w");
+        if(trace) {
+            setvbuf(trace,NULL,_IOFBF,65536);
+            fputs("selected,count,phase,monotonic_ns,elapsed_ns\n",trace);
+        }
+    }
+    if(!trace)return;
+    uint64_t ns;
+#ifdef _WIN32
+    LARGE_INTEGER now,hz;
+    if(!QueryPerformanceCounter(&now) || !QueryPerformanceFrequency(&hz))return;
+    ns=(uint64_t)(now.QuadPart/hz.QuadPart)*1000000000u+
+       (uint64_t)(now.QuadPart%hz.QuadPart)*1000000000u/(uint64_t)hz.QuadPart;
+#else
+    struct timespec now;
+    if(clock_gettime(CLOCK_MONOTONIC,&now))return;
+    ns=(uint64_t)now.tv_sec*1000000000u+(uint64_t)now.tv_nsec;
+#endif
+    if(!strcmp(phase,"begin"))last=ns;
+    fprintf(trace,"%u,%u,%s,%llu,%llu\n",selected_count,count,
+        phase,(unsigned long long)ns,(unsigned long long)(ns>=last?ns-last:0));
+    last=ns;
+}
 static bool choose_storage(unsigned count,bool remember) {
     if(count!=1 && count!=PRODUCT_PLAYERS)return false;
+    trace_storage(count,"begin");
     CoopMachine next={0};
     if(count>1 && !coop_machine_init(&next,count))return false;
-    /* Flush only SRAM that already belongs to the previous namespace. The
-     * guest decides when progress enters SRAM; this adds no save opportunity. */
-    if(selected_count)RtlWriteSram();
-    RtlSetSaveRoot(count>1?COOP_ROOT:"saves");
-    RtlEnsureSaveDir();
-    if(g_sram && g_sram_size>0)memset(g_sram,0,(size_t)g_sram_size);
-    RtlReadSram();
+    trace_storage(count,"allocated");
+    if(count!=selected_count) {
+        /* Copy for durable writing only when actually leaving a namespace.
+         * The worker never reads live guest bytes or the mutable save root.
+         * Selecting the count
+         * already prepared at boot retains its SRAM, including pending guest
+         * changes, without a redundant synchronous durable write/read. */
+        if(selected_count && !SmwCoopQueueStorage()) {
+            coop_machine_destroy(&next);trace_storage(count,"queue_failed");
+            return false;
+        }
+        trace_storage(count,"queued");
+        RtlSetSaveRoot(count>1?COOP_ROOT:"saves");
+        RtlEnsureSaveDir();
+        if(g_sram && g_sram_size>0)memset(g_sram,0,(size_t)g_sram_size);
+        if(!SmwCoopReadQueuedStorage())RtlReadSram();
+        trace_storage(count,"loaded");
+    } else trace_storage(count,"retained");
     coop_machine_destroy(&machine);machine=next;selected_count=count;
+    trace_storage(count,"replaced");
     if(remember) {
         MkDir("saves");MkDir(COOP_ROOT);
         FILE *f=fopen(SELECTION_FILE,"wb");
         if(f){fputc((int)('0'+count),f);fclose(f);}
     }
+    trace_storage(count,"remembered");
     return true;
 }
 bool SmwCoopPrepareStorage(void) {

@@ -199,10 +199,10 @@ Current evidence:
 |---|---|
 | `audio-backpressure-control`, 800 frames | Strict gate passes; zero dropped samples; 3 instrumented underflows retained. |
 | `audio-backpressure-death`, 800 frames | Strict gate passes; zero dropped samples and underflows. |
-| `audio-fresh-entry-buffered`, 3,600 frames | Original menus, intro, overworld and YI2 entry; strict gate passes, zero dropped samples. One underflow at frame 424 in file-menu mode `$08` remains open. |
-| Same fresh entry, frames 3200?3599 | Zero drops/underflows; 213,600 samples produced, 213,595 consumed; captured stage output peak 4,104, RMS 681.5. |
+| `audio-fresh-entry-buffered`, 3,600 frames | Original menus, intro, overworld and YI2 entry; strict gate passes, zero dropped samples. One underflow at frame 424 in file-menu mode `$08`; resolved by the later namespace-write correction below. |
+| Same fresh entry, frames 3200–3599 | Zero drops/underflows; 213,600 samples produced, 213,595 consumed; captured stage output peak 4,104, RMS 681.5. |
 | `audio-turbo-buffered`, 120-frame turbo interval | Whole-run strict result remains failed because accelerated frames deliberately overflow the device-rate queue. It is not relabeled as passing. |
-| Same turbo run, frames 240?1199 (after release) | Separate recovery acceptance passes: zero drops/underflows, 512,640 produced, 501,529 consumed; output peak 4,418, RMS 677.2. No persistent silence. |
+| Same turbo run, frames 240–1199 (after release) | Separate recovery acceptance passes: zero drops/underflows, 512,640 produced, 501,529 consumed; output peak 4,418, RMS 677.2. No persistent silence. |
 
 All listed completed runs have no dispatch misses. Saved fresh-entry state
 `savequick.sav` contains two actors in level `$106`; frame 3500 of the earlier
@@ -223,8 +223,8 @@ byte. The earlier startup timeout remains in the evidence directory. Contact
 fixtures now explicitly store their intended 448-pixel viewport, so their
 synthetic fixed-camera offsets do not accidentally exercise viewport refitting.
 
-Remaining audio qualification: investigate the reproducible file-menu underflow,
-exercise stage-entry/recovery across the campaign and supported devices/platforms,
+The later persistence section resolves the reproducible file-menu underflow.
+Remaining audio qualification: exercise stage-entry/recovery across the campaign and supported devices/platforms,
 and retain the distinction between routine normal-speed playback and intentional
 turbo sample disposal. These bounded checks do not close the full audio issue.
 
@@ -328,3 +328,46 @@ coordinates and, in the fence case, collision tiles are staged deliberately;
 VRAM is not rebuilt. Remaining custom sprite contacts, combined solid-object
 responses, cross-ability same-frame damage, projectiles, committed targets,
 mount interactions and campaign acceptance remain open.
+
+## File-menu persistence and audio
+
+`audio-storage-before` adds a buffered phase timer around namespace selection.
+At host frame 424, choosing the already loaded two-player namespace spent
+149.7626 ms in `RtlWriteSram`. The queue had 3,709 samples before that guest
+frame and underflowed during it. The stricter captured interval check correctly
+fails, even though the broader benchmark's audible-drop gate passes.
+
+Retaining an unchanged namespace removes the redundant write/read:
+`audio-storage-after` completes 3,600 native-width frames through the original
+menus, intro, overworld and Yoshi's Island 2 with zero dropped samples and zero
+underflows. Whole-run capture passes; stage frames 3200–3599 pass independently
+with 213,600 samples produced, 213,594 consumed, peak 4106 and RMS 681.49.
+Frame 3300 was inspected. Selection itself took about 0.229 ms.
+
+That correction alone was insufficient for actual namespace changes.
+`audio-storage-two-to-one` spent 863.4382 ms flushing the departing namespace
+and underflowed at frame 423. `audio-storage-one-to-two` spent 82.3401 ms and
+did not underflow. Both retained runs completed without dispatch misses.
+The asynchronous copied-image writer addresses these required writes rather
+than omitting durability or allowing one namespace's bytes to reach the other.
+
+The real SDL worker harness passes gated I/O, immutable path/data, FIFO,
+latest-image readback, superseded-failure, retained-failure and retry checks.
+Production menu routing passes namespace sentinels, same-mode retention,
+enqueue-failure/retry, invalid-count and disabled-mod checks. The real framework
+writer passes file/backup/failed-publication and explicit-image isolation checks.
+The worker harness also passes against SDL2 and SDL3 on Windows.
+
+The combined asynchronous build passes:
+
+| Evidence | Result |
+|---|---|
+| `audio-storage-async-two-to-one`, 650 frames | Zero drops/underflows; captured interval passes. |
+| `audio-storage-async-one-to-two`, 650 frames | Zero drops/underflows; captured interval passes. |
+| `audio-storage-async-entry`, 3,600 frames | Whole-run and YI2 interval pass with zero drops/underflows; stage peak 4106, RMS 681.49. Frame 3300 inspected. |
+| `audio-storage-sram-comparison.json` | All four resulting normal/co-op SRAM files match their synchronous baseline bytes. |
+| `storage-menu-exit`, 400 frames | Exit while the original count menu is open preserves both 2,048-byte namespace sentinels, creates only the selected co-op backup, and leaves no temporary file. Frame 390 confirms the count menu. |
+
+All runs complete with no dispatch misses. The old failed results remain
+retained. Supported-platform, full campaign and device audio qualification
+remain open; these checks resolve the observed menu-write failures.

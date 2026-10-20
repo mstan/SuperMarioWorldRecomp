@@ -12,6 +12,8 @@ bool SmwCoopInstallHooks(void);
 /* Before the initial SRAM read; false means no namespace has been selected. */
 bool SmwCoopPrepareStorage(void);
 bool SmwCoopPersistenceReady(void);
+/* Includes a selected namespace while its next player-count menu is open. */
+bool SmwCoopStorageSelected(void);
 bool SmwCoopFrozen(void);
 void SmwCoopResetSession(void);
 /* Input assignment/disconnect processing. True advances this gameplay frame. */

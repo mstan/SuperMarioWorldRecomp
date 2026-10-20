@@ -13,6 +13,8 @@ int g_sram_size;
 static size_t current_guest_size;
 static uint32 current_guest_version=10;
 int RtlWriteSram(void) {return 1;}
+bool SmwCoopQueueStorage(void) {return true;}
+bool SmwCoopReadQueuedStorage(void) {return false;}
 void RtlSetSaveRoot(const char *root) {(void)root;}
 void RtlEnsureSaveDir(void) {}
 void RtlReadSram(void) {}

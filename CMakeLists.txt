@@ -158,6 +158,7 @@ set(SMW_RUNTIME_SOURCES
     src/mods/coop/coop_guest.c
     src/mods/coop/coop_machine.c
     src/mods/coop/coop_runtime.c
+    src/mods/coop/coop_storage.c
     src/mods/coop/coop_simulation.c
     src/mods/coop/coop_terrain.c
     src/mods/coop/coop_presentation.c

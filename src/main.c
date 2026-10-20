@@ -518,6 +518,7 @@ static SDL_HitTestResult HitTestCallback(SDL_Window *win, const SDL_Point *pt, v
 }
 
 #include "mods/coop/coop_runtime.h"
+#include "mods/coop/coop_storage.h"
 
 void RtlDrawPpuFrame(uint8 *pixel_buffer, size_t pitch, uint32 render_flags) {
   PpuSetExtraSpace(g_ppu, 0);
@@ -2463,7 +2464,8 @@ error_reading:;
 #ifdef SMW_COOP_BUILD
   snes_netplay_shutdown();
 #endif
-  if (SmwCoopPersistenceReady()) RtlWriteSram();
+  if (SmwCoopEnabled()) SmwCoopStorageShutdown(SmwCoopStorageSelected());
+  else RtlWriteSram();
 
   // clean sdl
   if (g_audio_device) {

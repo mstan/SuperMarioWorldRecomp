@@ -7,10 +7,13 @@ continues the approved contract below; it does not narrow that contract.
 
 The 19 game commits have been rebased onto game main `8dedb28`, retaining the
 newer Falcon/cache-helper, isolated generation, disassembly-authority, capture
-and launcher changes. The framework now uses upstream `7a67b85`, which contains
-the merged co-op support from PR #95 (`6d6f432`), and the UI uses game main's
+and launcher changes. Framework pin `1c31f29` contains the merged co-op support
+from PR #95 (`6d6f432`), current framework main `9c6afcb`, and the explicit SRAM image writer
+in [framework PR #191](https://github.com/RetroPortingToolKit/snesrecomp/pull/191).
+That additional dependency remains under review. The UI uses game main's
 `01bff94`. The old dependency conflict and Linux failure described in the
-September checkpoint are historical; the selected framework's CI passed.
+September checkpoint are historical. The prior upstream pin's CI passed;
+the additional writer revision's CI is tracked on PR #191.
 
 The owner checkpoint, executable, saves and settings are preserved separately.
 Current integration findings and reproducible validation are recorded in
@@ -521,7 +524,9 @@ the interior hook must appear in the generated blocks or the build fails.
   The small `last-mode.txt` in the co-op directory selects the correct namespace
   before automatic resume on a subsequent launch. With no previous selection,
   SRAM and snapshots remain unavailable until the player chooses a count.
-  Changing namespaces clears the SRAM buffer before reading the selected file.
+  Changing namespaces first retains an immutable image of the old SRAM for
+  durable writing. It clears the live buffer before restoring the target's
+  newest queued image or reading its file.
 - Native actor-image records store player ID and input seat separately. The
   codec includes the stock ROM identity and an ownership-layout signature;
   tests cover reordered/non-contiguous IDs and 2/3/4/17 players. Invalid,
@@ -1107,7 +1112,7 @@ the native midway flag for a team retry. Run a finite recorded script through
 mid-sequence replay states come from running `savestate` commands, without
 pausing or patching those saved camera/death fields.
 
-Audio qualification remains open: two 800-frame real-time audio runs with the
+At this September checkpoint, audio qualification remained open: two 800-frame real-time audio runs with the
 individual-death fixture produced audible-range output at 60.05 FPS and passed
 the cue/music trace checks, but the strict audio-health gate reported 574
 dropped audible samples. Removing the script's mid-run save did not change
@@ -1115,6 +1120,9 @@ that result. A no-death control reported 1,307 dropped audible samples too.
 All runs had zero output underflows and enqueue failures. This demonstrates
 that sample loss also occurs without the new cue; it does not establish its
 cause or qualify audio health. The audio follow-up is `beads-8wg.3.29`.
+The October producer-pacing and namespace-write corrections now pass the
+recorded control/death/menu-entry cases; current evidence and remaining
+campaign/device qualification are in the October validation report.
 
 This is focused regression evidence, not complete campaign acceptance. Mounts,
 independent projectiles, remaining contacts, exceptional rooms, bosses, bonus
@@ -1313,10 +1321,13 @@ YI2 while gameplay continued, then asked to set it aside as a possible turbo
 fluke on this fork. The scripted re-entry still produced DSP music samples;
 it did not reproduce persistent silence. No turbo or silence fix is claimed.
 Temporary APU and device-output probes were removed. The earlier strict audio
-sample-loss issue (`beads-8wg.3.29`) remains unresolved; the instrumented
+sample-loss issue (`beads-8wg.3.29`) was unresolved at that checkpoint; the instrumented
 4600-frame run also failed that gate (66,992 audible samples dropped, two
 underflows), despite reaching the stage. HUD/transition validation does not
 qualify audio health.
+The October integration report supersedes this historical status with upstream
+turbo-recovery evidence, corrected producer pacing and namespace writes, and
+passing bounded audio captures. Full campaign/device qualification remains open.
 
 ## Player visibility across wide-screen boundaries (2026-09-23)
 
@@ -1548,6 +1559,49 @@ outside the original 256-pixel view, because `GiveMarioCape` still sets the
 shared freeze there. The separate smoke effect retains that guard until its
 limited coordinate representation is extended; widescreen smoke presentation
 remains outstanding.
+
+## Save selection and asynchronous SRAM persistence (2026-10-20)
+
+Selecting the count already prepared at boot resets the roster while retaining
+the current namespace's live SRAM. It does not write and reread the same file.
+The original path spent about 150 ms in a redundant durable write, causing the
+recorded file-menu audio underflow. Actual namespace changes also exposed
+durable writes exceeding 800 ms.
+
+`coop_storage.c` therefore copies the departing namespace's SRAM and exact file
+path on the main thread. A single SDL worker publishes those immutable images
+in order through the framework's `RtlWriteSramImage` service. That service uses
+the existing temporary-file, flush, backup, rename and failure-restoration
+protocol without consulting live SRAM or the currently selected save root.
+It does not change the guest's save opportunities.
+
+Returning to a namespace uses its newest retained image, even if its disk write
+is pending or failed. Enqueue rejection leaves the current namespace, live bytes
+and selection intact. Images stay available until shutdown; obsolete failed
+images cannot overwrite a newer successful write. Shutdown captures the active
+namespace, including while the count menu is open, drains the worker and retries
+the newest failed image for each path. A persistent failure offers a normal
+desktop error dialog with Retry as the default; discarding unsaved data requires
+an explicit Quit without saving choice. Disabled co-op retains its ordinary
+synchronous exit writer.
+
+The host queue is not simulation state: loading a state changes the active guest
+SRAM, while another namespace's queued bytes remain isolated. No worker reads
+or modifies emulated RAM, input, timing, actor state or mutable save paths.
+The queue uses portable SDL threads; the explicit writer retains Windows
+`_commit` and POSIX `fsync`. New platform acceptance is recorded separately.
+
+`tools/test_coop_storage.py` exercises the actual count/menu routing with
+sentinel namespaces and failed enqueue acceptance.
+`tools/test_coop_storage_queue.py` runs the actual SDL worker against a gated
+writer, checking that submission/readback continue while writing is blocked,
+then checks immutable images, ordering, superseded failures, retained failed
+data and retry. The framework's `tests/data_pack/check_sram.py` independently
+tests real file publication, backups and failures for both writer interfaces.
+Live audio results and retained negative controls belong in the October report.
+The game's `Native co-op checks` workflow runs ROM-free core, hook, namespace
+and SDL2 worker tests on Linux. Those checks complement local Windows SDL2/SDL3
+tests; they do not substitute for full game/platform or campaign acceptance.
 
 ## Acceptance matrix
 

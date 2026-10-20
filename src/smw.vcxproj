@@ -336,6 +336,7 @@
     <ClCompile Include="mods\coop\coop_guest.c" />
     <ClCompile Include="mods\coop\coop_machine.c" />
     <ClCompile Include="mods\coop\coop_runtime.c" />
+    <ClCompile Include="mods\coop\coop_storage.c" />
     <ClCompile Include="mods\coop\coop_simulation.c" />
     <ClCompile Include="mods\coop\coop_presentation.c" />
 
