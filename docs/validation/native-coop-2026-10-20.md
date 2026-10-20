@@ -434,3 +434,25 @@ The five boss-contact checks use real loader initialization and actual shots.
 They bypass stage prerequisites and do not qualify boss defeat or next-stage
 transitions. Custom contacts, other abilities, complex camera/recovery,
 mount behavior, special scenes and the complete stock-game audit remain open.
+
+## Extended hazard and cloud-coin milestone
+
+The [source and reproduction audit](native-coop-extended-contacts-2026-10-20.md)
+records the primary-only contact divergence and lost Luigi cloud-counter
+progress. The native contact stage now queries every active actor before
+responses, preserving one shared projectile update and one shared destruction/
+coin reward. Mounted damage releases the correct mount. The cloud challenge
+counter belongs to guest WRAM; its legacy actor-image byte remains compatible
+padding rather than being rebound.
+
+`extended-contacts/acceptance-final` passes 88/88 execution checks and 44
+complete WRAM/co-op snapshot comparisons. These cover seven stock hazard
+families, per-player/simultaneous damage and death, star resolution,
+invulnerability, scenery planes, bubbles, cloud-coin collector arbitration,
+mount ownership and both widescreen margins. Eight fireball/freeze regression
+checks, core tests, snapshot preflight and hook coverage pass. All 27 owner
+save/settings hashes remain unchanged.
+
+These are contact tests with offline positioning, not producer, route, fence
+climbing, full cloud reward, or campaign acceptance. Earlier invalid fixture
+attempts and the corrected reproductions remain explicitly documented.

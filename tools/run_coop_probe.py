@@ -88,6 +88,8 @@ KeyboardPlayers=3
         env['SMW_COOP_STORAGE_TRACE'] = str(out / 'storage.csv')
     if args.projectile_trace:
         env['SMW_COOP_PROJECTILE_TRACE'] = str(out / 'projectiles.csv')
+    if args.extended_trace:
+        env['SMW_COOP_EXTENDED_TRACE'] = str(out / 'extended.csv')
     if args.wram_watch:
         lo, hi = (int(value, 16) for value in args.wram_watch.split(':'))
         if not 0 <= lo <= hi <= 0xffff:
@@ -173,6 +175,8 @@ def main():
                         help='Record buffered namespace-selection I/O phase timings')
     parser.add_argument('--projectile-trace', action='store_true',
                         help='Record buffered accepted/rejected native fire contacts')
+    parser.add_argument('--extended-trace', action='store_true',
+                        help='Record buffered per-actor extended hazard/cloud-coin contacts')
     parser.add_argument('--wram-watch', help='Passive guest write log, inclusive hex LO:HI')
     parser.add_argument('--audio-capture', action='store_true',
                         help='Capture muted device output to a stereo WAV (audio-paced only)')

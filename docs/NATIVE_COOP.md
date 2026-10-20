@@ -31,6 +31,13 @@ fireball adapters and CNR6 snapshots. Its bounded checks pass; broader abilities
 boss defeats/transitions and campaign acceptance remain incomplete. See the
 [implementation and reproduction audit](validation/native-coop-fireballs-2026-10-20.md).
 
+The extended-contact milestone applies the original hazard/coin clipping to
+every active actor, resolves shared destruction and cloud-coin rewards once,
+and corrects ownership of the shared cloud challenge counter without changing
+legacy snapshot layouts. See its
+[source audit and focused evidence](validation/native-coop-extended-contacts-2026-10-20.md).
+Producer/targeting, full bonus-game and campaign coverage remain open.
+
 Owner-approved specification, 2026-09-22. Implementation tracking:
 `beads-8wg.3.26`, branch `feat/native-simultaneous-coop`.
 

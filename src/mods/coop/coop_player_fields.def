@@ -1,6 +1,7 @@
 /* Name, WRAM offset, byte count. Source: pinned SMWDisX rammap.asm / SMW_U.sym.
- * Only player-owned state: no sprite arrays, RNG, global freeze, world timers,
- * camera, progression or whole-WRAM snapshot belongs in this image.
+ * Player-owned state plus the explicitly retired compatibility mirror below:
+ * no sprite arrays, RNG, global freeze, world timers, camera, progression or
+ * whole-WRAM snapshot belongs to an actor.
  * Aliased scratch addresses apply only while running level player routines. */
 COOP_FIELD(input_and_power,       0x0015, 5)
 COOP_FIELD(animation_motion,      0x0071, 17)
@@ -34,5 +35,7 @@ COOP_FIELD(stun_climb,            0x18bd, 2)
 COOP_FIELD(in_cloud,             0x18c2, 1)
 COOP_FIELD(star_chain_sparkle,    0x18d2, 2)
 COOP_FIELD(yoshi_duck,           0x18dc, 1)
-COOP_FIELD(cloud_coins,          0x18e3, 1)
+/* CNR2..6 reserved this byte in actor images. Retain its position for snapshot
+ * compatibility, but never bind it: the game-cloud challenge is shared. */
+COOP_FIELD(legacy_cloud_coins,   0x18e3, 1)
 

@@ -5,6 +5,8 @@ COOP_HOOK(0x009E0D) /* Native player-count choice, before loading campaign */
 COOP_HOOK(0x00C569) /* Player update, after once-per-world shared timers */
 COOP_HOOK(0x00FEA8) /* Original two-slot fireball spawn in its actor's bank */
 COOP_HOOK(0x029B0A) /* Owned projectile banks, then the single shared extended pool */
+COOP_HOOK(0x02A3F6) /* Extended hazard/cloud-coin contacts query all active actors */
+COOP_HOOK(0x02A40B) /* Accepted extended contact, before any actor/world response */
 COOP_HOOK(0x02A0F5) /* Valid fire contact before shared enemy damage/coin conversion */
 COOP_HOOK(0x01D3B1) /* Morton/Roy/Ludwig's direct fireball contact loop */
 COOP_HOOK(0x01D3BA) /* Owned boss-contact bank begins at its actual slot 9 */

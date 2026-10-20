@@ -182,11 +182,11 @@ static void guest_ownership(void) {
     size_t n;const CoopGuestField *fields=coop_guest_fields(&n);
     for(size_t i=0;i<n;++i) for(unsigned j=0;j<fields[i].size;++j) {
         unsigned address=fields[i].address+j;assert(address<0x2000 && !owned[address]);
-        owned[address]=1;
+        owned[address]=address!=0x18e3; /* legacy serialized shared-counter mirror */
     }
     coop_guest_capture(&image,a);coop_guest_bind(&image,b);
     for(size_t i=0;i<0x20000;++i) assert(b[i]==(owned[i]?0x53:0xa7));
-    assert(!owned[0x9d] && !owned[0x148b] && !owned[0x14ad] && !owned[0x1a]);
+    assert(!owned[0x9d] && !owned[0x148b] && !owned[0x14ad] && !owned[0x1a] && !owned[0x18e3]);
     coop_guest_set_input(b,0x8180,0x0080);
     assert(b[0x15]==0x81 && b[0x16]==0x80 && b[0x17]==0x80 && b[0x18]==0x80);
     memset(b,0,0x20000);b[0x94]=16;b[0x96]=0x60;b[0x97]=1;

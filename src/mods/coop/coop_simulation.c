@@ -22,6 +22,8 @@ static unsigned mount_draw_depth;
 static unsigned contact_call_depth;
 static unsigned fireball_spawn_depth,extended_call_depth;
 static unsigned boss_fireball_depth;
+static unsigned extended_contact_depth;
+static bool extended_contact_query,extended_contact_found;
 static bool owned_boss_bank;
 static bool contact_query,contact_bounce_only,powerup_query;
 typedef enum NativeContactKind {
@@ -893,6 +895,105 @@ static bool collect_native_contacts(CpuState *cpu,CoopMachine *m,bool powerup) {
     bound_actor=original;
     return true;
 }
+typedef struct ExtendedContact {
+    CoopActor *actor;
+    uint64_t distance;
+    uint8_t scratch[16];
+    bool star;
+} ExtendedContact;
+
+static void trace_extended_contact(CoopMachine *m,unsigned slot,const ExtendedContact *c,
+                                   unsigned phase,bool committed) {
+    static bool initialized;static FILE *file;
+    if(!initialized) {
+        initialized=true;const char *path=getenv("SMW_COOP_EXTENDED_TRACE");
+        if(path && *path)file=fopen(path,"wb");
+        if(file) {
+            setvbuf(file,NULL,_IOFBF,1024*1024);
+            fputs("frame,slot,player,phase,committed,type,power,animation,star,riding,coins,cloud_coins,query_audits\n",file);
+        }
+    }
+    if(file)fprintf(file,"%llu,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%llu\n",
+        (unsigned long long)m->session.frame,slot,c->actor->player,phase,committed,
+        g_ram[0x170b+slot],g_ram[0x19],g_ram[0x71],g_ram[0x1490],g_ram[0x187a],
+        g_ram[0xdbf],g_ram[0x18e3],(unsigned long long)contact_query_audits);
+}
+
+static void collect_extended_contacts(CpuState *cpu,CoopMachine *m) {
+    /* 02:A3F6 is only the shared extended-object contact stage. Motion,
+     * gravity, timers and graphics remain in the original once-per-world
+     * callers. All candidates are queried before any response changes the
+     * projectile (a star turns it into smoke) or starts a transformation. */
+    unsigned slot=cpu->X&255;
+    if(slot>=10)Die("Native co-op extended contact slot is out of range");
+    CoopActor *saved_actor=bound_actor,*original=saved_actor?saved_actor:primary_actor(m);
+    capture(m,original);
+    CpuState caller=*cpu;uint8_t scratch[16];memcpy(scratch,g_ram,sizeof(scratch));
+    ExtendedContact *contacts=calloc(m->actor_count,sizeof(*contacts)),*winner=NULL;
+    if(!contacts)Die("Native co-op could not collect extended contacts");
+    size_t count=0;bool coin=g_ram[0x170b+slot]==0x0a;
+    uint8_t *audit=contact_audit_buffer();
+    ++extended_contact_depth;extended_contact_query=true;
+    for(size_t i=0;i<m->actor_count;++i) {
+        CoopActor *a=&m->actors[i];const CoopPlayer *p=coop_player_const(&m->session,a->player);
+        if(p->life!=COOP_PLAYING)continue;
+        restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
+        coop_guest_bind(&a->guest,g_ram);coop_mount_bind(actor_mount(m,a),g_ram);
+        bound_actor=a;extended_contact_found=false;
+        if(audit)memcpy(audit,g_ram,0x20000);
+        guest_jsr(cpu,0x02a3f6);
+        if(audit) {
+            for(unsigned at=16;at<0x20000;++at) {
+                if(at>=0x1c0 && at<0x200)continue;
+                if(audit[at]!=g_ram[at])Die("Native co-op extended query changed non-query WRAM");
+            }
+            ++contact_query_audits;
+        }
+        if(!extended_contact_found)continue;
+        ExtendedContact *c=&contacts[count++];c->actor=a;c->star=g_ram[0x1490]!=0;
+        /* Use the native queried projectile clipping rectangle's center,
+         * including its full high bytes, for pickup/attack tie resolution. */
+        int x=(g_ram[4]|(g_ram[10]<<8))+g_ram[6]/2;
+        int y=(g_ram[5]|(g_ram[11]<<8))+g_ram[7]/2;
+        int64_t dx=(int64_t)p->x-x,dy=(int64_t)p->y-y;
+        c->distance=(uint64_t)(dx*dx+dy*dy);memcpy(c->scratch,g_ram,sizeof(c->scratch));
+        if((coin || c->star) && (!winner || c->distance<winner->distance ||
+           (c->distance==winner->distance && coop_player_precedes(&m->session,a->player,winner->actor->player))))
+            winner=c;
+    }
+    extended_contact_query=false;
+    /* Every vulnerable actor receives the original response against the
+     * unmodified hazard. Then one star actor destroys it, or one collector
+     * receives the cloud coin. Stable primary ordering governs exact ties. */
+    for(size_t pass=0;pass<2;++pass)for(size_t i=0;i<count;++i) {
+        ExtendedContact *c=&contacts[i];
+        bool selected=coin?c==winner:pass==0?!c->star:c==winner;
+        if(coin && pass==0)continue;
+        if(!selected)continue;
+        restore_registers(cpu,&caller);memcpy(g_ram,c->scratch,sizeof(c->scratch));
+        coop_guest_bind(&c->actor->guest,g_ram);bound_actor=c->actor;
+        CoopEntity *mount=actor_mount(m,c->actor);
+        CoopEntityId mount_id=mount?mount->id:COOP_NO_ENTITY;
+        coop_mount_bind(mount,g_ram);
+        trace_extended_contact(m,slot,c,0,true);
+        guest_jsr(cpu,0x02a40b);
+        capture(m,c->actor);
+        /* Damage can allocate a reserve sprite. Resolve by stable identity
+         * again rather than holding a pointer across that allocation. */
+        mount=coop_machine_entity(m,mount_id);
+        if(mount) {coop_mount_capture(mount,g_ram);mount_owner(m,mount,c->actor);}
+        trace_extended_contact(m,slot,c,1,true);
+    }
+    for(size_t i=0;i<count;++i) {
+        coop_guest_bind(&contacts[i].actor->guest,g_ram);
+        trace_extended_contact(m,slot,&contacts[i],2,
+            coin?&contacts[i]==winner:!contacts[i].star || &contacts[i]==winner);
+    }
+    free(contacts);--extended_contact_depth;
+    restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
+    coop_guest_bind(&original->guest,g_ram);coop_mount_bind(actor_mount(m,original),g_ram);
+    bound_actor=saved_actor;
+}
 static bool run_normal_sprite(CpuState *cpu,CoopMachine *m) {
     unsigned slot=cpu->X&0xff;if(slot>=12)return false;
     CoopEntity *e=coop_machine_entity_slot(m,COOP_ENTITY_NORMAL,slot);
@@ -1061,6 +1162,12 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
         carry_through_room(cpu,m);return 0x02ac5b;
     }
     if(!level_frame)return 0;
+    if(pc==0x02a3f6 && !extended_contact_depth) {
+        collect_extended_contacts(cpu,m);return 0x02a468;
+    }
+    if(pc==0x02a40b && extended_contact_query) {
+        extended_contact_found=true;return 0x02a468;
+    }
     if((pc==0x01d3b1 || pc==0x01fd0a) && !boss_fireball_depth) {
         boss_fireball_contacts(cpu,m,pc);
         return pc==0x01d3b1?0x01d40a:0x01fd4f;

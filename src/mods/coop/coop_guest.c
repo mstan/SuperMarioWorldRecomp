@@ -23,7 +23,12 @@ void coop_guest_capture(CoopGuestPlayer *out,const uint8_t *ram) {
 void coop_guest_bind(const CoopGuestPlayer *in,uint8_t *ram) {
     size_t at=0;
     for(size_t i=0;i<sizeof(fields)/sizeof(*fields);++i) {
-        memcpy(ram+fields[i].address,in->bytes+at,fields[i].size);
+        /* $18E3 is shared challenge progress: the game cloud initializes and
+         * reads it, cloud coins increment it, and HurtMario resets it. Its
+         * old serialized actor byte remains padding so existing snapshots
+         * retain their exact layout/hash. The guest WRAM copy is authoritative. */
+        if(fields[i].address!=0x18e3)
+            memcpy(ram+fields[i].address,in->bytes+at,fields[i].size);
         at+=fields[i].size;
     }
 }
