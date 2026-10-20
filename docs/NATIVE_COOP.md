@@ -75,15 +75,23 @@ tracks roster-sized grants separately from block sources, retains history
 through rooms, defers allocation when all native slots are occupied, and saves
 pending eggs in CNR8. Fifty-six source cases and sixteen room/retry cases pass
 with replay and native/bounce comparisons. Babies cannot eat another pending
-mount grant. Expanded-margin hatching has a reproduced visibility-gate defect;
-stock-location and full mount acceptance remain open.
+mount grant. A follow-up viewport hook fixes expanded-margin hatching while
+preserving vertical culling and the original-width gate. Stock-location and
+full mount acceptance remain open.
 
 The [shell ability matrix](validation/native-coop-shell-abilities-2026-10-20.md)
 qualifies each actor's sixteen Yoshi/shell color combinations through original
 tongue acquisition, spitting, repeated wing motion and landing-effect creation.
 All 128 execution cases pass with exact replay and native/bounce parity.
-Damage outcomes, shared effect-pool pressure, berries, wing destinations and
-mounted keyholes still require acceptance.
+Damage outcomes, shared effect-pool pressure, berries and wing destinations
+still require acceptance.
+
+The [egg visibility and mounted-keyhole milestone](validation/native-coop-mount-visibility-keyholes-2026-10-20.md)
+adds fourteen focused viewport checks and twenty-six mounted-mouth keyhole
+checks, including both riders and isolation from another mount's empty mouth.
+Ordinary carried-key exits and competing goal arbitration retain identical
+native/bounce traces. Exact snapshot replay passes. Actual stock destinations,
+fresh acquisition beside a hole and full campaign mechanics remain open.
 
 Owner-approved specification, 2026-09-22. Implementation tracking:
 `beads-8wg.3.26`, branch `feat/native-simultaneous-coop`.
@@ -408,16 +416,19 @@ primary/stable actor. The stock sprite-slot bound is separate from roster size.
 
 Goal collection state is temporary within one host frame; committed scene
 state is already in the guest and native actor snapshot. No snapshot schema
-change or custom UI is needed. Mounted keyhole activation, mount
-rewards, bonus-room participation, and full campaign coverage still require
-their own adapters and validation.
+change or custom UI is needed. Mounted keyhole activation is covered by the
+October adapter below. Mount rewards, bonus-room participation, and full
+campaign coverage still require their own adapters and validation.
 
 ### Native keyhole completion
 
-At `01:E1C8`, query every active actor's explicitly owned, carried key. The
+At `01:E1C8`, query every active actor's explicitly owned, carried key or ridden
+Yoshi. The
 stock global scan chooses only the highest occupied key slot, which can hide
-another player's valid contact. Each candidate instead enters `01:E1F3` with
-its own key slot. The original carried-status, clipping, overlap and keyhole
+another player's valid contact. Each candidate instead enters `01:E1DB` with
+its own key slot (or `$FF`) and its mount's private globals. Original `$187A`
+and `$191C` select mounted rider clipping or carried-key clipping at
+`01:E1F3`. The original riding/key, carried-status, overlap and keyhole
 cooldown checks remain authoritative. `01:E210` records an accepted secret exit
 before shared effects; `01:E23A` stops queries before graphics. The hole is
 drawn once by its ordinary sprite update. This iterates the dynamic roster;

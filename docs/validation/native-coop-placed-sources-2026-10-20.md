@@ -153,7 +153,11 @@ beside Mario. Its camera is X=19, `$15A0=1`, `$186C=0`, and it is visibly inside
 the expanded viewport. Original `$01:F76C` branches on `IsSprOffScreen` before
 the hatch proximity test. A newly initialized egg is not a reliable negative
 control because its initially clear offscreen flags can allow an early hatch.
-No margin fix is claimed by this source-lifecycle milestone.
+No margin fix is claimed by this source-lifecycle milestone. The subsequent
+[visibility/keyhole milestone](native-coop-mount-visibility-keyholes-2026-10-20.md)
+fixes that gate and records fourteen passing viewport checks.
 
-The full stock locations, expanded-margin source activation, source/ability
-competition and campaign mechanics still need their own evidence.
+The full stock locations, source/ability competition and campaign mechanics
+still need their own evidence. The broader baby regression was rerun against
+this source-lifecycle build: all 44 cases pass, with the retained deadline
+failure and separate successful retry described in the follow-up report.

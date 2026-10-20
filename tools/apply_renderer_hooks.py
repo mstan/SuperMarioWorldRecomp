@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 
 PCS = (0x02A82E, 0x01B844, 0x01AC7C, 0x02D076, 0x03B8A8, 0x02A204, 0x019E93, 0x019F5A,
-       0x02A916, 0x02AFB3, 0x029B0C, 0x029B12, 0x02A2BE, 0x00E49A)
+       0x02A916, 0x02AFB3, 0x029B0C, 0x029B12, 0x02A2BE, 0x00E49A, 0x01F76C)
 # The normal sprite dispatcher is currently certified LLE-only. Its interpreter
 # boundaries are always armed; instrument them too if a future generator emits it.
 OPTIONAL_PCS = (0x0180AF, 0x0180B2)

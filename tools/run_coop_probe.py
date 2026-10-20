@@ -122,6 +122,9 @@ KeyboardPlayers=3
         env['SNESRECOMP_FRAMEDUMP_END'] = str(args.framedump)
         env['SNESRECOMP_FRAMEDUMP_PIXELS'] = '1'
     provenance = {'command': command, 'turbo_burst': args.turbo_burst,
+                  'timeout_seconds': args.timeout_seconds,
+                  'native': args.native, 'bounce': args.bounce,
+                  'disabled': args.disabled, 'players': args.players,
                   'minimal_trace': args.minimal_trace, 'audio_frames': args.audio_frames,
                   'audio_capture': args.audio_capture, 'audit_queries': args.audit_queries,
                   'wram_watch': args.wram_watch, 'storage_trace': args.storage_trace,
@@ -139,7 +142,7 @@ KeyboardPlayers=3
         try:
             result = subprocess.run(
                 command, cwd=out, env=env, stdout=stdout, stderr=stderr,
-                timeout=max(120, args.frames / 30),
+                timeout=args.timeout_seconds or max(120, args.frames / 30),
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
             returncode, timed_out = result.returncode, False
         except subprocess.TimeoutExpired:
@@ -177,6 +180,8 @@ def main():
     parser.add_argument('--normal-sram', type=Path, help='Copy normal SRAM into the isolated test directory')
     parser.add_argument('--coop-sram', type=Path, help='Copy co-op SRAM into the isolated test directory')
     parser.add_argument('--frames', type=int, default=800)
+    parser.add_argument('--timeout-seconds', type=float,
+                        help='Explicit positive process deadline for a busy validation host')
     parser.add_argument('--capture', default='')
     parser.add_argument('--framedump', type=int, help='Capture one completed frame, including native width')
     parser.add_argument('--players', type=int, choices=(1, 2), default=2)
@@ -203,6 +208,8 @@ def main():
     parser.add_argument('--bounce', action='store_true')
     parser.add_argument('--turbo-burst', help='Process-local start_frame,count')
     args = parser.parse_args()
+    if args.timeout_seconds is not None and args.timeout_seconds <= 0:
+        parser.error('--timeout-seconds must be positive')
     if args.audio_capture and not args.audio_paced:
         parser.error('--audio-capture requires --audio-paced')
     for name in ('exe', 'rom', 'snapshot', 'script', 'out', 'normal_sram', 'coop_sram'):

@@ -514,20 +514,26 @@ static void collect_keyhole(CpuState *cpu,CoopMachine *m) {
     for(size_t i=0;i<m->actor_count;++i) {
         CoopActor *a=&m->actors[i];CoopPlayer *p=coop_player(&m->session,a->player);
         CoopEntity *key=coop_machine_entity(m,p->held_object);
-        if(p->life!=COOP_PLAYING || !key || key->kind!=COOP_ENTITY_NORMAL ||
-           key->type!=0x80 || key->owner!=p->id || key->flags!=COOP_ENTITY_HELD ||
-           g_ram[0x14c8+key->slot]!=0x0b)continue;
-        coop_guest_bind(&a->guest,g_ram);bound_actor=a;
+        CoopEntity *mount=actor_mount(m,a);
+        bool held=key && key->kind==COOP_ENTITY_NORMAL && key->type==0x80 &&
+            key->owner==p->id && key->flags==COOP_ENTITY_HELD &&
+            g_ram[0x14c8+key->slot]==0x0b;
+        bool ridden=mount && mount->type==0x35 && mount->owner==p->id &&
+            mount->flags==COOP_ENTITY_RIDDEN && g_ram[0x14c8+mount->slot]==8;
+        if(p->life!=COOP_PLAYING || (!held && !ridden))continue;
+        coop_guest_bind(&a->guest,g_ram);coop_mount_bind(mount,g_ram);bound_actor=a;
         restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
-        cpu->Y=(uint16_t)key->slot;
-        /* Enter after the stock global first-key scan. The ROM still tests
-         * carried status, both clipping boxes, contact and hole cooldown.
+        cpu->Y=(uint16_t)(held?key->slot:0xff);
+        /* Enter after the stock global first-key scan, before the ridden
+         * mouth branch. Each mount's original update produces its $191C;
+         * the ROM tests riding/key state and selects rider or held-key
+         * clipping, then tests contact and the hole cooldown.
          * Query hooks stop before scene effects and duplicate graphics. */
-        guest_jsr(cpu,0x01e1f3);
+        guest_jsr(cpu,0x01e1db);
     }
     keyhole_query=false;bound_actor=previous;
     restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
-    coop_guest_bind(&original->guest,g_ram);
+    coop_guest_bind(&original->guest,g_ram);coop_mount_bind(actor_mount(m,original),g_ram);
 }
 static uint32_t follow_victory(CpuState *cpu,CoopMachine *m) {
     CoopActor *primary=primary_actor(m);

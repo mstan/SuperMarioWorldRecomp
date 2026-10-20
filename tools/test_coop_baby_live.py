@@ -7,6 +7,7 @@ This does not qualify repeated placed-source grants or competing fresh mouths.
 """
 import argparse
 import csv
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -103,19 +104,37 @@ def main():
     ap.add_argument('--out', type=Path, required=True)
     ap.add_argument('--exe', type=Path, default=ROOT/'build-adaptive/SuperMarioWorldSNESRecomp.exe')
     ap.add_argument('--rom', type=Path, default=ROOT/'smw.sfc')
+    ap.add_argument('--resume', action='store_true',
+                    help='Recheck successful evidence with identical inputs and retry incomplete cases separately')
+    ap.add_argument('--timeout-seconds', type=float, default=300)
     args = ap.parse_args()
     root = args.out.resolve()
-    root.mkdir(parents=True, exist_ok=False)
+    root.mkdir(parents=True, exist_ok=args.resume)
     results, parity = [], {}
 
     def run(name, source, script, frames, narrow, bounce):
         path = root/f'{name}.script'
         path.write_text(script, encoding='ascii', newline='\n')
         out = root/name
+        if out.exists() and args.resume:
+            report_path = out/'result.json'
+            report = json.loads(report_path.read_text()) if report_path.exists() else {}
+            if report.get('returncode') == 0 and not report.get('timed_out') and not report.get('dispatch_misses'):
+                old = json.loads((out/'inputs.json').read_text())['inputs']
+                for field, source_path in (('exe', args.exe), ('rom', args.rom),
+                                           ('snapshot', source), ('script', path)):
+                    assert old[field]['sha256'] == hashlib.sha256(source_path.read_bytes()).hexdigest(), (
+                        out, 'resume input changed', field)
+                return out
+            attempt = 1
+            while out.exists():
+                out = root/f'{name}-retry{attempt}'
+                attempt += 1
         cmd = [sys.executable, str(ROOT/'tools/run_coop_probe.py'),
                '--exe', str(args.exe.resolve()), '--rom', str(args.rom.resolve()),
                '--snapshot', str(source.resolve()), '--script', str(path), '--out', str(out),
                '--frames', str(frames), '--framedump', str(frames-10),
+               '--timeout-seconds', str(args.timeout_seconds),
                '--wram-watch', '151c:1649']
         if narrow:
             cmd.append('--native')
@@ -133,7 +152,7 @@ def main():
                 same(a, b)
         else:
             parity[key] = snapshots
-        results.append(dict(case=key, bounce=bounce, status='passed', evidence=name,
+        results.append(dict(case=key, bounce=bounce, status='passed', evidence=out.name,
                             parity_snapshots=slots))
         (root/'summary.json').write_text(json.dumps(dict(
             checks=results, campaign='unverified',
