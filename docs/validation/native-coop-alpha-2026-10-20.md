@@ -142,7 +142,46 @@ unfinished special-scene behavior remain alpha limitations in the full backlog.
 Boss/bonus breadth, rare simultaneous events and the complete stock inventory
 are not alpha gates. No full-product completion claim is made.
 
-Required CI, final preservation verification and owner UI handoff are recorded
-when delivery is complete. The owner launcher is `tools/run_adaptive_renderer.ps1`
-with `--launcher`, retaining `build-adaptive/playtest` saves/settings, normal
-audio and a normal window. Existing local input overrides are preserved.
+## Build checks and owner handoff
+
+The Windows Release artifact above is unchanged by this evidence/documentation
+pass. Python probe syntax checks pass. Both Linux core/storage jobs pass at
+the representative validation commit `2de950d`:
+
+- [Branch workflow](https://github.com/mstan/SuperMarioWorldRecomp/actions/runs/39460653607/job/118758940379)
+- [PR workflow](https://github.com/mstan/SuperMarioWorldRecomp/actions/runs/39460662355/job/118758967084)
+
+The final documentation commit runs the same required checks; the current
+results are attached to [PR #19](https://github.com/mstan/SuperMarioWorldRecomp/pull/19),
+which is ready for alpha review and remains unmerged.
+
+Owner build:
+`F:/Projects/snesrecomp/_wt-smw-native-coop/build-adaptive/SuperMarioWorldSNESRecomp.exe`.
+It uses the original verified `build-adaptive/smw.sfc` and the existing owner
+data directory `build-adaptive/playtest`. Launch from the worktree with:
+
+```powershell
+& ./tools/run_adaptive_renderer.ps1 -DirectRomPath ./build-adaptive/smw.sfc -GameArguments @('--launcher')
+```
+
+The actual visible window was verified as **Super Mario World — Launcher**,
+neither minimized nor maximized, with a normal bordered window. ROM verification
+and both player configuration panels are visible. Audio is enabled at 32040 Hz;
+the owner helper clears dummy SDL audio/video drivers, and no muted test options
+are passed. The launcher is left idle for the owner's playtest; sound health is
+qualified by the captured gameplay evidence linked above.
+
+The final `alpha-first-pass/owner-handoff.json` records the actual executable
+path/hash, window PID/title/rectangle and preservation checks. All **27** owner
+save/settings files retain their baseline hashes, and `config.local.ini` retains
+SHA256 `e2dce8d1880849f8bf5e5f68b202f8bf25622bac3565b6f58cb1e781dbae7cae`.
+Existing local input overrides remain intact. `owner-ui.png` retains the visible
+launcher image. These private artifacts remain in the ignored evidence directory.
+
+Launch note: redirecting the detached hidden PowerShell helper's native output
+through its short-lived parent stalled the first attempt during configuration
+logging, before a game window existed. That startup process was stopped and the
+same wrapper was launched from a hidden helper without detached stream redirects;
+the normal UI then opened immediately. No runtime fix or owner-data mutation was
+needed. Future handoffs should use the wrapper directly or keep the helper's
+console hidden without those redirects.

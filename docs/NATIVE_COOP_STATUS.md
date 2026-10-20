@@ -2,7 +2,8 @@
 
 Updated 2026-10-20. Contract: [NATIVE_COOP.md](NATIVE_COOP.md).
 Delivery: [PR #19](https://github.com/mstan/SuperMarioWorldRecomp/pull/19),
-still draft. Latest validated, pushed gameplay milestone: `3d4d2ea`.
+ready for alpha review; not merged. Latest validated gameplay milestone:
+`3d4d2ea`; representative alpha validation is committed in `2de950d`.
 The [playable-alpha first pass](validation/native-coop-alpha-2026-10-20.md)
 adds representative boss/bonus completion and current inactive-mode/presentation
 checks to the existing common-path evidence.
@@ -31,8 +32,8 @@ Before the alpha handoff:
 - [x] Finish and check the current small berry change with a few common cases.
 - [x] Make a broad representative pass through remaining major systems and
   document visible blockers, limitations and unverified areas.
-- [ ] Complete required builds/CI and preserve owner saves/settings.
-- [ ] Update PR #19 for alpha review and deliver the normal-window,
+- [x] Complete required builds/CI and preserve owner saves/settings.
+- [x] Update PR #19 for alpha review and deliver the normal-window,
   normal-audio owner build.
 
 ## Longer-term burndown
@@ -50,10 +51,10 @@ Close an area only when its remaining implementation and evidence are complete.
 | Mounts | Independent riders/mouths, tongue arbitration, block/placed grants, baby growth, transport/parking, mounted recovery/keyholes, ordinary body berries | Interrupted bites/rare berry combinations, wings destinations, fresh baby/adult competition, source locations and special scenes |
 | Recovery and camera | Individual/team death, bubbles, adjacent placement, mounted clearance, widescreen visibility | Slopes/platforms, water/air, vertical rooms, Layer 2, autoscroll and live viewport changes |
 | Transitions and progression | Focused pipes, checkpoints, retry, goal/keyhole arbitration and rewards | Every entrance/transition variant, conflicting events, game-over/continue and actual exit destinations |
-| Special scenes and presentation | Original reserve artwork/badges, focused native/wide drawing and Mode 7 contact checks | Full boss defeats/targeting, bonus participation, overworld follower, castle/ending, fences/darkness |
+| Special scenes and presentation | Original reserve artwork/badges, focused native/wide drawing and Mode 7 contacts; one actual Morton defeat/castle completion and one two-player bonus completion | Other bosses/targeting and bonus variants, overworld follower, castle/ending breadth, fences/darkness |
 | Persistence, input and inert modes | Separate SRAM/state namespaces, atomic preflight, legacy migration, focused replay and solo/disabled controls | Campaign round trips, controller disconnect/reassignment, broad solo/disabled parity |
 | Audio health | Reproduced sample-loss/menu-stall fixes, fresh YI2 and post-turbo captured checks | Broader campaign/device/platform qualification |
-| Integration and release | Rebase preserving newer main, Windows build, both Linux core/storage jobs | Additional framework PR review, complete platform/package/performance checks, campaign audit, final owner build/UI |
+| Integration and release | Rebase preserving newer main, Windows build, both Linux core/storage jobs, tested owner build and normal-window UI handoff | Additional framework PR review, complete platform/package/performance checks, campaign audit |
 
 The foundation includes simultaneous Mario/Luigi, separate controls/equipment,
 original menus, shared world/session policy and stable roster/entity identities.
@@ -64,6 +65,7 @@ support remains limited to two.
 
 | Commit | Result |
 |---|---|
+| `2de950d` | Representative alpha pass: both actors defeat Morton with native fire hits and complete its castle; both participate in one bonus/reward/exit; current solo/disabled storage and wide legacy-state checks pass; both Linux jobs pass |
 | `3d4d2ea` | Body-berry arbitration: three common checks and one ordinary tongue regression pass; Windows/core/hooks and both Linux CI jobs pass; alpha scope recorded |
 | `de2d9ee` | Expanded-margin egg hatching and mounted keyholes: 40 focused cases, replay/backend comparisons and ordinary-key regressions; both Linux CI jobs pass |
 | `2dca5d8` | Roster-sized placed-source grants, room history, slot-pressure deferral, atomic preflight and independent child pickup |
@@ -100,6 +102,9 @@ it grants **zero gameplay passes**. See the
 [stock inventory](validation/SMW_STOCK_CONTENT.md). Actual mechanic checks must
 exercise outcomes and transitions without setting their success flags.
 
-All 27 preserved owner save/settings files match their original hashes at the
-latest validated milestone. Final owner handoff and marking PR #19 ready remain
-pending the alpha first pass and required build checks above.
+All 27 preserved owner save/settings files and the additional local input override
+match their original hashes after the owner handoff. The tested executable remains
+SHA256 `3006dcd4a3306a1001445c2a6a9da8788f7398a1167c8aa505fc2c5c267c5c46`.
+Its recomp UI is open in a normal window with normal audio configuration.
+PR #19 is ready for alpha review and remains unmerged. See the alpha report for
+build location, launch command, CI links and the retained preservation evidence.
