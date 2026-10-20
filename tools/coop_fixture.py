@@ -26,7 +26,7 @@ class Fixture:
         self.machine = self.end-self.word(self.end)
         m = self.machine
         self.version = self.word(m+4)
-        assert d[m:m+4] == b'CNR1' and self.version in (2, 3, 4, 5)
+        assert d[m:m+4] == b'CNR1' and self.version in (2, 3, 4, 5, 6)
         self.check_crc(m, self.end)
         self.core = m+64
         self.core_end = self.core+self.word(m+40)
@@ -85,6 +85,26 @@ class Fixture:
             for _ in range(sources):
                 self.sources.append(struct.unpack_from('<6I', d, at))
                 at += 24
+        self.fireballs = {}
+        if self.version >= 6:
+            assert d[at:at+4] == b'PJT1'
+            actors, slots, initialized = struct.unpack_from('<3I', d, at+4)
+            assert actors == len(self.actors) and slots == 2 and initialized in (0, 1)
+            self.projectiles_at = at
+            at += 16
+            for _ in range(actors):
+                player = self.word(at)
+                assert player in self.actors and player not in self.fireballs
+                at += 4
+                self.fireballs[player] = []
+                for _ in range(slots):
+                    identity = self.word(at)
+                    guest = bytes(d[at+4:at+16])
+                    pending, visible = self.word(at+16), self.word(at+20)
+                    assert pending <= 1 and visible <= 1
+                    self.fireballs[player].append(dict(
+                        id=identity, guest=guest, pending=pending, visible=visible, at=at))
+                    at += 24+(pending+visible)*540
         assert at == self.end-4
 
     def word(self, at):

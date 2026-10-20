@@ -33,7 +33,10 @@ static void capture_pieces(CoopVisualPiece *pieces,uint32_t *size,unsigned capac
     for(unsigned slot=0;slot<128;++slot) {
         if(primary) {
             unsigned fence=g_ram[0x13f9];
-            if(fence>2)Die("Invalid native co-op fence side");
+            /* Mode 7 Morton/Roy/Ludwig rooms deliberately use selector 3
+             * (GM12PrepareLevel), drawing at $03E0 and disabling ordinary
+             * body contact. The ROM reads E2B9's first byte as this offset. */
+            if(fence>3)Die("Invalid native co-op player draw selector");
             unsigned first=(0x100+g_rom[0xe2b6-0x8000+fence])/4;
             if(slot<first || slot>=first+7)continue;
         }
@@ -68,10 +71,14 @@ void SmwCoopCaptureMount(CoopMountVisual *visual,int x,int y) {
     capture_pieces(visual->pieces,&visual->count,COOP_MOUNT_PIECES,false,
         x-(int)read16(g_ram,0x1a),y-(int)read16(g_ram,0x1c));
 }
+void SmwCoopCaptureFireball(CoopFireball *f,int x,int y) {
+    capture_pieces(&f->pending,&f->pending_count,1,false,
+        (int16_t)(x-(int)read16(g_ram,0x1a)),(int16_t)(y-(int)read16(g_ram,0x1c)));
+}
 void SmwCoopPresentationLatch(void) {
     CoopMachine *m=SmwCoopMachine();if(!m)return;
-    /* Fade modes are shared with the overworld. Its border Mario uses fence
-     * selector 3, which is not a level actor; retain the latched scene kind. */
+    /* Fade modes are shared with the overworld. Its border Mario and some
+     * Mode 7 bosses both use selector 3; retain the latched scene kind. */
     bool level=SmwRendererIsLevelScene();
     if(level && m->room_initialized) {
         CoopActor *primary=coop_machine_actor(m,m->session.primary);
@@ -82,6 +89,11 @@ void SmwCoopPresentationLatch(void) {
     for(size_t i=0;i<m->actor_count;++i) {
         if(!level)m->actors[i].pending.count=0;
         m->actors[i].visible=m->actors[i].pending;
+        for(unsigned j=0;j<COOP_FIREBALL_SLOTS;++j) {
+            CoopFireball *f=&m->actors[i].fireballs[j];
+            if(!level)f->pending_count=0;
+            f->visible_count=f->pending_count;f->visible=f->pending;
+        }
     }
     for(size_t i=0;i<m->entity_count;++i) {
         if(!level)m->entities[i].pending.count=0;
@@ -182,6 +194,7 @@ void SmwCoopPresentationPrepare(void) {
     if(m)for(size_t i=0;i<m->actor_count;++i) {
         if(m->actors[i].player!=m->session.primary)count+=m->actors[i].visible.count;
         if(level)count+=2; /* reserve plus optional bubble/warning */
+        for(unsigned j=0;j<COOP_FIREBALL_SLOTS;++j)count+=m->actors[i].fireballs[j].visible_count;
     }
     if(level)++count; /* original TIME label and digits */
     if(m)for(size_t i=0;i<m->entity_count;++i)count+=m->entities[i].visible.count;
@@ -196,6 +209,12 @@ void SmwCoopPresentationPrepare(void) {
         pixels=next_pixels;capacity=count;
     }
     size_t at=0;
+    if(m)for(size_t i=0;i<m->actor_count;++i)for(unsigned j=0;j<COOP_FIREBALL_SLOTS;++j) {
+        const CoopFireball *f=&m->actors[i].fireballs[j];if(!f->visible_count)continue;
+        const CoopVisualPiece *v=&f->visible;
+        objects[at++]=(PpuExtraObject){v->x,v->y,(uint16_t)v->width,(uint16_t)v->height,16,
+            (uint8_t)v->priority,(uint8_t)v->math,(uint8_t)v->slot,f->id,v->pixels};
+    }
     if(m)for(size_t i=0;i<m->entity_count;++i) {
         const CoopEntity *e=&m->entities[i];
         for(unsigned j=0;j<e->visible.count;++j) {

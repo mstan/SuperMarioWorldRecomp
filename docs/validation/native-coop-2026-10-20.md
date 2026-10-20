@@ -392,7 +392,7 @@ no dispatch misses.
 The ROM's `$00:FEA8` `ShootFireball` searches only extended slots 8–9. The
 once-per-world loop at `$02:9B0A` updates ten extended slots through `$02:9B16`.
 Its twelve sprite tables occupy `$170B–$1782`. Per-player fireball allowance
-is therefore still unimplemented at this checkpoint; two control images or
+was still unimplemented at the `e3c678a` checkpoint; two control images or
 independent fire-button input do not establish independent ammunition.
 
 The initial control script used save slot 12, which is the Quick slot and writes
@@ -406,3 +406,31 @@ can increment Chuck's `$1528` hit count without setting a contact cooldown.
 Extending the projectile pool alone would permit duplicate damage in one frame.
 Projectile ownership, original motion/drawing, shared damage arbitration and
 snapshot support must be implemented and validated together.
+
+## Owned fireball milestone
+
+The [permanent implementation audit](native-coop-fireballs-2026-10-20.md)
+documents the owned banks, original-code boundaries, CNR6 records, legacy
+compatibility and two Mode 7 defects found during real boss entry.
+
+The combined build passes:
+
+- `projectiles/acceptance-first`: 34/34 base checks. Independent two-shot
+  allowance, refused third shots, expiry/reuse, exact save/load replay,
+  both widescreen margins, one Chuck hit, all five direct boss fireball
+  handlers, and conservative legacy-shot migration. All native/bounce
+  comparisons match complete WRAM and co-op payloads.
+- `projectiles/freeze-acceptance`: 8/8 checks, including four repeated lifecycle
+  controls. An actual feather pickup freezes all existing fireballs; they
+  resume after the native transformation in standard/wide and native/bounce.
+- `projectiles/contact-regression`: 10/10 common stomp, spin, star, exclusive
+  pickup and dual-transformation cases; 20/20 trace/capture comparisons.
+- ROM-free 2/3/4/17-roster snapshot tests, legacy/current preflight and hook
+  coverage checks. The build has 58 compiled and four interpreter hook sites.
+- `projectiles/owner-data-verification.json`: 27/27 owner saves/settings retain
+  their preserved hashes.
+
+The five boss-contact checks use real loader initialization and actual shots.
+They bypass stage prerequisites and do not qualify boss defeat or next-stage
+transitions. Custom contacts, other abilities, complex camera/recovery,
+mount behavior, special scenes and the complete stock-game audit remain open.

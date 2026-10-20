@@ -25,6 +25,12 @@ for gameplay mechanics or transitions.
 PR #19 remains the delivery PR and stays in draft until the full contract and
 required acceptance coverage are satisfied.
 
+The October projectile milestone adds an original two-fireball allowance per
+actor, native motion/drawing, shared fire-damage arbitration, direct boss
+fireball adapters and CNR6 snapshots. Its bounded checks pass; broader abilities,
+boss defeats/transitions and campaign acceptance remain incomplete. See the
+[implementation and reproduction audit](validation/native-coop-fireballs-2026-10-20.md).
+
 Owner-approved specification, 2026-09-22. Implementation tracking:
 `beads-8wg.3.26`, branch `feat/native-simultaneous-coop`.
 
@@ -1201,7 +1207,9 @@ constant. Mount pictures have a checked 16-piece capacity.
 
 ### Snapshot version 5 and evidence
 
-The native machine writes CNR version 5 with a `YSH1` extension after `CAM1`.
+The mount implementation introduced CNR version 5 with a `YSH1` extension after
+`CAM1`. The October fireball work extends it to version 6, described in
+[the owned-fireball implementation audit](validation/native-coop-fireballs-2026-10-20.md).
 It contains the adoption flag, stable mount IDs, private globals, pending/visible
 pieces and source records. Length/count/identity/CRC validation occurs before
 atomic replacement. Core tests preserve different mount data and reject corrupt
@@ -1548,10 +1556,12 @@ Detailed results and retained negative controls belong in
 [the October validation report](validation/native-coop-2026-10-20.md).
 
 This milestone does not complete custom-contact callers, all solid-object and
-reactive-platform responses, ON/OFF arbitration, projectiles, committed attack
+reactive-platform responses, ON/OFF arbitration, committed attack
 targets, Yoshi mouth interactions, or campaign acceptance. In particular, the
 custom-interaction tweaker's carry-result continuation remains with its
 individual native caller; it is not replayed generically as a default response.
+The subsequent owned-fireball milestone is documented above; broader projectile
+and ability interactions still require acceptance.
 
 Cape pickup also separates animation setup from the original `$01:C5AE`
 viewport guard. The collector must run the native 24-frame transformation even

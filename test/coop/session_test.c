@@ -261,6 +261,16 @@ static void native_states(size_t players) {
     mount->visible.pieces[0].x=111;
     CoopYoshiSource *source=coop_yoshi_source(&a,0x106,0,640,336,0x12d);assert(source);
     source->uses=1;a.mounts_initialized=true;
+    a.fireballs_initialized=true;
+    for(size_t i=0;i<players;++i)for(unsigned j=0;j<COOP_FIREBALL_SLOTS;++j) {
+        CoopFireball *f=&a.actors[i].fireballs[j];
+        f->id=a.next_entity++;
+        for(unsigned k=0;k<COOP_FIREBALL_BYTES;++k)f->guest[k]=(uint8_t)(i*17+j*7+k);
+        f->guest[0]=j?1:5;
+        f->pending_count=f->visible_count=1;f->pending=f->visible=*piece;
+        f->pending.x=(int32_t)(i*23+j*9);
+        f->visible.x=f->pending.x-3;
+    }
     size_t n=coop_machine_save_size(&a);uint8_t *data=malloc(n),*again=malloc(n);assert(data&&again);
     assert(coop_machine_save(&a,data,n));assert(coop_machine_load(&b,data,n));
     assert(b.actor_count==players && b.room==123 && b.room_initialized);
@@ -273,6 +283,12 @@ static void native_states(size_t players) {
     assert(coop_machine_entity_slot(&b,COOP_ENTITY_NORMAL,8)->mount[5]==73);
     assert(coop_machine_entity_slot(&b,COOP_ENTITY_NORMAL,8)->visible.pieces[0].x==111);
     assert(b.mounts_initialized && b.source_count==1 && b.sources[0].uses==1);
+    assert(b.fireballs_initialized);
+    for(size_t i=0;i<players;++i)for(unsigned j=0;j<COOP_FIREBALL_SLOTS;++j) {
+        const CoopFireball *f=&b.actors[i].fireballs[j],*expected=&a.actors[i].fireballs[j];
+        assert(f->id==expected->id && !memcmp(f->guest,expected->guest,COOP_FIREBALL_BYTES));
+        assert(f->pending.x==expected->pending.x && f->visible.x==expected->visible.x);
+    }
     assert(coop_machine_save(&b,again,n));assert(!memcmp(data,again,n));
     CoopActor *original=b.actors;
     for(size_t i=0;i<n;++i) {
@@ -308,11 +324,30 @@ static void native_states(size_t players) {
     data[mounts+16+4]=COOP_MOUNT_PIECES+1;repair_native_crc(data,n);
     assert(!coop_machine_load(&b,data,n) && b.actors==original);
     memcpy(data,again,n);
-    data[n-8]=(uint8_t)(players+1);repair_native_crc(data,n); /* excessive grants */
+    size_t sources=mounts+16+33+2*540;
+    data[sources+20]=(uint8_t)(players+1);repair_native_crc(data,n); /* excessive grants */
     assert(!coop_machine_load(&b,data,n) && b.actors==original);
+    size_t projectiles=sources+24,first=projectiles+16+4;
+    const size_t invalid_offsets[]={projectiles+4,projectiles+8,projectiles+12,
+        projectiles+16,first,first+4,first+16,first+20,first+24+8};
+    for(size_t i=0;i<sizeof(invalid_offsets)/sizeof(*invalid_offsets);++i) {
+        memcpy(data,again,n);data[invalid_offsets[i]]=255;repair_native_crc(data,n);
+        assert(!coop_machine_load(&b,data,n) && b.actors==original);
+    }
+    memcpy(data,again,n);
+    size_t second=first+24+2*540;
+    memcpy(data+second,data+first,4);repair_native_crc(data,n); /* duplicate shot ID */
+    assert(!coop_machine_load(&b,data,n) && b.actors==original);
+    memcpy(data,again,n);
     a.actors[1].player=a.actors[0].player;
     assert(coop_machine_save(&a,data,n));assert(!coop_machine_load(&b,data,n));
     assert(b.actors==original);
+    /* Earlier images have no PJT chunk and retain native physical shots.
+     * Their owners must remain unknown until the simulation adopts empty
+     * banks; the decoder must not assign either old shot to a guessed actor. */
+    memcpy(data,again,n);data[4]=5;repair_native_crc(data,projectiles+4);
+    assert(coop_machine_load(&b,data,projectiles+4));
+    assert(!b.fireballs_initialized && !b.actors[0].fireballs[0].id);
     free(data);free(again);coop_machine_destroy(&a);coop_machine_destroy(&b);
 }
 

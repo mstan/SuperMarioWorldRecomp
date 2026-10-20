@@ -4,6 +4,12 @@
 
 enum { HEADER = 64, ACTOR_HEADER = 16, PIECE_BYTES = 28+COOP_PIECE_PIXELS*2,
        ENTITY_HEADER = 16, ENTITY_BYTES = 28, FOCUS_BYTES = 32, TRAILER = 4 };
+void coop_fireball_capture(CoopFireball *f,const uint8_t *ram,unsigned slot) {
+    for(unsigned i=0;i<COOP_FIREBALL_BYTES;++i)f->guest[i]=ram[0x170b+i*10+slot];
+}
+void coop_fireball_bind(const CoopFireball *f,uint8_t *ram,unsigned slot) {
+    for(unsigned i=0;i<COOP_FIREBALL_BYTES;++i)ram[0x170b+i*10+slot]=f->guest[i];
+}
 /* Singleton native globals become mount-owned, including an unoccupied mount's
  * mouth and berry state. Sprite-indexed tables already have native ownership. */
 static const uint16_t mount_fields[COOP_MOUNT_BYTES]={
@@ -180,6 +186,15 @@ size_t coop_machine_save_size(const CoopMachine *m) {
         if(bytes>SIZE_MAX-n)return 0;
         n+=bytes;
     }
+    if(n>SIZE_MAX-16 || m->actor_count>(SIZE_MAX-n-16)/(4+COOP_FIREBALL_SLOTS*24))return 0;
+    n+=16+m->actor_count*(4+COOP_FIREBALL_SLOTS*24);
+    for(size_t i=0;i<m->actor_count;++i)for(unsigned j=0;j<COOP_FIREBALL_SLOTS;++j) {
+        const CoopFireball *f=&m->actors[i].fireballs[j];
+        if(f->pending_count>1 || f->visible_count>1)return 0;
+        size_t bytes=(f->pending_count+f->visible_count)*PIECE_BYTES;
+        if(bytes>SIZE_MAX-n)return 0;
+        n+=bytes;
+    }
     return n;
 }
 static bool entities_valid(const CoopMachine *m) {
@@ -222,6 +237,16 @@ static bool entities_valid(const CoopMachine *m) {
         }
         if(!held || !mount)return false;
     }
+    for(size_t i=0;i<m->actor_count;++i)for(unsigned j=0;j<COOP_FIREBALL_SLOTS;++j) {
+        const CoopFireball *f=&m->actors[i].fireballs[j];
+        if(f->guest[0]!=0 && f->guest[0]!=1 && f->guest[0]!=5)return false;
+        if(f->id>=m->next_entity || ((!f->id || !m->fireballs_initialized) &&
+           (f->guest[0] || f->pending_count || f->visible_count)))return false;
+        if(!f->id)continue;
+        for(size_t e=0;e<m->entity_count;++e)if(f->id==m->entities[e].id)return false;
+        for(size_t a=0;a<=i;++a)for(unsigned b=0;b<(a==i?j:COOP_FIREBALL_SLOTS);++b)
+            if(f->id==m->actors[a].fireballs[b].id)return false;
+    }
     return true;
 }
 static bool piece_valid(const CoopVisualPiece *v) {
@@ -247,7 +272,7 @@ static bool load_piece(CoopVisualPiece *v,const uint8_t *p) {
 bool coop_machine_save(const CoopMachine *m,void *data,size_t capacity) {
     size_t n=coop_machine_save_size(m);if(!data || !n || capacity<n || !entities_valid(m))return false;
     uint8_t *p=data;memset(p,0,HEADER);
-    memcpy(p,"CNR1",4);put32(p+4,5);memcpy(p+8,rom_id,32);
+    memcpy(p,"CNR1",4);put32(p+4,6);memcpy(p+8,rom_id,32);
     size_t core=coop_session_save_size(&m->session);
     put32(p+40,(uint32_t)core);put32(p+44,(uint32_t)m->actor_count);
     put32(p+48,layout_id());put32(p+52,m->room);put32(p+56,m->previous_mode);
@@ -296,13 +321,31 @@ bool coop_machine_save(const CoopMachine *m,void *data,size_t capacity) {
         put32(p+at,s->level);put32(p+at+4,s->layer);put32(p+at+8,s->x);
         put32(p+at+12,s->y);put32(p+at+16,s->tile);put32(p+at+20,s->uses);at+=24;
     }
+    memcpy(p+at,"PJT1",4);put32(p+at+4,(uint32_t)m->actor_count);
+    put32(p+at+8,COOP_FIREBALL_SLOTS);put32(p+at+12,m->fireballs_initialized);at+=16;
+    for(size_t i=0;i<m->actor_count;++i) {
+        put32(p+at,m->actors[i].player);at+=4;
+        for(unsigned j=0;j<COOP_FIREBALL_SLOTS;++j) {
+            const CoopFireball *f=&m->actors[i].fireballs[j];
+            put32(p+at,f->id);memcpy(p+at+4,f->guest,COOP_FIREBALL_BYTES);
+            put32(p+at+16,f->pending_count);put32(p+at+20,f->visible_count);at+=24;
+            if(f->pending_count) {
+                if(!piece_valid(&f->pending))return false;
+                save_piece(p+at,&f->pending);at+=PIECE_BYTES;
+            }
+            if(f->visible_count) {
+                if(!piece_valid(&f->visible))return false;
+                save_piece(p+at,&f->visible);at+=PIECE_BYTES;
+            }
+        }
+    }
     put32(p+at,crc(p,at));return true;
 }
 bool coop_machine_load(CoopMachine *m,const void *data,size_t size) {
     if(!m || !data || size<HEADER+TRAILER)return false;
     const uint8_t *p=data;
     uint32_t version=u32(p+4);
-    if(memcmp(p,"CNR1",4)||(version<2 || version>5)||memcmp(p+8,rom_id,32)||u32(p+48)!=layout_id()||
+    if(memcmp(p,"CNR1",4)||(version<2 || version>6)||memcmp(p+8,rom_id,32)||u32(p+48)!=layout_id()||
         u32(p+60)>1||u32(p+56)>0x29||u32(p+size-4)!=crc(p,size-4))return false;
     size_t core=u32(p+40),count=u32(p+44);
     if(core>size-HEADER-TRAILER || count>(size-HEADER-TRAILER-core)/(ACTOR_HEADER+COOP_GUEST_BYTES))return false;
@@ -382,13 +425,37 @@ bool coop_machine_load(CoopMachine *m,const void *data,size_t size) {
                 at+=PIECE_BYTES;
             }
         }
-        if(sources!=(size-TRAILER-at)/24 || (size-TRAILER-at)%24 ||
+        if(sources>(size-TRAILER-at)/24 ||
            sources>SIZE_MAX/sizeof(*tmp.sources))goto fail;
         if(sources) {tmp.sources=calloc(sources,sizeof(*tmp.sources));if(!tmp.sources)goto fail;}
         tmp.source_count=tmp.source_capacity=sources;
         for(size_t i=0;i<sources;++i) {
             tmp.sources[i]=(CoopYoshiSource){u32(p+at),u32(p+at+4),u32(p+at+8),
                 u32(p+at+12),u32(p+at+16),u32(p+at+20)};at+=24;
+        }
+    }
+    if(version>=6) {
+        if(size-TRAILER-at<16 || memcmp(p+at,"PJT1",4) || u32(p+at+4)!=count ||
+           u32(p+at+8)!=COOP_FIREBALL_SLOTS || u32(p+at+12)>1)goto fail;
+        tmp.fireballs_initialized=u32(p+at+12)!=0;at+=16;
+        for(size_t i=0;i<count;++i) {
+            if(size-TRAILER-at<4 || u32(p+at)!=tmp.actors[i].player)goto fail;
+            at+=4;
+            for(unsigned j=0;j<COOP_FIREBALL_SLOTS;++j) {
+                if(size-TRAILER-at<24)goto fail;
+                CoopFireball *f=&tmp.actors[i].fireballs[j];
+                f->id=u32(p+at);memcpy(f->guest,p+at+4,COOP_FIREBALL_BYTES);
+                f->pending_count=u32(p+at+16);f->visible_count=u32(p+at+20);at+=24;
+                if(f->pending_count>1 || f->visible_count>1)goto fail;
+                if(f->pending_count) {
+                    if(size-TRAILER-at<PIECE_BYTES || !load_piece(&f->pending,p+at))goto fail;
+                    at+=PIECE_BYTES;
+                }
+                if(f->visible_count) {
+                    if(size-TRAILER-at<PIECE_BYTES || !load_piece(&f->visible,p+at))goto fail;
+                    at+=PIECE_BYTES;
+                }
+            }
         }
     }
     if(at!=size-TRAILER || !entities_valid(&tmp))goto fail;

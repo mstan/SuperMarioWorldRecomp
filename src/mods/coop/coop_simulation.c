@@ -20,6 +20,9 @@ static unsigned room_sprite_depth;
 static unsigned carried_reward_depth;
 static unsigned mount_draw_depth;
 static unsigned contact_call_depth;
+static unsigned fireball_spawn_depth,extended_call_depth;
+static unsigned boss_fireball_depth;
+static bool owned_boss_bank;
 static bool contact_query,contact_bounce_only,powerup_query;
 typedef enum NativeContactKind {
     CONTACT_NONE,CONTACT_STAR,CONTACT_BOUNCE,CONTACT_SIDE,CONTACT_SLIDE,
@@ -27,7 +30,28 @@ typedef enum NativeContactKind {
 } NativeContactKind;
 static NativeContactKind queried_contact;
 static uint64_t contact_query_audits;
+/* Normal sprite capacity is fixed by the ROM. Stable IDs distinguish a new
+ * object reusing that slot; this ledger exists only during a host frame. */
+static CoopEntityId damaged_entity[12];
 static CoopActor *bound_actor;
+static void trace_fire_contact(CoopMachine *m,uint32_t pc,unsigned slot,unsigned projectile,
+                               CoopEntityId id,bool accepted) {
+    static bool initialized;static FILE *file;
+    if(!initialized) {
+        initialized=true;const char *path=getenv("SMW_COOP_PROJECTILE_TRACE");
+        if(path && *path) {
+            file=fopen(path,"wb");
+            if(file) {
+                setvbuf(file,NULL,_IOFBF,1024*1024);
+                fputs("frame,pc,actor,entity,sprite,projectile,status,type,hits,accepted\n",file);
+            }
+        }
+    }
+    if(file)fprintf(file,"%llu,%06x,%u,%u,%u,%u,%u,%u,%u,%u\n",
+        (unsigned long long)m->session.frame,pc,bound_actor?bound_actor->player:COOP_NO_PLAYER,
+        id,slot,projectile,g_ram[0x14c8+slot],g_ram[0x9e + slot],
+        g_ram[(pc==0x01d3e9?0x1626:pc==0x01fd36?0x154c:0x1528)+slot],accepted);
+}
 static bool level_frame;
 static bool timer_had_time;
 static bool gameplay_stage_started;
@@ -165,6 +189,105 @@ static void guest_jsr(CpuState *cpu,uint32_t entry) {
     cpu_push_jsr_return_frame(cpu);
     if(!interp_bridge_run(cpu,entry) || cpu->S!=stack)
         Die("Native co-op scoped guest routine failed its return contract");
+}
+static void adopt_fireball_banks(CoopMachine *m) {
+    if(m->fireballs_initialized)return;
+    /* CNR2..5 did not identify the owners of physical slots 8/9. Leave any
+     * live legacy shot in the shared world; it temporarily reserves that
+     * slot in every actor's allowance until it expires. Never guess an owner.
+     * Import empty-slot residue, which the original spawn routine preserves. */
+    for(size_t i=0;i<m->actor_count;++i)for(unsigned j=0;j<COOP_FIREBALL_SLOTS;++j)
+        if(!g_ram[0x170b+8+j])coop_fireball_capture(&m->actors[i].fireballs[j],g_ram,8+j);
+    m->fireballs_initialized=true;
+}
+static void spawn_owned_fireball(CpuState *cpu,CoopMachine *m) {
+    CoopActor *a=bound_actor?bound_actor:primary_actor(m);
+    CoopFireball shared[COOP_FIREBALL_SLOTS]={0};
+    bool reserved[COOP_FIREBALL_SLOTS],empty[COOP_FIREBALL_SLOTS];
+    for(unsigned j=0;j<COOP_FIREBALL_SLOTS;++j) {
+        coop_fireball_capture(&shared[j],g_ram,8+j);
+        reserved[j]=shared[j].guest[0]!=0;empty[j]=a->fireballs[j].guest[0]==0;
+        if(!reserved[j])coop_fireball_bind(&a->fireballs[j],g_ram,8+j);
+    }
+    ++fireball_spawn_depth;guest_jsr(cpu,0x00fea8);--fireball_spawn_depth;
+    for(unsigned j=0;j<COOP_FIREBALL_SLOTS;++j) {
+        if(!reserved[j]) {
+            CoopFireball *f=&a->fireballs[j];coop_fireball_capture(f,g_ram,8+j);
+            if(empty[j] && f->guest[0]) {
+                if(m->next_entity==COOP_NO_ENTITY)Die("Native co-op projectile identity exhausted");
+                f->id=m->next_entity++;
+            }
+        }
+        coop_fireball_bind(&shared[j],g_ram,8+j);
+    }
+}
+static CoopActor *next_ordered_actor(CoopMachine *m,CoopPlayerId previous) {
+    CoopActor *a=NULL;
+    for(size_t i=0;i<m->actor_count;++i) {
+        CoopActor *candidate=&m->actors[i];
+        if(previous!=COOP_NO_PLAYER && !coop_player_precedes(&m->session,previous,candidate->player))continue;
+        if(!a || coop_player_precedes(&m->session,candidate->player,a->player))a=candidate;
+    }
+    if(!a)Die("Native co-op projectile roster ordering failed");
+    return a;
+}
+static void boss_fireball_contacts(CpuState *cpu,CoopMachine *m,uint32_t entry) {
+    CpuState caller=*cpu;uint8_t scratch[16];memcpy(scratch,g_ram,sizeof(scratch));
+    CoopActor *original=bound_actor?bound_actor:primary_actor(m);
+    capture(m,original);
+    CoopFireball shared[COOP_FIREBALL_SLOTS]={0};
+    for(unsigned j=0;j<COOP_FIREBALL_SLOTS;++j)coop_fireball_capture(&shared[j],g_ram,8+j);
+    ++boss_fireball_depth;owned_boss_bank=true;
+    CoopPlayerId previous=COOP_NO_PLAYER;
+    for(size_t rank=0;rank<m->actor_count;++rank) {
+        CoopActor *a=next_ordered_actor(m,previous);previous=a->player;
+        coop_guest_bind(&a->guest,g_ram);bound_actor=a;
+        memcpy(g_ram,scratch,sizeof(scratch));restore_registers(cpu,&caller);
+        for(unsigned j=0;j<COOP_FIREBALL_SLOTS;++j)coop_fireball_bind(&a->fireballs[j],g_ram,8+j);
+        guest_jsr(cpu,entry);
+        for(unsigned j=0;j<COOP_FIREBALL_SLOTS;++j)coop_fireball_capture(&a->fireballs[j],g_ram,8+j);
+        capture(m,a);
+    }
+    owned_boss_bank=false;
+    for(unsigned j=0;j<COOP_FIREBALL_SLOTS;++j)coop_fireball_bind(&shared[j],g_ram,8+j);
+    coop_guest_bind(&original->guest,g_ram);bound_actor=original;
+    memcpy(g_ram,scratch,sizeof(scratch));restore_registers(cpu,&caller);
+    guest_jsr(cpu,entry); /* retain native legacy-slot behavior exactly once */
+    --boss_fireball_depth;
+}
+static void run_owned_fireballs(CpuState *cpu,CoopMachine *m) {
+    CpuState caller=*cpu;uint8_t scratch[16],oam[0x2a0];
+    memcpy(scratch,g_ram,sizeof(scratch));memcpy(oam,g_ram+0x200,sizeof(oam));
+    uint8_t sprite=g_ram[0x15e9],track=g_ram[0x185e];
+    CoopActor *saved_actor=bound_actor,*primary=primary_actor(m);capture(m,primary);
+    /* Ascending primary/stable identity order is independent of roster layout.
+     * Each owner's slot 9 precedes 8, matching the original world stage. */
+    CoopPlayerId previous=COOP_NO_PLAYER;
+    for(size_t rank=0;rank<m->actor_count;++rank) {
+        CoopActor *a=next_ordered_actor(m,previous);
+        previous=a->player;
+        coop_guest_bind(&a->guest,g_ram);bound_actor=a;
+        for(unsigned n=COOP_FIREBALL_SLOTS;n;--n) {
+            unsigned j=n-1,slot=8+j;
+            CoopFireball *f=&a->fireballs[j],shared={0};
+            f->pending_count=0;
+            if(!f->guest[0])continue;
+            coop_fireball_capture(&shared,g_ram,slot);coop_fireball_bind(f,g_ram,slot);
+            memcpy(g_ram,scratch,sizeof(scratch));
+            for(unsigned piece=0;piece<128;++piece)g_ram[0x201+piece*4]=0xf0;
+            restore_registers(cpu,&caller);cpu->X=(uint16_t)slot;g_ram[0x15e9]=(uint8_t)slot;
+            guest_jsr(cpu,0x029b16);
+            coop_fireball_capture(f,g_ram,slot);
+            SmwCoopCaptureFireball(f,(unsigned)f->guest[2]+((unsigned)f->guest[4]<<8),
+                                   (unsigned)f->guest[1]+((unsigned)f->guest[3]<<8));
+            coop_fireball_bind(&shared,g_ram,slot);
+        }
+        capture(m,a);
+    }
+    bound_actor=saved_actor;restore_registers(cpu,&caller);
+    memcpy(g_ram,scratch,sizeof(scratch));memcpy(g_ram+0x200,oam,sizeof(oam));
+    g_ram[0x15e9]=sprite;g_ram[0x185e]=track;
+    coop_guest_bind(&primary->guest,g_ram);
 }
 static void carry_through_room(CpuState *cpu,CoopMachine *m) {
     /* 02:ABF2 normally keeps one carried sprite and moves it to slot zero.
@@ -335,13 +458,16 @@ static void initialize_room(CoopMachine *m) {
         g_ram[0x1470]=g_ram[0x148f]=(uint8_t)(p->held_object!=COOP_NO_ENTITY);
         capture(m,a);
         a->pending.count=a->visible.count=0;
+        memset(a->fireballs,0,sizeof(a->fireballs));
     }
     m->room=(uint32_t)g_ram[0xce]|((uint32_t)g_ram[0xcf]<<8)|((uint32_t)g_ram[0xd0]<<16);
     m->room_initialized=true;
     coop_guest_bind(&primary_actor(m)->guest,g_ram);
     m->mounts_initialized=false;
+    m->fireballs_initialized=true;
 }
 void SmwCoopSimulationBegin(void) {
+    memset(damaged_entity,0,sizeof(damaged_entity));
     level_frame=gameplay_stage_started=false;room_request=COOP_NO_PLAYER;
     goal_query=goal_commit=goal_contact=false;goal_height=goal_stars=0;
     keyhole_query=false;
@@ -353,6 +479,7 @@ void SmwCoopSimulationBegin(void) {
     if(mode!=0x14) {m->previous_mode=mode;return;}
     if(!m->room_initialized || m->previous_mode!=0x14)initialize_room(m);
     adopt_mounts(m);
+    adopt_fireball_banks(m);
     m->previous_mode=mode;level_frame=true;
     end_timer_at_begin=g_ram[0x1493];
     timer_had_time=(g_ram[0xf31]|g_ram[0xf32]|g_ram[0xf33])!=0;
@@ -683,6 +810,9 @@ static void commit_contact(CpuState *cpu,CoopMachine *m,unsigned slot,
     coop_mount_bind(actor_mount(m,c->actor),g_ram);bound_actor=c->actor;
     if(entry!=0x01a7e4 && entry!=0x01c4ac)g_ram[0x18d2]=0; /* non-star prefix */
     trace_arbitration(m,slot,c,0,winner);
+    if(winner && (c->kind==CONTACT_STAR || c->kind==CONTACT_SLIDE ||
+                  c->kind==CONTACT_SPIN || c->kind==CONTACT_STOMP))
+        damaged_entity[slot]=normal_entity(m,slot,false)->id;
     contact_bounce_only=bounce_only;
     guest_jsr(cpu,entry);
     contact_bounce_only=false;
@@ -931,6 +1061,50 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
         carry_through_room(cpu,m);return 0x02ac5b;
     }
     if(!level_frame)return 0;
+    if((pc==0x01d3b1 || pc==0x01fd0a) && !boss_fireball_depth) {
+        boss_fireball_contacts(cpu,m,pc);
+        return pc==0x01d3b1?0x01d40a:0x01fd4f;
+    }
+    if(owned_boss_bank && (pc==0x01d3ba || pc==0x01fd0c) && cpu->Y==10)
+        cpu->Y=9; /* each owned bank contains exactly original slots 9 and 8 */
+    if(pc==0x01d3e9 || pc==0x01fd36) {
+        unsigned slot=cpu->X&255,projectile=cpu->Y&255;
+        if(slot<12 && projectile<10) {
+            CoopEntityId id=normal_entity(m,slot,false)->id;
+            trace_fire_contact(m,pc,slot,projectile,id,damaged_entity[slot]!=id);
+            if(damaged_entity[slot]==id) {
+                /* Keep the valid hit's native puff and bonk; suppress only
+                 * its duplicate shared boss response. These are the three
+                 * writes preceding D3F8's hit counter / FD47's knockback. */
+                g_ram[0x170b+projectile]=1;g_ram[0x176f+projectile]=15;g_ram[0x1df9]=1;
+                return pc==0x01d3e9?0x01d405:0x01fd4a;
+            }
+            damaged_entity[slot]=id;
+        }
+    }
+    if(pc==0x02a0f5) {
+        /* Original fire contact has already consumed an ordinary projectile
+         * and rejected fire-immune enemies. Admit one shared enemy response,
+         * including Chuck's otherwise unguarded hit counter. Yoshi fire uses
+         * this same native boundary without consuming the flame. */
+        unsigned slot=cpu->X&255;
+        if(slot<12) {
+            CoopEntityId id=normal_entity(m,slot,false)->id;
+            trace_fire_contact(m,pc,slot,g_ram[0x185e],id,damaged_entity[slot]!=id);
+            if(damaged_entity[slot]==id)return 0x02a143;
+            damaged_entity[slot]=id;
+        }
+    }
+    if(pc==0x00fea8 && !fireball_spawn_depth) {
+        spawn_owned_fireball(cpu,m);return 0x00feb4;
+    }
+    if(pc==0x029b0a && !extended_call_depth) {
+        ++extended_call_depth;
+        run_owned_fireballs(cpu,m);
+        guest_jsr(cpu,0x029b0a); /* enemy/legacy pool advances exactly once */
+        --extended_call_depth;
+        return 0x029b15;
+    }
     /* Masking L/R inputs alone is insufficient: CODE_00CDDD stores the
      * singleton manual-camera flag to SpriteLock even with no buttons held.
      * An idle partner therefore cancelled a transforming player's freeze. */
@@ -1219,7 +1393,9 @@ static void recover_and_frame(CoopMachine *m) {
     if(!coop_camera_frame(s,g_smw_viewport.width,224,width,height,!g_ram[0x1411]))
         Die("Native co-op camera framing failed");
     s->camera.x=(int)read16(0x1a)-SmwViewOffset(g_smw_viewport,(int)read16(0x1a),(g_ram[0x5e]+1)*256);
-    s->camera.y=(int)read16(0x1c);
+    /* Iggy/Larry's native camera is $FF90 (-112). Treating that word as
+     * 65424 declares both visible actors offscreen and bubbles the primary. */
+    s->camera.y=(int16_t)read16(0x1c);
     if(resized)coop_machine_refit_view(m);
     if(!coop_camera_check_separation(s,resized))Die("Native co-op separation check failed");
     /* Drop before recovery binds a new position: objects stay at departure. */

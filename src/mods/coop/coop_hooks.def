@@ -3,6 +3,15 @@ COOP_HOOK(0x009CB0) /* EnterFileSelect, before reading any file */
 COOP_HOOK(0x009D22) /* FileSelected.NotValid, after validation/copy */
 COOP_HOOK(0x009E0D) /* Native player-count choice, before loading campaign */
 COOP_HOOK(0x00C569) /* Player update, after once-per-world shared timers */
+COOP_HOOK(0x00FEA8) /* Original two-slot fireball spawn in its actor's bank */
+COOP_HOOK(0x029B0A) /* Owned projectile banks, then the single shared extended pool */
+COOP_HOOK(0x02A0F5) /* Valid fire contact before shared enemy damage/coin conversion */
+COOP_HOOK(0x01D3B1) /* Morton/Roy/Ludwig's direct fireball contact loop */
+COOP_HOOK(0x01D3BA) /* Owned boss-contact bank begins at its actual slot 9 */
+COOP_HOOK(0x01D3E9) /* Valid boss fire contact before puff/shared hit count */
+COOP_HOOK(0x01FD0A) /* Iggy/Larry's direct fireball contact loop */
+COOP_HOOK(0x01FD0C) /* Owned rotating-platform boss bank begins at slot 9 */
+COOP_HOOK(0x01FD36) /* Valid Iggy/Larry fire contact before puff/knockback */
 COOP_HOOK(0x00E2BD) /* Player graphics entry, before primary draw */
 COOP_HOOK(0x018127) /* One normal-sprite update, with selected actor context */
 COOP_HOOK(0x01808C) /* Per-actor contact occupancy before world sprites */
