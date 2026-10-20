@@ -213,6 +213,47 @@ static void guest_jsr(CpuState *cpu,uint32_t entry) {
     if(!interp_bridge_run(cpu,entry) || cpu->S!=stack)
         Die("Native co-op scoped guest routine failed its return contract");
 }
+static CoopPlacedEgg *placed_source_for(CoopMachine *m,CoopEntityId egg) {
+    for(size_t i=0;i<m->placed_count;++i)
+        if(m->placed_eggs[i].egg==egg)return &m->placed_eggs[i];
+    return NULL;
+}
+static bool adopt_placed_egg(CoopMachine *m,CoopEntity *e) {
+    unsigned slot=e->slot;
+    if(e->type!=0x2c || placed_source_for(m,e->id))return true;
+    /* Only a placed egg enters InitYoshiEgg (status 1) or waits with $187B.
+     * Block eggs already have their separate source and hatch timer. */
+    if(g_ram[0x14c8+slot]!=1 && !g_ram[0x187b+slot])return true;
+    if(m->level>=512)Die("Native co-op placed egg has no room identity");
+    unsigned x=g_ram[0xe4+slot]|(g_ram[0x14e0+slot]<<8);
+    unsigned y=g_ram[0xd8+slot]|(g_ram[0x14d4+slot]<<8);
+    CoopPlacedEgg *s=coop_placed_egg(m,m->level,x,y,g_ram[0x161a+slot]);
+    if(!s)Die("Native co-op could not record a placed egg source");
+    if(s->egg || s->uses>=m->actor_count) {
+        /* A native loader revisit cannot create an additional grant. */
+        g_ram[0x14c8+slot]=0;coop_machine_forget_entity(m,e->id);return false;
+    }
+    s->egg=e->id;return true;
+}
+static void replenish_placed_eggs(CpuState *cpu,CoopMachine *m) {
+    if(!m->session.advancing || g_ram[0x9d] || m->session.outcome!=COOP_CONTINUE)return;
+    CpuState caller=*cpu;uint8_t scratch[16];memcpy(scratch,g_ram,sizeof(scratch));
+    for(size_t i=0;i<m->placed_count;++i) {
+        CoopPlacedEgg *s=&m->placed_eggs[i];
+        if(s->level!=m->level || s->egg || s->uses>=m->actor_count)continue;
+        int slot=11;while(slot>=0 && g_ram[0x14c8+slot])--slot;
+        if(slot<0)break; /* retain the grant until a physical slot is free */
+        g_ram[0x9e + slot]=0x2c;g_ram[0x14c8+slot]=1;
+        g_ram[0xe4+slot]=(uint8_t)s->x;g_ram[0x14e0+slot]=(uint8_t)(s->x>>8);
+        g_ram[0xd8+slot]=(uint8_t)s->y;g_ram[0x14d4+slot]=(uint8_t)(s->y>>8);
+        g_ram[0x161a+slot]=0xff; /* children never release the original load flag */
+        cpu->X=(uint16_t)slot;cpu_push_jsl_return_frame(cpu);
+        if(!interp_bridge_run(cpu,0x07f722) || cpu->S!=caller.S)
+            Die("Native co-op placed egg initialization failed its return contract");
+        s->egg=normal_entity(m,(unsigned)slot,false)->id;
+        restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
+    }
+}
 static void adopt_fireball_banks(CoopMachine *m) {
     if(m->fireballs_initialized)return;
     /* CNR2..5 did not identify the owners of physical slots 8/9. Leave any
@@ -520,7 +561,7 @@ static void initialize_room(CoopMachine *m) {
         }
     }
     if(!g_ram[0x141a]) {
-        m->source_count=0;
+        m->source_count=m->placed_count=0;
         m->session.checkpoint=(g_ram[0x1ea2+g_ram[0x13bf]]&0x40)?g_ram[0x13bf]+1u:0;
     }
     CoopGuestPlayer entry;coop_guest_capture(&entry,g_ram);
@@ -653,6 +694,9 @@ static CoopActor *mount_target(CoopMachine *m,const CoopEntity *e) {
 static bool mouth_candidate_available(CoopMachine *m,unsigned mouth,unsigned slot) {
     CoopPlayerId rider=normal_entity(m,mouth,false)->owner;
     CoopEntity *object=normal_entity(m,slot,false);
+    /* The single-mount ROM can treat another egg/baby as edible. A shared
+     * co-op mount or unhatched source reward is never somebody else's food. */
+    if(object->type==0x2c || object->type==0x2d || object->type==0x35)return false;
     if((object->flags&(COOP_ENTITY_HELD|COOP_ENTITY_ATTACHED)) && object->owner!=rider)
         return false;
     for(unsigned other=0;other<12;++other)
@@ -1175,6 +1219,7 @@ static bool run_normal_sprite(CpuState *cpu,CoopMachine *m) {
         return false;
     }
     e=normal_entity(m,slot,false);
+    if(!adopt_placed_egg(m,e))return true;
     bool yoshi=e->type==0x35,baby=e->type==0x2d;
     if(yoshi && e->owner!=COOP_NO_PLAYER) {
         const CoopPlayer *rider=coop_player_const(&m->session,e->owner);
@@ -1355,6 +1400,13 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
     if(pc==0x01f78a) {
         unsigned slot=cpu->X&255;
         if(slot>=12)Die("Native co-op placed egg has no native slot");
+        CoopEntity *egg=normal_entity(m,slot,false);
+        CoopPlacedEgg *source=placed_source_for(m,egg->id);
+        if(!source || source->uses>=m->actor_count)
+            Die("Native co-op placed egg has no remaining source grant");
+        ++source->uses;
+        if(source->load_index<128)g_ram[0x1938+source->load_index]=1;
+        g_ram[0x161a+slot]=0xff;
         cpu->A=(cpu->A&0xff00)|(mount_count(slot)<m->actor_count?0x2d:0x78);
     }
     if(pc==0x02ea8a) {
@@ -1569,7 +1621,9 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
     if(pc==0x00f6db && !camera_call_depth) {
         run_team_camera(cpu,m);return 0x00f628; /* original RTL */
     }
-    if((pc&0x7fffff)==0x01808c)prepare_world_contacts(m);
+    if((pc&0x7fffff)==0x01808c) {
+        prepare_world_contacts(m);replenish_placed_eggs(cpu,m);
+    }
     if((pc&0x7fffff)==0x018127 && !sprite_call_depth && run_normal_sprite(cpu,m))
         return 0x018126; /* original bank-1 RTS; world sprite runs once */
     if((pc&0x7fffff)==0x00e2bd) {draw_mounts(cpu,m);draw_secondary_players(cpu,m);}

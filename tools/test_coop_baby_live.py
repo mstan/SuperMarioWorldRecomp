@@ -137,7 +137,8 @@ def main():
                             parity_snapshots=slots))
         (root/'summary.json').write_text(json.dumps(dict(
             checks=results, campaign='unverified',
-            repeated_placed_grants='unimplemented', fresh_mouth_arbitration='unverified'), indent=2)+'\n')
+            repeated_placed_grants='covered by test_coop_placed_sources_live.py',
+            fresh_mouth_arbitration='unverified'), indent=2)+'\n')
 
     fixtures = {}
     kinds = ('rider0', 'rider1', 'one-babies', 'cap-adults', 'cap-babies', 'cap-pending', 'cap-bubble')
@@ -156,9 +157,11 @@ def main():
                 key = f'{kind}-{width}'
                 name = f'{key}-{backend}'
                 out = run(name, fixtures[kind],
-                          'wait 60\nloadstate 10\nwait 150\nsavestate 9\n'
+                          # Observe the first child before the repeated grant
+                          # can hatch an alternate 1-up that the baby can eat.
+                          'wait 60\nloadstate 10\nwait 42\nsavestate 9\n'
                           'wait 10\nsavestate 8\nloadstate 9\nwait 10\nsavestate 7\nwait 5\n',
-                          255, narrow, bounce)
+                          147, narrow, bounce)
                 choices = re.findall(r'^f\d+\s+01:1520=(2D|78) w1',
                                      (out/'wram-writes.log').read_text(), re.M)
                 assert choices == ['78' if kind.startswith('cap-') else '2D'], (name, choices)

@@ -1,8 +1,10 @@
 # Placed eggs and baby-Yoshi food ownership
 
 Tracking: `beads-8wg.3.30`; approved contract: [NATIVE_COOP.md](../NATIVE_COOP.md).
-This is a focused implementation milestone. Repeated placed-source grants,
-fresh competing mouths, growth/abilities and campaign acceptance remain open.
+This is a focused implementation milestone. Fresh competing mouths,
+full abilities and campaign acceptance remain open. Repeated placed-source
+grants are covered by the later
+[source-lifecycle milestone](native-coop-placed-sources-2026-10-20.md).
 The later growth milestone below qualifies bounded feeding/growth behavior.
 
 ## Reproduced failures and native boundaries
@@ -23,7 +25,8 @@ The co-op hook replaces that selection with the existing room mount count
 against the session roster size. Adults, babies, pending mount eggs and
 bubble-owned mounts count; the allocating egg excludes itself. Original
 proximity checks, hatching, initialization, motion and alternate rewards still
-execute. This does not yet create a second placed-source grant.
+execute. This initial milestone did not create a second placed-source grant;
+the later source-lifecycle adapter adds that behavior.
 
 Baby food uses a separate original routine, `$02:EA4E`, with its own descending
 sprite scan, parity, type and growth filters. `$02:EA8A` performs native sprite

@@ -40,6 +40,21 @@ CoopYoshiSource *coop_yoshi_source(CoopMachine *m,unsigned level,unsigned layer,
     CoopYoshiSource *s=&m->sources[m->source_count++];
     *s=(CoopYoshiSource){level,layer,x,y,tile,0};return s;
 }
+CoopPlacedEgg *coop_placed_egg(CoopMachine *m,unsigned level,unsigned x,unsigned y,
+                             unsigned load_index) {
+    for(size_t i=0;i<m->placed_count;++i) {
+        CoopPlacedEgg *s=&m->placed_eggs[i];
+        if(s->level==level && s->x==x && s->y==y)return s;
+    }
+    if(m->placed_count==m->placed_capacity) {
+        size_t n=m->placed_capacity?m->placed_capacity*2:8;
+        if(n<m->placed_capacity || n>SIZE_MAX/sizeof(*m->placed_eggs))return NULL;
+        CoopPlacedEgg *p=realloc(m->placed_eggs,n*sizeof(*p));if(!p)return NULL;
+        m->placed_eggs=p;m->placed_capacity=n;
+    }
+    CoopPlacedEgg *s=&m->placed_eggs[m->placed_count++];
+    *s=(CoopPlacedEgg){level,x,y,load_index,0,0};return s;
+}
 /* Stock US ROM SHA-256. A native session can never restore into a patched ROM. */
 static const uint8_t rom_id[32] = {
     0x08,0x38,0xe5,0x31,0xfe,0x22,0xc0,0x77,0x52,0x8f,0xeb,0xe1,0x4c,0xb3,0xff,0x7c,
@@ -78,7 +93,8 @@ bool coop_machine_init(CoopMachine *m,size_t count) {
 }
 void coop_machine_destroy(CoopMachine *m) {
     if(!m)return;
-    coop_session_destroy(&m->session);free(m->actors);free(m->entities);free(m->sources);memset(m,0,sizeof(*m));
+    coop_session_destroy(&m->session);free(m->actors);free(m->entities);free(m->sources);
+    free(m->placed_eggs);memset(m,0,sizeof(*m));
 }
 CoopActor *coop_machine_actor(CoopMachine *m,CoopPlayerId player) {
     for(size_t i=0;i<m->actor_count;++i)if(m->actors[i].player==player)return &m->actors[i];
@@ -95,6 +111,8 @@ CoopEntity *coop_machine_entity_slot(CoopMachine *m,unsigned kind,unsigned slot)
 }
 void coop_machine_forget_entity(CoopMachine *m,CoopEntityId id) {
     for(size_t i=0;i<m->entity_count;++i)if(m->entities[i].id==id) {
+        for(size_t j=0;j<m->placed_count;++j)
+            if(m->placed_eggs[j].egg==id)m->placed_eggs[j].egg=0;
         for(size_t j=0;j<m->session.player_count;++j) {
             CoopPlayer *p=&m->session.players[j];
             if(p->held_object==id)p->held_object=COOP_NO_ENTITY;
@@ -196,7 +214,9 @@ size_t coop_machine_save_size(const CoopMachine *m) {
         n+=bytes;
     }
     if(n>SIZE_MAX-16 || m->actor_count>(SIZE_MAX-n-16)/12)return 0;
-    return n+16+m->actor_count*12;
+    n+=16+m->actor_count*12;
+    if(n>SIZE_MAX-8 || m->placed_count>UINT32_MAX || m->placed_count>(SIZE_MAX-n-8)/24)return 0;
+    return n+8+m->placed_count*24;
 }
 static bool entities_valid(const CoopMachine *m) {
     if(m->entity_count>22 || !m->next_entity || (m->level!=UINT32_MAX && m->level>=512))return false;
@@ -225,6 +245,23 @@ static bool entities_valid(const CoopMachine *m) {
         for(size_t j=0;j<i;++j) {
             const CoopYoshiSource *t=&m->sources[j];
             if(s->level==t->level && s->layer==t->layer && s->x==t->x && s->y==t->y)return false;
+        }
+    }
+    for(size_t i=0;i<m->placed_count;++i) {
+        const CoopPlacedEgg *s=&m->placed_eggs[i];
+        if(s->level>=512 || s->x>65535 || s->y>65535 || ((s->x|s->y)&15) ||
+           (s->load_index>=128 && s->load_index!=255) || s->uses>m->actor_count)return false;
+        if(s->egg) {
+            const CoopEntity *egg=NULL;
+            for(size_t j=0;j<m->entity_count;++j)
+                if(m->entities[j].id==s->egg)egg=&m->entities[j];
+            if(s->level!=m->level || !egg || egg->kind!=COOP_ENTITY_NORMAL ||
+               egg->type!=0x2c || egg->owner!=COOP_NO_PLAYER || egg->flags)return false;
+        }
+        for(size_t j=0;j<i;++j) {
+            const CoopPlacedEgg *t=&m->placed_eggs[j];
+            if((s->level==t->level && s->x==t->x && s->y==t->y) ||
+               (s->egg && s->egg==t->egg))return false;
         }
     }
     for(size_t i=0;i<m->session.player_count;++i) {
@@ -287,7 +324,7 @@ static bool load_piece(CoopVisualPiece *v,const uint8_t *p) {
 bool coop_machine_save(const CoopMachine *m,void *data,size_t capacity) {
     size_t n=coop_machine_save_size(m);if(!data || !n || capacity<n || !entities_valid(m))return false;
     uint8_t *p=data;memset(p,0,HEADER);
-    memcpy(p,"CNR1",4);put32(p+4,7);memcpy(p+8,rom_id,32);
+    memcpy(p,"CNR1",4);put32(p+4,8);memcpy(p+8,rom_id,32);
     size_t core=coop_session_save_size(&m->session);
     put32(p+40,(uint32_t)core);put32(p+44,(uint32_t)m->actor_count);
     put32(p+48,layout_id());put32(p+52,m->room);put32(p+56,m->previous_mode);
@@ -360,13 +397,19 @@ bool coop_machine_save(const CoopMachine *m,void *data,size_t capacity) {
         put32(p+at,m->actors[i].player);put32(p+at+4,m->actors[i].stored_mount);
         put32(p+at+8,m->actors[i].stored_mount_color);at+=12;
     }
+    memcpy(p+at,"PEG1",4);put32(p+at+4,(uint32_t)m->placed_count);at+=8;
+    for(size_t i=0;i<m->placed_count;++i) {
+        const CoopPlacedEgg *s=&m->placed_eggs[i];
+        put32(p+at,s->level);put32(p+at+4,s->x);put32(p+at+8,s->y);
+        put32(p+at+12,s->load_index);put32(p+at+16,s->uses);put32(p+at+20,s->egg);at+=24;
+    }
     put32(p+at,crc(p,at));return true;
 }
 bool coop_machine_load(CoopMachine *m,const void *data,size_t size) {
     if(!m || !data || size<HEADER+TRAILER)return false;
     const uint8_t *p=data;
     uint32_t version=u32(p+4);
-    if(memcmp(p,"CNR1",4)||(version<2 || version>7)||memcmp(p+8,rom_id,32)||u32(p+48)!=layout_id()||
+    if(memcmp(p,"CNR1",4)||(version<2 || version>8)||memcmp(p+8,rom_id,32)||u32(p+48)!=layout_id()||
         u32(p+60)>1||u32(p+56)>0x29||u32(p+size-4)!=crc(p,size-4))return false;
     size_t core=u32(p+40),count=u32(p+44);
     if(core>size-HEADER-TRAILER || count>(size-HEADER-TRAILER-core)/(ACTOR_HEADER+COOP_GUEST_BYTES))return false;
@@ -490,6 +533,17 @@ bool coop_machine_load(CoopMachine *m,const void *data,size_t size) {
             tmp.actors[i].stored_mount_color=u32(p+at+8);at+=12;
         }
     }
+    if(version>=8) {
+        if(size-TRAILER-at<8 || memcmp(p+at,"PEG1",4))goto fail;
+        size_t eggs=u32(p+at+4);at+=8;
+        if(eggs>(size-TRAILER-at)/24 || eggs>SIZE_MAX/sizeof(*tmp.placed_eggs))goto fail;
+        if(eggs) {tmp.placed_eggs=calloc(eggs,sizeof(*tmp.placed_eggs));if(!tmp.placed_eggs)goto fail;}
+        tmp.placed_count=tmp.placed_capacity=eggs;
+        for(size_t i=0;i<eggs;++i) {
+            tmp.placed_eggs[i]=(CoopPlacedEgg){u32(p+at),u32(p+at+4),u32(p+at+8),
+                u32(p+at+12),u32(p+at+16),u32(p+at+20)};at+=24;
+        }
+    }
     if(at!=size-TRAILER || !entities_valid(&tmp))goto fail;
     coop_machine_destroy(m);*m=tmp;return true;
 fail:
@@ -501,6 +555,23 @@ bool coop_mount_mouth_active(const uint8_t *ram,unsigned slot) {
     unsigned status=ram[0x14c8+slot],type=ram[0x9e + slot];
     return (status==8 && type==0x35) ||
            (status>=9 && status<=11 && type==0x2d && ram[0x163e + slot]>0x20);
+}
+bool coop_machine_placed_eggs_valid(const CoopMachine *m,const uint8_t *ram) {
+    if(!m || !ram)return false;
+    for(size_t i=0;i<m->placed_count;++i) {
+        const CoopPlacedEgg *s=&m->placed_eggs[i];if(!s->egg)continue;
+        const CoopEntity *egg=NULL;
+        for(size_t j=0;j<m->entity_count;++j)
+            if(m->entities[j].id==s->egg)egg=&m->entities[j];
+        if(!egg || egg->slot>=12)return false;
+        unsigned slot=egg->slot,status=ram[0x14c8+slot];
+        if(ram[0x9e + slot]!=0x2c || (status!=1 && status!=8) ||
+           (unsigned)(ram[0xe4+slot]|(ram[0x14e0+slot]<<8))!=s->x ||
+           (unsigned)(ram[0xd8+slot]|(ram[0x14d4+slot]<<8))!=s->y)return false;
+        if(status==8 && !ram[0x187b+slot] &&
+           (!s->uses || (ram[0x151c+slot]!=0x2d && ram[0x151c+slot]!=0x78)))return false;
+    }
+    return true;
 }
 bool coop_machine_mouths_valid(const CoopMachine *m,const uint8_t *ram) {
     if(!m || !ram)return false;
@@ -515,6 +586,8 @@ bool coop_machine_mouths_valid(const CoopMachine *m,const uint8_t *ram) {
             continue; /* adult's original signed-empty convention */
         }
         if(object>=12 || object==slot || referenced[object])return false;
+        if(ram[0x9e + object]==0x2c || ram[0x9e + object]==0x2d ||
+           ram[0x9e + object]==0x35)return false;
         referenced[object]=true;
         CoopPlayerId rider=COOP_NO_PLAYER;
         for(size_t i=0;i<m->entity_count;++i) {

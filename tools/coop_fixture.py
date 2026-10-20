@@ -26,7 +26,7 @@ class Fixture:
         self.machine = self.end-self.word(self.end)
         m = self.machine
         self.version = self.word(m+4)
-        assert d[m:m+4] == b'CNR1' and self.version in (2, 3, 4, 5, 6, 7)
+        assert d[m:m+4] == b'CNR1' and self.version in (2, 3, 4, 5, 6, 7, 8)
         self.check_crc(m, self.end)
         self.core = m+64
         self.core_end = self.core+self.word(m+40)
@@ -119,6 +119,15 @@ class Fixture:
                 assert player in self.actors and player not in self.stored_mounts
                 self.stored_mounts[player] = (identity, color)
                 at += 12
+        self.placed_eggs = []
+        if self.version >= 8:
+            assert d[at:at+4] == b'PEG1'
+            self.placed_at = at
+            count = self.word(at+4)
+            at += 8
+            for _ in range(count):
+                self.placed_eggs.append(struct.unpack_from('<6I', d, at))
+                at += 24
         assert at == self.end-4
 
     def word(self, at):

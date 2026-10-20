@@ -60,6 +60,10 @@ typedef struct CoopEntity {
 typedef struct CoopYoshiSource {
     uint32_t level,layer,x,y,tile,uses;
 } CoopYoshiSource;
+typedef struct CoopPlacedEgg {
+    uint32_t level,x,y,load_index,uses;
+    CoopEntityId egg; /* zero when no unhatched egg is currently allocated */
+} CoopPlacedEgg;
 
 typedef struct CoopMachine {
     CoopSession session;
@@ -81,6 +85,8 @@ typedef struct CoopMachine {
     bool entrance_prepared;
     CoopYoshiSource *sources;
     size_t source_count,source_capacity;
+    CoopPlacedEgg *placed_eggs;
+    size_t placed_count,placed_capacity;
 } CoopMachine;
 
 bool coop_machine_init(CoopMachine *m, size_t players);
@@ -98,6 +104,8 @@ void coop_fireball_capture(CoopFireball *f,const uint8_t *ram,unsigned slot);
 void coop_fireball_bind(const CoopFireball *f,uint8_t *ram,unsigned slot);
 CoopYoshiSource *coop_yoshi_source(CoopMachine *m,unsigned level,unsigned layer,
                                  unsigned x,unsigned y,unsigned tile);
+CoopPlacedEgg *coop_placed_egg(CoopMachine *m,unsigned level,unsigned x,unsigned y,
+                             unsigned load_index);
 size_t coop_machine_save_size(const CoopMachine *m);
 bool coop_machine_save(const CoopMachine *m, void *data, size_t capacity);
 /* Transactional: failure leaves both policy and native images untouched. */
@@ -105,6 +113,7 @@ bool coop_machine_load(CoopMachine *m, const void *data, size_t size);
 /* Cross-check native mouth indices before a snapshot touches the live guest.
  * This validates references/ownership, not all native sprite mechanics. */
 bool coop_machine_mouths_valid(const CoopMachine *m, const uint8_t *ram);
+bool coop_machine_placed_eggs_valid(const CoopMachine *m,const uint8_t *ram);
 /* Adults retain mouth indices; babies reserve food while their native eat
  * timer is above $20. At $20 the original routine consumes it. */
 bool coop_mount_mouth_active(const uint8_t *ram,unsigned slot);

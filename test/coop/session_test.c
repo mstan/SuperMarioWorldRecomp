@@ -269,6 +269,12 @@ static void native_states(size_t players) {
     assert(!coop_machine_mouths_valid(&a,mouth_ram)); /* baby cannot reserve another carrier's food */
     mouth_ram[0x1617]=4;
     assert(coop_machine_mouths_valid(&a,mouth_ram));
+    const uint8_t other_mounts[]={0x2c,0x2d,0x35};
+    for(size_t i=0;i<sizeof(other_mounts);++i) {
+        mouth_ram[0xa2]=other_mounts[i];
+        assert(!coop_machine_mouths_valid(&a,mouth_ram));
+    }
+    mouth_ram[0xa2]=0;
     mouth_ram[0x1616]=4;
     assert(!coop_machine_mouths_valid(&a,mouth_ram)); /* adult/baby duplicate reservation */
     mouth_ram[0x1616]=0xff;
@@ -372,7 +378,7 @@ static void native_states(size_t players) {
     size_t second=first+24+2*540;
     memcpy(data+second,data+first,4);repair_native_crc(data,n); /* duplicate shot ID */
     assert(!coop_machine_load(&b,data,n) && b.actors==original);
-    size_t transport=n-4-16-players*12;
+    size_t transport=n-4-8-16-players*12;
     const size_t bad_mounts[]={transport+4,transport+8,transport+12,transport+16,
                               transport+16+4,transport+16+9,
                               transport+16+(players-1)*12+4};
@@ -407,6 +413,51 @@ static void native_states(size_t players) {
     assert(coop_machine_load(&b,data,projectiles+4));
     assert(!b.fireballs_initialized && !b.actors[0].fireballs[0].id);
     free(data);free(again);coop_machine_destroy(&a);coop_machine_destroy(&b);
+}
+
+static void placed_egg_states(size_t players) {
+    CoopMachine a={0},b={0};assert(coop_machine_init(&a,players));
+    a.level=0x134;
+    CoopEntity *egg=coop_machine_spawn_entity(&a,COOP_ENTITY_NORMAL,5,0x2c);assert(egg);
+    CoopEntityId id=egg->id;
+    CoopPlacedEgg *s=coop_placed_egg(&a,0x134,192,2240,23);assert(s);
+    s->uses=(uint32_t)players-1;s->egg=id;
+    assert(coop_placed_egg(&a,0x134,192,2240,23)==s);
+    uint8_t *ram=calloc(0x20000,1);assert(ram);
+    ram[0xa3]=0x2c;ram[0x14cd]=1;
+    ram[0xe9]=192;ram[0xdd]=2240&255;ram[0x14d9]=2240>>8;
+    assert(coop_machine_placed_eggs_valid(&a,ram));
+    ram[0x14cd]=8;ram[0x1521]=0x2d;
+    assert(coop_machine_placed_eggs_valid(&a,ram));
+    const unsigned corrupt[]={0xa3,0x14cd,0xe9,0x14e5,0xdd,0x14d9,0x1521};
+    for(size_t i=0;i<sizeof(corrupt)/sizeof(*corrupt);++i) {
+        ram[corrupt[i]]^=255;assert(!coop_machine_placed_eggs_valid(&a,ram));ram[corrupt[i]]^=255;
+    }
+    free(ram);
+    s=coop_placed_egg(&a,0x130,144,368,1);assert(s);s->uses=(uint32_t)players;
+    size_t n=coop_machine_save_size(&a),at=n-4-48;
+    uint8_t *data=malloc(n),*bad=malloc(n);assert(data && bad);
+    assert(coop_machine_save(&a,data,n) && coop_machine_load(&b,data,n));
+    assert(b.placed_count==2 && b.placed_eggs[0].egg==id);
+    assert(b.placed_eggs[0].y==2240 && b.placed_eggs[1].uses==players);
+    assert(coop_machine_save(&b,bad,n) && !memcmp(data,bad,n));
+    CoopActor *original=b.actors;
+    const size_t invalid[]={at-4,at+1,at+4,at+8,at+12,at+16,at+20};
+    for(size_t i=0;i<sizeof(invalid)/sizeof(*invalid);++i) {
+        memcpy(bad,data,n);bad[invalid[i]]=254;repair_native_crc(bad,n);
+        assert(!coop_machine_load(&b,bad,n) && b.actors==original);
+    }
+    memcpy(bad,data,n);memcpy(bad+at+24,bad+at,12);repair_native_crc(bad,n);
+    assert(!coop_machine_load(&b,bad,n) && b.actors==original); /* duplicate origin */
+    memcpy(bad,data,n);memcpy(bad+at+44,bad+at+20,4);repair_native_crc(bad,n);
+    assert(!coop_machine_load(&b,bad,n) && b.actors==original); /* duplicate egg */
+    coop_machine_forget_entity(&b,id);
+    assert(!b.placed_eggs[0].egg && b.placed_eggs[0].uses==players-1);
+    assert(coop_machine_save(&b,bad,coop_machine_save_size(&b)));
+    /* Old versions have no source history; do not invent previously used grants. */
+    memcpy(bad,data,n);bad[4]=7;repair_native_crc(bad,at-8+4);
+    assert(coop_machine_load(&b,bad,at-8+4) && !b.placed_count);
+    free(data);free(bad);coop_machine_destroy(&a);coop_machine_destroy(&b);
 }
 
 static void terrain(void) {
@@ -485,6 +536,7 @@ int main(void) {
     roster(2);roster(3);roster(4);roster(17);
     arbitration();priorities();camera_and_recovery();checkpoint_disconnect_input();states();guest_ownership();
     native_states(2);native_states(3);native_states(4);native_states(17);
+    placed_egg_states(2);placed_egg_states(3);placed_egg_states(4);placed_egg_states(17);
     terrain();
     puts("co-op: roster 2/3/4/17, recovery, arbitration, camera, input, checkpoint and atomic state validation passed");
     return 0;

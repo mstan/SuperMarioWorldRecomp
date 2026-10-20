@@ -219,7 +219,8 @@ bool SmwCoopSnapshotPreflight(const void *data,size_t size) {
     /* v9->v10 only appends the RDNMI latch, after WRAM and the input records;
      * its earlier WRAM offset is unchanged. No future-schema offset is guessed. */
     if(staged.actor_count!=selected_count || ram_offset>guest ||
-       guest-ram_offset<0x20000 || !coop_machine_mouths_valid(&staged,p+ram_offset)) {
+       guest-ram_offset<0x20000 || !coop_machine_mouths_valid(&staged,p+ram_offset) ||
+       !coop_machine_placed_eggs_valid(&staged,p+ram_offset)) {
         coop_machine_destroy(&staged);return false;
     }
     staged_size=n;return true;

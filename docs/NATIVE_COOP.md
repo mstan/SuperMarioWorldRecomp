@@ -66,9 +66,17 @@ execution checks pass, with native/bounce parity, save replay and unchanged
 disabled/One-Player behavior. A follow-up growth adapter starts new adult mount
 state independently and ends baby food claims when growth occurs inside a scan.
 Fifty-six additional growth cases cover both riders, four power-ups, five-food
-growth, actual carried babies, replay and native/bounce parity. Repeated
-placed-source grants, fresh mouth competition, full abilities and mount
+growth, actual carried babies, replay and native/bounce parity. Fresh
+mouth competition, full abilities and mount
 acceptance remain open.
+
+The [repeated placed-source adapter](validation/native-coop-placed-sources-2026-10-20.md)
+tracks roster-sized grants separately from block sources, retains history
+through rooms, defers allocation when all native slots are occupied, and saves
+pending eggs in CNR8. Fifty-six source cases and sixteen room/retry cases pass
+with replay and native/bounce comparisons. Babies cannot eat another pending
+mount grant. Expanded-margin hatching has a reproduced visibility-gate defect;
+stock-location and full mount acceptance remain open.
 
 The [shell ability matrix](validation/native-coop-shell-abilities-2026-10-20.md)
 qualifies each actor's sixteen Yoshi/shell color combinations through original
