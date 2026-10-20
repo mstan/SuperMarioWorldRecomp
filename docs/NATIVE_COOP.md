@@ -7,8 +7,9 @@ continues the approved contract below; it does not narrow that contract.
 
 The 19 game commits have been rebased onto game main `8dedb28`, retaining the
 newer Falcon/cache-helper, isolated generation, disassembly-authority, capture
-and launcher changes. Framework pin `1c31f29` contains the merged co-op support
+and launcher changes. Framework pin `fa018f3` contains the merged co-op support
 from PR #95 (`6d6f432`), current framework main `9c6afcb`, and the explicit SRAM image writer
+and serializer-derived snapshot WRAM location query
 in [framework PR #191](https://github.com/RetroPortingToolKit/snesrecomp/pull/191).
 That additional dependency remains under review. The UI uses game main's
 `01bff94`. The old dependency conflict and Linux failure described in the
@@ -43,8 +44,9 @@ prevents Yoshi from taking a partner's held object or another mount's mouth
 contents. Current input reaches both mouths in the same frame; accepted native
 tongue contacts resolve by distance and primary/stable ties, including reversed
 mount slots and multiple objects. Held/released objects and valid mouth-state
-replay pass focused checks. Legacy duplicate-mouth validation, cross-ability
-outcomes and the remaining full mount contract are still open.
+replay pass focused checks. Invalid legacy duplicate-mouth states are rejected
+atomically before changing the running guest. Cross-ability outcomes and the
+remaining full mount contract are still open.
 
 Owner-approved specification, 2026-09-22. Implementation tracking:
 `beads-8wg.3.26`, branch `feat/native-simultaneous-coop`.

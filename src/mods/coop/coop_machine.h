@@ -97,4 +97,7 @@ size_t coop_machine_save_size(const CoopMachine *m);
 bool coop_machine_save(const CoopMachine *m, void *data, size_t capacity);
 /* Transactional: failure leaves both policy and native images untouched. */
 bool coop_machine_load(CoopMachine *m, const void *data, size_t size);
+/* Cross-check native mouth indices before a snapshot touches the live guest.
+ * This validates references/ownership, not all native sprite mechanics. */
+bool coop_machine_mouths_valid(const CoopMachine *m, const uint8_t *ram);
 #endif

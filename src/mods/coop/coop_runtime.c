@@ -199,7 +199,8 @@ bool SmwCoopSnapshotPreflight(const void *data,size_t size) {
     coop_machine_destroy(&staged);staged_size=0;staged_consumed=false;
     if(!SmwCoopActive())return !enabled || SmwCoopPersistenceReady();
     const uint8_t *p=data;if(!p || size<16 || memcmp(p+size-4,"CNRE",4))return false;
-    uint32_t version=0;size_t guest=RtlSnapshotGuestSize(&version);
+    uint32_t version=0;size_t ram_offset=SIZE_MAX;
+    size_t guest=RtlSnapshotGuestLayout(&version,&ram_offset);
     uint32_t saved_version=read32(p+4);
     if(read32(p)!=0x52544c53u)return false;
     /* Framework daa3310 appends one serialized bool (rdnmiPending) to the
@@ -215,7 +216,12 @@ bool SmwCoopSnapshotPreflight(const void *data,size_t size) {
     if(read32(p+guest)!=0x31434d53u || read32(p+guest+4)!=0x53574d53u ||
         read32(p+guest+8)!=1u)return false;
     if(!coop_machine_load(&staged,p+guest+extra,n))return false;
-    if(staged.actor_count!=selected_count) {coop_machine_destroy(&staged);return false;}
+    /* v9->v10 only appends the RDNMI latch, after WRAM and the input records;
+     * its earlier WRAM offset is unchanged. No future-schema offset is guessed. */
+    if(staged.actor_count!=selected_count || ram_offset>guest ||
+       guest-ram_offset<0x20000 || !coop_machine_mouths_valid(&staged,p+ram_offset)) {
+        coop_machine_destroy(&staged);return false;
+    }
     staged_size=n;return true;
 }
 void SmwCoopSaveExtra(SaveLoadInfo *sli) {

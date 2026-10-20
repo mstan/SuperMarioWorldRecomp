@@ -173,8 +173,42 @@ key cases, this milestone has **28 execution checks, 28 parity comparisons and
 
 ## Remaining work
 
-Legacy snapshots that already contain duplicate mouth references still need
-validation/handling. Other open work includes cross-ability outcomes, baby-Yoshi
+Open work includes cross-ability outcomes, baby-Yoshi
 eating, berries, shell abilities, mouth-object transport, mounted keyholes,
 and the complete source/save/recovery/campaign matrix. The native mouth indices
 must be remapped when transport moves their referenced normal-sprite slots.
+
+## Invalid legacy mouth states
+
+Snapshot preflight now uses the framework's serializer-derived WRAM location,
+then validates the staged roster against the native mouth references before
+applying any guest bytes. Two live adult mouths cannot reference one object,
+reference themselves, use nonnegative indices outside the original twelve
+slots, or take another actor's held/attached object. Native negative empty
+indices and uninitialized/dead sprite table residue are preserved.
+
+Invalid older development snapshots are rejected atomically. The code does
+not guess which duplicated mouth originally owned the object or rewrite the
+owner's file. This also applies to malformed current snapshots. Valid CNR and
+explicit RTLS v9/v10 compatibility are preserved; the v10 RDNMI append occurs
+after WRAM, so the earlier WRAM offset is identical for v9.
+
+Reproduction:
+
+```text
+python tools/test_coop_mouth_preflight_live.py <valid-two-mount-state> \
+  --legacy-bad <old-duplicate-mouth-state> --out <new-directory>
+```
+
+`preflight-live` passes ten native/bounce running checks. Every negative case,
+including the actual `contested-key-before/save9.sav`, leaves the **entire
+guarded resulting snapshot byte-identical** to a missing-slot control after
+the same gameplay interval. Each run loads the valid source successfully and
+records only that one successful load. No dispatch misses or runtime pause.
+
+`tools/test_coop_preflight.py` additionally checks all 116 invalid nonnegative
+indices, self/duplicate references, layout bounds, every truncated prefix,
+malformed schemas and atomic staging. The portable roster tests cover
+partner-held/attached ownership with noncontiguous actor IDs; the framework
+layout test covers varied serializer field positions, nonmutation and bounds.
+This validates mouth reference safety, not every native sprite field.

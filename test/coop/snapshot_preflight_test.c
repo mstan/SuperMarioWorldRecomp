@@ -11,6 +11,7 @@
 uint8 *g_sram;
 int g_sram_size;
 static size_t current_guest_size;
+static size_t current_ram_offset;
 static uint32 current_guest_version=10;
 int RtlWriteSram(void) {return 1;}
 bool SmwCoopQueueStorage(void) {return true;}
@@ -20,7 +21,8 @@ void RtlEnsureSaveDir(void) {}
 void RtlReadSram(void) {}
 void MkDir(const char *path) {(void)path;}
 size_t SmwStateSharedExtraSize(void) {return 145;}
-size_t RtlSnapshotGuestSize(uint32 *version) {
+size_t RtlSnapshotGuestLayout(uint32 *version,size_t *ram_offset) {
+    *ram_offset=current_ram_offset;
     *version=current_guest_version;return current_guest_size;
 }
 static unsigned word(const uint8 *p) {
@@ -52,6 +54,7 @@ int main(int argc,char **argv) {
     assert(native_size+153<size9);
     size_t guest9=size9-native_size-153;
     current_guest_size=guest9+1;
+    current_ram_offset=guest9-69-0x20000; /* input fixture's explicit v9 layout */
 
     SmwCoopEnable(true);assert(SmwCoopPrepareStorage());assert(SmwCoopActive());
     CoopMachine *live=SmwCoopMachine();
@@ -75,6 +78,27 @@ int main(int argc,char **argv) {
         v9[damage[i]]^=1;assert(!SmwCoopSnapshotPreflight(v9,size9));v9[damage[i]]^=1;
         unchanged(before,before_size);
     }
+    /* Native mouth references are outside the co-op payload CRC. Preflight
+     * must reject them before applying either guest bytes or staged actors. */
+    uint8 *ram=v9+current_ram_offset;
+    uint8 saved[0x20000];memcpy(saved,ram,sizeof(saved));
+    ram[0x9e]=ram[0x9f]=0x35;ram[0x14c8]=ram[0x14c9]=8;
+    ram[0x160e]=ram[0x160f]=2;
+    assert(!SmwCoopSnapshotPreflight(v9,size9));unchanged(before,before_size);
+    ram[0x160f]=0xff;
+    assert(SmwCoopSnapshotPreflight(v9,size9));unchanged(before,before_size);
+    for(unsigned invalid=12;invalid<128;++invalid) {
+        ram[0x160e]=(uint8)invalid;
+        assert(!SmwCoopSnapshotPreflight(v9,size9));unchanged(before,before_size);
+    }
+    ram[0x160e]=0;assert(!SmwCoopSnapshotPreflight(v9,size9));
+    ram[0x160e]=2;ram[0x14c9]=1;ram[0x160f]=2;
+    assert(SmwCoopSnapshotPreflight(v9,size9)); /* uninitialized table residue */
+    memcpy(ram,saved,sizeof(saved));
+    size_t real_offset=current_ram_offset;
+    current_ram_offset=SIZE_MAX;assert(!SmwCoopSnapshotPreflight(v9,size9));
+    current_ram_offset=guest9-0x20000+1;assert(!SmwCoopSnapshotPreflight(v9,size9));
+    current_ram_offset=real_offset;unchanged(before,before_size);
     current_guest_version=11;
     assert(!SmwCoopSnapshotPreflight(v9,size9));
     assert(!SmwCoopSnapshotPreflight(v10,size9+1));
@@ -91,6 +115,6 @@ int main(int argc,char **argv) {
     SmwCoopLoadExtra(&sli);SmwCoopStateLoaded();
     assert(SmwCoopMachine()->level==0x106);
     SmwCoopEnable(false);free(before);free(v10);free(file);
-    puts("preflight: v9/v10, every truncated prefix, malformed schemas and atomic staging passed");
+    puts("preflight: v9/v10, truncation, malformed schemas/mouths and atomic staging passed");
     return 0;
 }

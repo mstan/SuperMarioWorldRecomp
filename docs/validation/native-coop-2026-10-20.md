@@ -7,6 +7,15 @@ This is an integration checkpoint, not full two-player acceptance.
 The approved behavior and outstanding feature work remain in
 [NATIVE_COOP.md](../NATIVE_COOP.md).
 
+Latest dependency follow-up: framework `fa018f3` extends the explicit image
+writer revision with `RtlSnapshotGuestLayout`, reporting WRAM's serialized
+location through the actual current-schema serializer. Game preflight can now
+reject invalid native mouth references atomically without embedding raw guest
+layout offsets. Ten running native/bounce checks retain byte-identical complete
+snapshots after rejected loads; valid mouth states still load. The
+[mouth audit](native-coop-mouth-ownership-2026-10-20.md) records reproduction,
+the actual old duplicate-state control, and the remaining mount work.
+
 ## Preserved checkpoint and upstream
 
 - Original tested game commit: `27677aa0227c07f13a3a1ad6b6e2a0ac3a7a0ddc`,

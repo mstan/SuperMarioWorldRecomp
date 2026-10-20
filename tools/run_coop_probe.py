@@ -61,6 +61,14 @@ KeyboardPlayers=3
     saves = selection if args.players > 1 and not args.disabled else out / 'saves'
     if args.snapshot:
         shutil.copy2(args.snapshot, saves / 'save10.sav')
+    extra_states = {}
+    for value in args.extra_state:
+        slot_text, path_text = value.split('=', 1)
+        slot, path = int(slot_text), Path(path_text).resolve()
+        if not 0 <= slot < 16 or slot in extra_states or (slot == 10 and args.snapshot):
+            raise ValueError('Extra snapshot slot must be unique and between 0 and 15')
+        shutil.copy2(path, saves/f'save{slot}.sav')
+        extra_states[slot] = {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
     script = out / 'input.script'
     shutil.copy2(args.script, script)
     env = os.environ.copy()
@@ -119,6 +127,7 @@ KeyboardPlayers=3
                   'wram_watch': args.wram_watch, 'storage_trace': args.storage_trace,
                   'projectile_trace': args.projectile_trace,
                   'extended_trace': args.extended_trace, 'mouth_trace': args.mouth_trace,
+                  'extra_states': extra_states,
                   'inputs': {}}
     for name in ('exe', 'rom', 'snapshot', 'script', 'normal_sram', 'coop_sram'):
         path = getattr(args, name)
@@ -163,6 +172,8 @@ def main():
     for name in ('exe', 'rom', 'script', 'out'):
         parser.add_argument('--' + name, type=Path, required=True)
     parser.add_argument('--snapshot', type=Path)
+    parser.add_argument('--extra-state', action='append', default=[], metavar='SLOT=PATH',
+                        help='Copy another snapshot to an isolated numbered slot')
     parser.add_argument('--normal-sram', type=Path, help='Copy normal SRAM into the isolated test directory')
     parser.add_argument('--coop-sram', type=Path, help='Copy co-op SRAM into the isolated test directory')
     parser.add_argument('--frames', type=int, default=800)

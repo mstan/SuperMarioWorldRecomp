@@ -256,6 +256,16 @@ static void native_states(size_t players) {
     mount->owner=0;mount->flags=COOP_ENTITY_RIDDEN;mount->target=2000;
     coop_player(&a.session,0)->mount=mount->id;
     mount->mount_valid=true;mount->mount[5]=73; /* independent swallow timer */
+    uint8_t *mouth_ram=calloc(0x20000,1);assert(mouth_ram);
+    mouth_ram[0x14d0]=8;mouth_ram[0xa6]=0x35;mouth_ram[0x1616]=3;
+    assert(!coop_machine_mouths_valid(&a,mouth_ram)); /* partner-held key */
+    held=coop_machine_entity(&a,held_id);held->flags=COOP_ENTITY_ATTACHED;
+    assert(!coop_machine_mouths_valid(&a,mouth_ram));
+    held->flags=COOP_ENTITY_HELD;held->owner=0;
+    assert(coop_machine_mouths_valid(&a,mouth_ram)); /* own carrier */
+    held->owner=2000;mouth_ram[0x1616]=0xff;
+    assert(coop_machine_mouths_valid(&a,mouth_ram));
+    free(mouth_ram);
     mount->pending.count=mount->visible.count=1;
     mount->pending.pieces[0]=mount->visible.pieces[0]=*piece;
     mount->visible.pieces[0].x=111;

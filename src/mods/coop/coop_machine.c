@@ -463,3 +463,29 @@ bool coop_machine_load(CoopMachine *m,const void *data,size_t size) {
 fail:
     coop_machine_destroy(&tmp);return false;
 }
+
+bool coop_machine_mouths_valid(const CoopMachine *m,const uint8_t *ram) {
+    if(!m || !ram)return false;
+    bool referenced[12]={false};
+    for(unsigned slot=0;slot<12;++slot) {
+        /* Newly initialized and dead sprites can retain unrelated table
+         * residue. Only a live adult executes the native mouth routines. */
+        if(ram[0x14c8+slot]!=8 || ram[0x9e + slot]!=0x35)continue;
+        unsigned object=ram[0x160e + slot];
+        if(object>=0x80)continue; /* original signed-empty convention */
+        if(object>=12 || object==slot || referenced[object])return false;
+        referenced[object]=true;
+        CoopPlayerId rider=COOP_NO_PLAYER;
+        for(size_t i=0;i<m->entity_count;++i) {
+            const CoopEntity *e=&m->entities[i];
+            if(e->kind==COOP_ENTITY_NORMAL && e->slot==slot)rider=e->owner;
+        }
+        for(size_t i=0;i<m->entity_count;++i) {
+            const CoopEntity *e=&m->entities[i];
+            if(e->kind==COOP_ENTITY_NORMAL && e->slot==object &&
+               (e->flags&(COOP_ENTITY_HELD|COOP_ENTITY_ATTACHED)) && e->owner!=rider)
+                return false;
+        }
+    }
+    return true;
+}
