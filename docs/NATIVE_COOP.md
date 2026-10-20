@@ -2,6 +2,11 @@
 
 ## Current integration checkpoint (2026-10-20)
 
+The owner has accepted the playable prototype and authorized merging it into
+game main as **Experimental**, with README screenshots and setup instructions.
+This accepts the documented alpha scope and limitations; the full product
+contract and [deferred work](NATIVE_COOP_DEFERRED.md) remain the roadmap.
+
 Implementation and campaign acceptance remain incomplete. On 2026-10-20 the
 owner changed the immediate delivery target to an alpha with a high-level
 first pass. The product rules below remain the intended behavior; exhaustive
@@ -62,9 +67,9 @@ The reproducible [stock content inventory](validation/SMW_STOCK_CONTENT.md)
 derives indexed rooms, overworld nodes, special variants and screen routes from
 the original ROM. Its coverage seed starts unverified; it does not grant passes
 for gameplay mechanics or transitions.
-PR #19 remains the delivery PR. It stays in draft until the alpha first pass
-and required build checks are complete; its review description must identify
-known limitations and the remaining full-contract work.
+PR #19 is the prototype delivery PR. Its alpha first pass and required checks
+passed, and the owner authorized its merge after the experimental label and
+README presentation update. The remaining full-contract work stays documented.
 
 The October projectile milestone adds an original two-fireball allowance per
 actor, native motion/drawing, shared fire-damage arbitration, direct boss

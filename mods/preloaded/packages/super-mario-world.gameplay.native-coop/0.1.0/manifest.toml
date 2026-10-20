@@ -1,9 +1,9 @@
 format_version = 1
 id = "super-mario-world.gameplay.native-coop"
 version = "0.1.0"
-name = "SMW Native Co-op (Development)"
+name = "SMW Native Co-op (Experimental)"
 author = "mstan"
-description = "Native simultaneous Mario and Luigi. Development build; campaign implementation and validation are in progress."
+description = "Experimental playable prototype: Mario and Luigi together on screen. Common interactions have been tested; unusual combinations and full campaign coverage remain in progress."
 license = "MIT"
 resolver = "declarative"
 save_compatibility = "separate"
@@ -14,8 +14,8 @@ rom_sha256 = "0838e531fe22c077528febe14cb3ff7c492f1f5fa8de354192bdff7137c27f5b"
 
 [[feature]]
 id = "simultaneous"
-name = "Simultaneous co-op"
-description = "Choose 2 Player in the original game menus to use separate co-op saves. Requires both players to have input assignments."
+name = "Simultaneous co-op (Experimental)"
+description = "Experimental prototype. Assign both players, then choose 2 Player in the original menus. Co-op uses separate saves. Expect bugs in unusual interactions."
 group = "Gameplay"
 default_enabled = false
 

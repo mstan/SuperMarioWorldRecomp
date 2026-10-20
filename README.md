@@ -89,7 +89,7 @@ listens during ordinary play. Source builds enable this with
 
 ## Widescreen
 
-Enable **SMW Adaptive Widescreen** in the one-player launcher's **Mods** page.
+Enable **SMW Adaptive Widescreen** in the launcher's **Mods** page.
 Its two controls are **Aspect ratio** (Fit to screen by default, plus fixed
 4:3 through 100:9 choices) and **Enemy spawn behavior** (Screen-based by
 default, or Original 4:3 activation). The HUD anchors automatically: lives and
@@ -106,90 +106,47 @@ See [the renderer guide](docs/adaptive-renderer.md) for building, isolated
 playtesting, architecture, checks, and current limitations. Old `Widescreen`
 and `WidescreenHud` INI fields no longer control this mod.
 
-## Simultaneous co-op build
+## Experimental native simultaneous co-op
 
-The repository also produces a separate `SuperMarioWorldCoopSNESRecomp` build. It
-uses the simultaneous co-op gameplay patch while keeping the normal legal ROM
-flow: select an untouched Super Mario World (USA) ROM in the launcher or pass
-it on the command line.
+**Playable prototype ? experimental and disabled by default.** Mario (P1) and
+Luigi (P2) play together on one screen using the normal executable and an
+unmodified Super Mario World (USA) ROM.
 
-On first use, the executable verifies the stock ROM and applies the bundled IPS
-delta. The IPS contains the co-op hack's changed bytes, but not a complete ROM.
-The generated file is written beside the executable as
-`<stock-rom-name>.coop.sfc`; that generated co-op ROM is what the runtime loads.
-Subsequent launches reuse it after verifying its CRC. Both headerless `.sfc`
-dumps and 512-byte-headered `.smc` dumps are accepted as input. To force a clean
-repatch, delete the generated `.coop.sfc` file.
+1. Assign both players' controllers or keyboard bindings in the recomp UI.
+2. Open **Mods**, enable **Simultaneous co-op (Experimental)** in
+   **SMW Native Co-op (Experimental)**, then press **Play**.
+3. Use the original save-file menus and select **2 Player**. Co-op saves and
+   save states are stored separately from regular play. **1 Player** retains
+   ordinary solo behavior.
 
-Player 1 and Player 2 are active simultaneously in levels. Connect two SDL
-game controllers, or configure the `[Player1]` and `[Player2]` keyboard
-bindings in `keybinds.ini`. The stock ROM and generated `.coop.sfc` remain
-local and must not be redistributed.
+The prototype includes independent movement, powerups, reserve items and
+ordinary Yoshi riding; shared enemy outcomes and rewards; recovery bubbles;
+and a shared camera. The reserve boxes use the original artwork with M/L
+badges. It also works with **SMW Adaptive Widescreen**. The overworld and
+special scenes use the original single lead.
 
-Widescreen is currently disabled in the co-op build, and its launcher omits the
-aspect-ratio control. Co-op always runs in **Standard (4:3)** even if an older
-configuration or `SNESRECOMP_WIDESCREEN` requests another mode. The experimental
-IPS-specific hooks remain in the source for future work, but extended terrain
-streaming is not yet reliable during normal scrolling.
+![Mario and Luigi playing together in Yoshi's Island 2](docs/images/native-coop-widescreen.png)
 
-### Network co-op
+*Mario and Luigi together in an adaptive widescreen view.*
 
-The co-op executable supports two-player delay-sync netplay through
-`snesrecomp`'s `recomp-net` integration and recomp-ui. Both players must use the
-same build and a matching verified SMW (USA) ROM.
+![Mario and Luigi each riding Yoshi](docs/images/native-coop-yoshi.png)
 
-1. Start `SuperMarioWorldCoopSNESRecomp` and open **Netplay** in the launcher.
-   The first visit asks for a player name and saves it for later launches.
-2. Choose **Host Lobby**. **Online** publishes the room through the configured
-   lobby server; **LAN / Direct IP** advertises it directly on the local
-   network. **Create** immediately opens the waiting room.
-3. The guest joins the matching **Super Mario World Co-op** room. Once both
-   seats are occupied, the host selects **Play**; the guest does not need a
-   separate ready action.
-4. The host controls Mario (network slot 1) and the guest controls Luigi
-   (network slot 2). Each machine uses its Player 1 keyboard/controller by
-   default, so the guest does not need separate Player 2 bindings.
+*Separate riders and reserve items in the native view.*
 
-Closing the game or pressing Escape during a network match returns both
-players to the room for a rematch. Use **Leave Lobby** to disconnect instead.
+This is an early prototype, with representative common interactions tested
+and owner playtesting completed. Some unusual combinations can still behave
+incorrectly. A known example is bubble recovery interrupting a Yoshi berry
+bite. Full campaign coverage, rare Yoshi/ability combinations, special
+platforms, exceptional transitions and broader boss/controller/platform
+qualification remain follow-up work. Please report bugs with reproduction
+steps, your build version and a co-op save state when possible.
 
-The simulation waits for confirmed inputs before every frame. Turbo, pause,
-and local reset are disabled during a session; save/load synchronization is
-host-authoritative. LAN uses UDP directly. Internet games may require a build
-configured with `-DSNESRECOMP_NET_ICE=ON`, which includes libjuice-based NAT
-traversal, when the peers cannot reach each other directly.
+See the [implementation and product rules](docs/NATIVE_COOP.md),
+[validation evidence](docs/validation/native-coop-common-followup-2026-10-20.md)
+and [known issues and deferred checks](docs/NATIVE_COOP_DEFERRED.md).
 
-For a launcher-free loopback or CI smoke test, start two instances with the
-same session ID and opposite ports:
-
-```powershell
-# Host
-$env:SNES_NETPLAY='1'; $env:SNES_NET_SLOT='0'
-$env:SNES_NET_SESSION_ID='4242'; $env:SNES_NET_TRANSPORT='lan'
-$env:SNES_NET_BIND='0.0.0.0:7777'; $env:SNES_NET_PEER='127.0.0.1:7778'
-$env:SNES_NET_TEST_TICKS='600'
-.\SuperMarioWorldCoopSNESRecomp.exe .\smw.sfc
-
-# Guest (in another terminal)
-$env:SNES_NETPLAY='1'; $env:SNES_NET_SLOT='1'
-$env:SNES_NET_SESSION_ID='4242'; $env:SNES_NET_TRANSPORT='lan'
-$env:SNES_NET_BIND='0.0.0.0:7778'; $env:SNES_NET_PEER='127.0.0.1:7777'
-$env:SNES_NET_TEST_TICKS='600'
-.\SuperMarioWorldCoopSNESRecomp.exe .\smw.sfc
-```
-
-### Co-op hack attribution
-
-This build distributes an IPS delta for **Super Mario World - 2 Player
-Simultaneous Co-op Hack**. Original hack credits:
-
-- **Noobish Noobsicle** - creator of the original SMW co-op hack
-- **Bloony Fox** and **NesDraug** - developed it into the full hack used here
-
-Source and original credits:
-[Romhack Plaza - Super Mario World - 2 Player Simultaneous Co-op Hack](https://romhackplaza.org/romhacks/super-mario-world-2-player-co-op-hack-snes/).
-This recompilation project is not affiliated with or endorsed by the hack
-authors.
+The older separate IPS-based executable and its netplay instructions are
+archived in [Legacy IPS co-op](docs/legacy-ips-coop.md).
 
 ## Controls (default `keybinds.ini`)
 
@@ -206,8 +163,8 @@ authors.
 | Select      | Right Shift |
 
 Player 2 is unbound by default — fill in keys in `keybinds.ini` to enable a
-second keyboard player. In the co-op build, the two bindings drive Mario and
-Luigi at the same time rather than taking turns.
+second keyboard player. With the experimental native co-op mod enabled and
+2 Player selected, the two bindings control Mario and Luigi simultaneously.
 
 **Xbox / PlayStation / Switch Pro controllers** are auto-detected via
 SDL_GameController (XInput on Windows). Plug it in before launching,
@@ -233,6 +190,10 @@ System shortcuts (configured in `config.ini`'s `[KeyMap]` section):
 
 ## Building from source
 
+For the native co-op prototype, use the standard stock-ROM CMake target
+described in the [adaptive renderer build guide](docs/adaptive-renderer.md).
+The `--coop`/`SMW_BUILD_COOP` options below select the legacy IPS executable.
+
 Prerequisites: Windows 10+, Visual Studio 2022 (with C++ desktop
 workload), Python 3.9+ on PATH, and `rustup` for regeneration.
 
@@ -245,11 +206,11 @@ Regenerate the desired variant from your legally obtained stock ROM, then
 build it. The generated C is intentionally untracked:
 
 ```bash
-# Normal 1P build (the default)
+# Normal stock-ROM build (the default)
 bash tools/regen.sh --stock
 msbuild smw.sln /p:Configuration=Production /p:Platform=x64 /m
 
-# Simultaneous co-op build
+# Legacy IPS co-op build (optional)
 bash tools/regen.sh --coop
 msbuild smw.sln /p:Configuration=CoopProduction /p:Platform=x64 /m
 ```
@@ -259,7 +220,7 @@ The normal configuration remains `smw.exe`; the additive configuration creates
 `smw_coop.ips` beside it. CMake builds the normal target by default; configure
 with `-DSMW_BUILD_COOP=ON` to make both targets available in one build tree.
 
-The netplay-enabled co-op target uses CMake so it can link recomp-net. A sibling
+The legacy netplay-enabled IPS co-op target uses CMake so it can link recomp-net. A sibling
 engine worktree can be selected without replacing the checked-in submodule:
 
 ```powershell
@@ -288,7 +249,7 @@ framework, or otherwise need to re-run the recompiler:
 1. Drop a legally-obtained `smw.sfc` at the repo root (`.gitignore`
    excludes it).
 2. Run `bash tools/regen.sh --stock` for the normal build and/or
-   `bash tools/regen.sh --coop` for co-op. Stock emits to `src/gen/` from the
+   `bash tools/regen.sh --coop` for the legacy IPS build. Stock emits to `src/gen/` from the
    vanilla SMW (USA) ROM. Co-op applies the bundled IPS to a throwaway verified
    ROM, layers the small CFG fragments in `recomp/coop/`, and emits
    independently to `src/gen-coop/`. It builds and requires the fast native
@@ -311,7 +272,7 @@ MSU-1 Audio mod means streamed music. Packs for SMW MSU+ or SMW MSU-1 Plus
 Ultra are not interchangeable with this audio-only track map. Full credit and
 pack details are in [`recomp/msu1/ATTRIBUTION.md`](recomp/msu1/ATTRIBUTION.md).
 
-MSU-1 is disabled in the simultaneous co-op build for now.
+MSU-1 is disabled in the legacy IPS co-op executable for now.
 
 ## Repo layout
 
