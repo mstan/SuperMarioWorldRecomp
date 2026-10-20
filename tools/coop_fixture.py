@@ -19,7 +19,8 @@ class Fixture:
         assert d[:8] == b'RSGUARD\1' and d[16:48].rstrip(b'\0') == b'smw.us.native-coop.v1'
         assert struct.unpack_from('<Q', d, 8)[0] == len(d)-52
         self.check_crc(0, len(d))
-        assert struct.unpack_from('<II', d, 48) == (0x52544c53, 9)
+        magic, self.guest_version = struct.unpack_from('<II', d, 48)
+        assert magic == 0x52544c53 and self.guest_version in (9, 10)
         assert d[-8:-4] == b'CNRE'
         self.end = len(d)-12
         self.machine = self.end-self.word(self.end)
@@ -35,7 +36,8 @@ class Fixture:
         extra = m-145
         assert d[extra:extra+8] == b'SMC1SMWS'
         # RTLS v9: ramAdr(4), legacy joypad(7), JoypadState(58).
-        self.ram = extra-69-0x20000
+        # v10 appends the one-byte RDNMI latch after the joypads.
+        self.ram = extra-69-(self.guest_version >= 10)-0x20000
         assert d[self.ram+0x100] == 0x14
         fields = [(int(a, 16), int(n)) for a, n in re.findall(
             r'COOP_FIELD\(\w+,\s*(0x[0-9a-f]+),\s*(\d+)\)',

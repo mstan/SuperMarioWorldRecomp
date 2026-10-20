@@ -1,5 +1,23 @@
 # Native simultaneous co-op
 
+## Current integration checkpoint (2026-10-20)
+
+Implementation and campaign acceptance remain incomplete. The October goal
+continues the approved contract below; it does not narrow that contract.
+
+The 19 game commits have been rebased onto game main `8dedb28`, retaining the
+newer Falcon/cache-helper, isolated generation, disassembly-authority, capture
+and launcher changes. The framework now uses upstream `7a67b85`, which contains
+the merged co-op support from PR #95 (`6d6f432`), and the UI uses game main's
+`01bff94`. The old dependency conflict and Linux failure described in the
+September checkpoint are historical; the selected framework's CI passed.
+
+The owner checkpoint, executable, saves and settings are preserved separately.
+Current integration findings and reproducible validation are recorded in
+[the October integration report](validation/native-coop-2026-10-20.md).
+PR #19 remains the delivery PR and stays in draft until the full contract and
+required acceptance coverage are satisfied.
+
 Owner-approved specification, 2026-09-22. Implementation tracking:
 `beads-8wg.3.26`, branch `feat/native-simultaneous-coop`.
 

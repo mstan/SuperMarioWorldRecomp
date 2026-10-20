@@ -18,6 +18,8 @@ static bool staged_consumed;
 
 /* Existing shared SMW extras precede the native roster. */
 extern size_t SmwStateSharedExtraSize(void);
+/* Game host directory helper in main.c. */
+extern void MkDir(const char *path);
 static uint32_t read32(const uint8_t *p) {
     return (uint32_t)p[0]|((uint32_t)p[1]<<8)|((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24);
 }
@@ -143,10 +145,19 @@ const char *SmwCoopSnapshotIdentity(void) {return SmwCoopActive()?"smw.us.native
 bool SmwCoopSnapshotPreflight(const void *data,size_t size) {
     coop_machine_destroy(&staged);staged_size=0;staged_consumed=false;
     if(!SmwCoopActive())return !enabled || SmwCoopPersistenceReady();
-    const uint8_t *p=data;if(size<16 || memcmp(p+size-4,"CNRE",4))return false;
+    const uint8_t *p=data;if(!p || size<16 || memcmp(p+size-4,"CNRE",4))return false;
     uint32_t version=0;size_t guest=RtlSnapshotGuestSize(&version);
+    uint32_t saved_version=read32(p+4);
+    if(read32(p)!=0x52544c53u)return false;
+    /* Framework daa3310 appends one serialized bool (rdnmiPending) to the
+     * guest prefix in RTLS v10. Its v9 loader initializes that new latch.
+     * Retain the owner's guarded v9/CNR states without rewriting the files.
+     * This is an explicit v9->v10 compatibility rule, not a guessed offset
+     * for future schemas: all other mismatched guest versions stay rejected. */
+    if(version==10 && saved_version==9 && guest) --guest;
+    else if(saved_version!=version)return false;
     size_t extra=SmwStateSharedExtraSize(),n=read32(p+size-8);
-    if(!guest || read32(p+4)!=version || guest>size || extra>size-guest ||
+    if(!guest || guest>size || extra>size-guest ||
         size-guest-extra<8 || n!=size-guest-extra-8)return false;
     if(read32(p+guest)!=0x31434d53u || read32(p+guest+4)!=0x53574d53u ||
         read32(p+guest+8)!=1u)return false;
