@@ -1162,6 +1162,23 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
         carry_through_room(cpu,m);return 0x02ac5b;
     }
     if(!level_frame)return 0;
+    if(pc==0x01f58e) {
+        unsigned mouth=cpu->X&255,slot=cpu->Y&255;
+        if(mouth>=12 || slot>=12 || g_ram[0x9e + mouth]!=0x35)
+            Die("Native co-op tongue candidate has no native mount");
+        CoopPlayerId rider=normal_entity(m,mouth,false)->owner;
+        CoopEntity *object=normal_entity(m,slot,false);
+        /* A loose mount has no player entitled to somebody else's carried
+         * object. Once released, the object's ordinary native eligibility
+         * applies again; no global inedible bit or cooldown is introduced. */
+        if((object->flags&(COOP_ENTITY_HELD|COOP_ENTITY_ATTACHED)) &&
+           object->owner!=rider)return 0x01f609;
+        /* Native mouth indices remain authoritative while a tongue retracts
+         * and while swallowed status-7 objects wait for spit/swallow. */
+        for(unsigned other=0;other<12;++other)
+            if(other!=mouth && g_ram[0x14c8+other] && g_ram[0x9e + other]==0x35 &&
+               g_ram[0x160e + other]==slot)return 0x01f609;
+    }
     if(pc==0x02a3f6 && !extended_contact_depth) {
         collect_extended_contacts(cpu,m);return 0x02a468;
     }

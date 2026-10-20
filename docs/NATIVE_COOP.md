@@ -38,6 +38,12 @@ legacy snapshot layouts. See its
 [source audit and focused evidence](validation/native-coop-extended-contacts-2026-10-20.md).
 Producer/targeting, full bonus-game and campaign coverage remain open.
 
+The initial [mouth ownership guard](validation/native-coop-mouth-ownership-2026-10-20.md)
+prevents Yoshi from taking a partner's held object or another mount's mouth
+contents. Held/released objects and valid mouth-state replay pass focused
+checks; same-frame mouth arbitration, legacy duplicate-mouth validation and
+the remaining full mount contract are still open.
+
 Owner-approved specification, 2026-09-22. Implementation tracking:
 `beads-8wg.3.26`, branch `feat/native-simultaneous-coop`.
 
