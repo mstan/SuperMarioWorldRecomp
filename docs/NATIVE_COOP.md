@@ -29,6 +29,9 @@ Retain existing tests and evidence for later targeted use. Continue the
 inventory-driven campaign audit after the alpha as follow-up qualification.
 The immediate delivery gate is the documented common-interaction first pass,
 required build/CI checks and an owner build with preserved saves/settings.
+Record newly identified corner cases in the [deferral list](NATIVE_COOP_DEFERRED.md)
+and move on. Investigate them during this alpha only if an observed failure
+blocks ordinary play or threatens saves, or the owner explicitly requests it.
 
 The 19 game commits have been rebased onto game main `8dedb28`, retaining the
 newer Falcon/cache-helper, isolated generation, disassembly-authority, capture

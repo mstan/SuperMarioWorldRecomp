@@ -2,7 +2,7 @@
 
 Updated 2026-10-20. Contract: [NATIVE_COOP.md](NATIVE_COOP.md).
 Delivery: [PR #19](https://github.com/mstan/SuperMarioWorldRecomp/pull/19),
-still draft. Latest validated, pushed milestone: `de2d9ee`.
+still draft. Latest validated, pushed gameplay milestone: `3d4d2ea`.
 
 ## Immediate target: alpha first pass
 
@@ -11,6 +11,9 @@ high-level pass through the major systems, and move on. Some bugs in unusual
 interactions are accepted for the alpha. Extreme interaction matrices and a
 complete campaign audit are deferred. This supersedes the previous requirement
 to finish all nine areas below before offering the alpha.
+Maintain the [corner-case deferral list](NATIVE_COOP_DEFERRED.md) as new findings
+arise; do not work those entries during the alpha pass unless they become an
+observed ordinary-play/save blocker or the owner requests them.
 
 Alpha acceptance uses representative checks for movement/collisions,
 pickups/reserves, ordinary Yoshi use, death/recovery, room/stage transitions,
@@ -58,6 +61,7 @@ support remains limited to two.
 
 | Commit | Result |
 |---|---|
+| `3d4d2ea` | Body-berry arbitration: three common checks and one ordinary tongue regression pass; Windows/core/hooks and both Linux CI jobs pass; alpha scope recorded |
 | `de2d9ee` | Expanded-margin egg hatching and mounted keyholes: 40 focused cases, replay/backend comparisons and ordinary-key regressions; both Linux CI jobs pass |
 | `2dca5d8` | Roster-sized placed-source grants, room history, slot-pressure deferral, atomic preflight and independent child pickup |
 | `a0dd6ce` | 128 shell-color/ability execution cases, including independent flames, flight and landing effects |
