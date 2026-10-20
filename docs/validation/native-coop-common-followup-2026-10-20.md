@@ -155,6 +155,23 @@ This pass adds no new boss/bonus matrix. The known interrupted berry defect
 remains deferred. Thwomp's target guard is source-audited but was not an added
 live encounter; the retained-target live check qualifies charging Chuck.
 
-Required branch/PR CI and the refreshed normal-window/audio owner handoff are
-recorded on completion below. Owner data are retained in `build-adaptive/playtest`
-and launched through `tools/run_adaptive_renderer.ps1 --launcher`.
+Gameplay commit: `eae1bb16883c891693a44d4cf5e4f03aed394d1c`.
+Both required Linux core/storage jobs pass at that revision:
+[branch workflow](https://github.com/mstan/SuperMarioWorldRecomp/actions/runs/39472812445/job/118800981999)
+and [PR workflow](https://github.com/mstan/SuperMarioWorldRecomp/actions/runs/39472818353/job/118801004044).
+The final evidence-only update runs the same required checks on
+[PR #19](https://github.com/mstan/SuperMarioWorldRecomp/pull/19).
+
+The updated owner build was launched through `tools/run_adaptive_renderer.ps1`
+with `--launcher`, retaining `build-adaptive/playtest` as its data directory.
+The actual **Super Mario World — Launcher** window is visible, normal bordered,
+neither minimized nor maximized. Its ROM-verified and player configuration
+panels were inspected through an owned-window `PrintWindow` capture without
+changing foreground focus. Audio remains enabled at 32040 Hz; the helper clears
+dummy SDL audio/video drivers and passes no muted benchmark options.
+
+`owner-handoff.json` and `owner-ui.png` retain the actual executable hash,
+window observation, audio configuration and preservation proof. All **28**
+preserved owner files (the previous 27 plus `config.local.ini`) retain their
+hashes. The launcher remains available for the owner. PR #19 is updated and
+ready for alpha review; no merge was performed.

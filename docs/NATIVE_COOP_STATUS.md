@@ -3,7 +3,7 @@
 Updated 2026-10-20. Contract: [NATIVE_COOP.md](NATIVE_COOP.md).
 Delivery: [PR #19](https://github.com/mstan/SuperMarioWorldRecomp/pull/19),
 ready for alpha review; not merged. Latest validated gameplay milestone:
-`3d4d2ea`; representative alpha validation is committed in `2de950d`.
+`eae1bb1`; the earlier representative alpha pass is committed in `2de950d`.
 The [playable-alpha first pass](validation/native-coop-alpha-2026-10-20.md)
 adds representative boss/bonus completion and current inactive-mode/presentation
 checks to the existing common-path evidence.
@@ -72,6 +72,7 @@ support remains limited to two.
 
 | Commit | Result |
 |---|---|
+| `eae1bb1` | Bounded follow-up fixes Chuck contacts, independent cape interactions and common platform riders/recovery; Boo/star/spin/swim/hazard and pipe/door samples pass; original single-lead overworld/scenes accepted |
 | `2de950d` | Representative alpha pass: both actors defeat Morton with native fire hits and complete its castle; both participate in one bonus/reward/exit; current solo/disabled storage and wide legacy-state checks pass; both Linux jobs pass |
 | `3d4d2ea` | Body-berry arbitration: three common checks and one ordinary tongue regression pass; Windows/core/hooks and both Linux CI jobs pass; alpha scope recorded |
 | `de2d9ee` | Expanded-margin egg hatching and mounted keyholes: 40 focused cases, replay/backend comparisons and ordinary-key regressions; both Linux CI jobs pass |
@@ -114,4 +115,5 @@ additional local input override. The current follow-up build is SHA256
 `22d47a4951281435e538e61b714233f2143767592ecdb7bdb62ecb92a79aa93b`;
 its [follow-up report](validation/native-coop-common-followup-2026-10-20.md)
 records the focused checks and refreshed delivery. PR #19 remains the alpha
-review PR and is unmerged.
+review PR and is unmerged. Its refreshed owner UI is open in a normal window
+with normal audio configuration; all 28 preserved owner files remain unchanged.

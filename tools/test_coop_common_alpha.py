@@ -193,7 +193,7 @@ def main():
             attacks=list(csv.DictReader(arbitration.open())) if arbitration.is_file() else []
             frames=list(csv.DictReader((out/'coop.csv').open()))
             assert frames and all(int(r['stack'])==511 for r in frames)
-            actors = {p: dict(power=field(f,p,0x19), animation=field(f,p,0x71),
+            actors = {p: dict(power=field(f,p,0x19), reserve=field(f,p,0xdc2), animation=field(f,p,0x71),
                              spin=field(f,p,0x14a6), cape=field(f,p,0x13e8),
                              cape_x=field(f,p,0x13e9)+256*field(f,p,0x13ea),
                              cape_y=field(f,p,0x13eb)+256*field(f,p,0x13ec),
@@ -218,6 +218,7 @@ def main():
                 assert f.level==0x1ca and f.data[f.ram+0x100]==0x14, 'Wrong destination or unfinished entrance'
                 assert f.data[f.ram+0x141a]==1 and all(a['life']==0 and a['animation']==0 for a in actors.values())
                 assert [a['power'] for a in actors.values()]==[1,3]
+                assert [a['reserve'] for a in actors.values()]==[1,4], 'Room entry lost independent reserves'
             elif case.startswith('hazard-'):
                 extended=list(csv.DictReader((out/'extended.csv').open()))
                 responses=[r for r in extended if r['phase']=='0']
