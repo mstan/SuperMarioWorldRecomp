@@ -17,6 +17,8 @@ static unsigned player_call_depth;
 static unsigned sprite_call_depth;
 static unsigned camera_call_depth;
 static unsigned room_sprite_depth;
+static unsigned room_load_depth;
+static bool spawning_room_mount;
 static unsigned carried_reward_depth;
 static unsigned mount_draw_depth;
 static unsigned contact_call_depth;
@@ -115,14 +117,23 @@ static void mount_owner(CoopMachine *m,CoopEntity *e,CoopActor *a) {
            (p->mount!=COOP_NO_ENTITY && p->mount!=e->id))Die("Native co-op mount ownership conflict");
         e->owner=p->id;e->flags=COOP_ENTITY_RIDDEN;p->mount=e->id;
     } else if(e->flags==COOP_ENTITY_RIDDEN) {
+        /* The castle/ghost-house entrance script dismounts its rider before
+         * reloading the playable room. Keep this scripted association until
+         * that loader parks the mount; it is not a player-released Yoshi.
+         * Native C2/$187A still control the dismounted pose and movement. */
+        if(g_ram[0x71]==0x0a)return;
         CoopPlayer *old=coop_player(&m->session,e->owner);
         if(old && old->mount==e->id)old->mount=COOP_NO_ENTITY;
         e->owner=COOP_NO_PLAYER;e->flags=0;
     }
 }
 static void restore_primary_mount(CoopMachine *m) {
-    CoopEntity *e=actor_mount(m,primary_actor(m));
+    CoopActor *a=primary_actor(m);
+    CoopEntity *e=actor_mount(m,a);
     coop_mount_bind(e,g_ram);
+    if(!e && a->stored_mount) {
+        g_ram[0xdc1]=1;g_ram[0x13c7]=(uint8_t)a->stored_mount_color;
+    }
 }
 static void adopt_mounts(CoopMachine *m) {
     if(m->mounts_initialized)return;
@@ -338,6 +349,62 @@ static void carry_through_room(CpuState *cpu,CoopMachine *m) {
     }
     --room_sprite_depth;restore_registers(cpu,&completed);memcpy(g_ram,scratch,sizeof(scratch));
 }
+static void load_room_sprites(CpuState *cpu,CoopMachine *m) {
+    /* Native room entry reconstructs a ridden Yoshi from its carry flag and
+     * color; its mouth is cleared. Preserve that rule and each stable identity
+     * before the shared cleanup forgets the departed room's physical slots. */
+    for(size_t i=0;i<m->actor_count;++i) {
+        CoopActor *a=&m->actors[i];CoopEntity *e=actor_mount(m,a);
+        if(!e)continue;
+        if(a->stored_mount)Die("Native co-op actor has both a ridden and stored mount");
+        a->stored_mount=e->id;
+        a->stored_mount_color=e->mount_valid?e->mount[1]:g_ram[0x13c7];
+        coop_machine_forget_entity(m,e->id);
+    }
+    CoopActor *primary=primary_actor(m);
+    /* Legacy campaign SRAM identifies only the original primary's Yoshi.
+     * Adopt that native carry flag when no explicit mount identity exists. */
+    if(!primary->stored_mount && g_ram[0xdc1]) {
+        if(m->next_entity==COOP_NO_ENTITY)Die("Native co-op mount identity space exhausted");
+        primary->stored_mount=m->next_entity++;
+        primary->stored_mount_color=g_ram[0x13c7];
+    }
+    ++room_load_depth;
+    unsigned stack=cpu->S;cpu_push_jsl_return_frame(cpu);
+    if(!interp_bridge_run(cpu,0x02a751) || cpu->S!=stack)
+        Die("Native co-op room loader failed its return contract");
+    CpuState completed=*cpu;uint8_t scratch[16];memcpy(scratch,g_ram,sizeof(scratch));
+    CoopGuestPlayer entry;coop_guest_capture(&entry,g_ram);
+    bool allowed=!g_ram[0x1b9b];
+    for(size_t i=0;i<m->actor_count;++i) {
+        CoopActor *a=&m->actors[i];CoopPlayer *p=coop_player(&m->session,a->player);
+        coop_guest_bind(&entry,g_ram);coop_mount_bind(NULL,g_ram);
+        g_ram[0x187a]=g_ram[0x188b]=0;
+        if(m->room_initialized || a!=primary) {
+            g_ram[0x19]=(uint8_t)p->power;g_ram[0xdc2]=(uint8_t)p->reserve;
+        }
+        if(g_ram[0x71]==0x0a)g_ram[0x88]=a->stored_mount?0x0f:0;
+        if(a->stored_mount && allowed) {
+            g_ram[0xdc1]=1;g_ram[0x13c7]=(uint8_t)a->stored_mount_color;
+            restore_registers(cpu,&completed);memcpy(g_ram,scratch,sizeof(scratch));
+            spawning_room_mount=true;cpu_push_jsl_return_frame(cpu);
+            if(!interp_bridge_run(cpu,0x00fc7a) || cpu->S!=stack)
+                Die("Native co-op mount entrance failed its return contract");
+            spawning_room_mount=false;
+            unsigned slot=g_ram[0x18e2]?g_ram[0x18e2]-1:12;
+            if(slot>=12 || g_ram[0x9e + slot]!=0x35 || g_ram[0x14c8+slot]!=8)
+                Die("Native co-op mount entrance did not create a Yoshi");
+            CoopEntity *e=normal_entity(m,slot,true);
+            e->id=a->stored_mount;e->owner=a->player;e->flags=COOP_ENTITY_RIDDEN;
+            p->mount=e->id;a->stored_mount=0;a->stored_mount_color=0;
+            coop_mount_capture(e,g_ram);
+        }
+        capture(m,a);a->pending.count=a->visible.count=0;
+    }
+    m->entrance_prepared=true;--room_load_depth;
+    restore_registers(cpu,&completed);memcpy(g_ram,scratch,sizeof(scratch));
+    coop_guest_bind(&primary->guest,g_ram);restore_primary_mount(m);
+}
 static void convert_carried_reward(CpuState *cpu,CoopMachine *m) {
     unsigned slot=cpu->Y&0xff;
     CoopEntity *e=coop_machine_entity_slot(m,COOP_ENTITY_NORMAL,slot);
@@ -459,7 +526,7 @@ static void initialize_room(CoopMachine *m) {
     CoopGuestPlayer entry;coop_guest_capture(&entry,g_ram);
     for(size_t i=0;i<m->actor_count;++i) {
         CoopActor *a=&m->actors[i];CoopPlayer *p=coop_player(&m->session,a->player);
-        coop_guest_bind(&entry,g_ram);
+        coop_guest_bind(m->entrance_prepared?&a->guest:&entry,g_ram);
         /* Entry movement/pose belongs to the new room; equipment belongs to
          * the persistent actor. Everyone uses the original entrance point. */
         if(m->room_initialized || a->player!=m->session.primary) {
@@ -474,6 +541,7 @@ static void initialize_room(CoopMachine *m) {
     }
     m->room=(uint32_t)g_ram[0xce]|((uint32_t)g_ram[0xcf]<<8)|((uint32_t)g_ram[0xd0]<<16);
     m->room_initialized=true;
+    m->entrance_prepared=false;
     coop_guest_bind(&primary_actor(m)->guest,g_ram);
     m->mounts_initialized=false;
     m->fireballs_initialized=true;
@@ -1263,6 +1331,20 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
         return 0x05d8a2;
     }
     if(pc==0x05d8b7) {m->level=read16(0x0e);return 0;}
+    if(pc==0x02a751 && !room_load_depth) {
+        load_room_sprites(cpu,m);return 0x02a772; /* original RTL */
+    }
+    if(pc==0x00fc7a && room_load_depth && !spawning_room_mount)return 0x00fceb;
+    if(pc==0x00fc98 && spawning_room_mount) {
+        unsigned slot=cpu->X&255;
+        if(slot>=12 || g_ram[0x14c8+slot]) {
+            /* Keep the original preferred slot when available. Extra riders
+             * must not overwrite another rider or a carried world object. */
+            for(slot=12;slot && g_ram[0x14c8+slot-1];--slot) {}
+            if(!slot)Die("Native co-op room has no free slot for a transported mount");
+            cpu->X=(uint16_t)(slot-1);
+        }
+    }
     if(pc==0x02abf2 && !room_sprite_depth) {
         carry_through_room(cpu,m);return 0x02ac5b;
     }
@@ -1740,6 +1822,7 @@ void SmwCoopSimulationEnd(void) {
         }
         for(size_t i=0;i<m->actor_count;++i) {
             CoopActor *a=&m->actors[i];coop_guest_bind(&a->guest,g_ram);
+            a->stored_mount=a->stored_mount_color=0;
             g_ram[0x1470]=g_ram[0x148f]=g_ram[0x187a]=0;
             g_ram[0x13f3]=g_ram[0x1891]=0;capture(m,a);
         }

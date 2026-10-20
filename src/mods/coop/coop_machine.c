@@ -195,7 +195,8 @@ size_t coop_machine_save_size(const CoopMachine *m) {
         if(bytes>SIZE_MAX-n)return 0;
         n+=bytes;
     }
-    return n;
+    if(n>SIZE_MAX-16 || m->actor_count>(SIZE_MAX-n-16)/12)return 0;
+    return n+16+m->actor_count*12;
 }
 static bool entities_valid(const CoopMachine *m) {
     if(m->entity_count>22 || !m->next_entity || (m->level!=UINT32_MAX && m->level>=512))return false;
@@ -237,6 +238,20 @@ static bool entities_valid(const CoopMachine *m) {
         }
         if(!held || !mount)return false;
     }
+    for(size_t i=0;i<m->actor_count;++i) {
+        const CoopActor *a=&m->actors[i];
+        if(a->stored_mount_color>255 || (!a->stored_mount && a->stored_mount_color))return false;
+        if(!a->stored_mount)continue;
+        const CoopPlayer *p=coop_player_const(&m->session,a->player);
+        if(!p || p->mount!=COOP_NO_ENTITY || a->stored_mount>=m->next_entity)return false;
+        for(size_t j=0;j<m->entity_count;++j)
+            if(m->entities[j].id==a->stored_mount)return false;
+        for(size_t j=0;j<m->actor_count;++j) {
+            if(j!=i && m->actors[j].stored_mount==a->stored_mount)return false;
+            for(unsigned k=0;k<COOP_FIREBALL_SLOTS;++k)
+                if(m->actors[j].fireballs[k].id==a->stored_mount)return false;
+        }
+    }
     for(size_t i=0;i<m->actor_count;++i)for(unsigned j=0;j<COOP_FIREBALL_SLOTS;++j) {
         const CoopFireball *f=&m->actors[i].fireballs[j];
         if(f->guest[0]!=0 && f->guest[0]!=1 && f->guest[0]!=5)return false;
@@ -272,7 +287,7 @@ static bool load_piece(CoopVisualPiece *v,const uint8_t *p) {
 bool coop_machine_save(const CoopMachine *m,void *data,size_t capacity) {
     size_t n=coop_machine_save_size(m);if(!data || !n || capacity<n || !entities_valid(m))return false;
     uint8_t *p=data;memset(p,0,HEADER);
-    memcpy(p,"CNR1",4);put32(p+4,6);memcpy(p+8,rom_id,32);
+    memcpy(p,"CNR1",4);put32(p+4,7);memcpy(p+8,rom_id,32);
     size_t core=coop_session_save_size(&m->session);
     put32(p+40,(uint32_t)core);put32(p+44,(uint32_t)m->actor_count);
     put32(p+48,layout_id());put32(p+52,m->room);put32(p+56,m->previous_mode);
@@ -339,13 +354,19 @@ bool coop_machine_save(const CoopMachine *m,void *data,size_t capacity) {
             }
         }
     }
+    memcpy(p+at,"MTR1",4);put32(p+at+4,(uint32_t)m->actor_count);
+    put32(p+at+8,m->entrance_prepared);put32(p+at+12,0);at+=16;
+    for(size_t i=0;i<m->actor_count;++i) {
+        put32(p+at,m->actors[i].player);put32(p+at+4,m->actors[i].stored_mount);
+        put32(p+at+8,m->actors[i].stored_mount_color);at+=12;
+    }
     put32(p+at,crc(p,at));return true;
 }
 bool coop_machine_load(CoopMachine *m,const void *data,size_t size) {
     if(!m || !data || size<HEADER+TRAILER)return false;
     const uint8_t *p=data;
     uint32_t version=u32(p+4);
-    if(memcmp(p,"CNR1",4)||(version<2 || version>6)||memcmp(p+8,rom_id,32)||u32(p+48)!=layout_id()||
+    if(memcmp(p,"CNR1",4)||(version<2 || version>7)||memcmp(p+8,rom_id,32)||u32(p+48)!=layout_id()||
         u32(p+60)>1||u32(p+56)>0x29||u32(p+size-4)!=crc(p,size-4))return false;
     size_t core=u32(p+40),count=u32(p+44);
     if(core>size-HEADER-TRAILER || count>(size-HEADER-TRAILER-core)/(ACTOR_HEADER+COOP_GUEST_BYTES))return false;
@@ -456,6 +477,17 @@ bool coop_machine_load(CoopMachine *m,const void *data,size_t size) {
                     at+=PIECE_BYTES;
                 }
             }
+        }
+    }
+    if(version>=7) {
+        if(size-TRAILER-at<16 || memcmp(p+at,"MTR1",4) || u32(p+at+4)!=count ||
+           u32(p+at+8)>1 || u32(p+at+12))goto fail;
+        tmp.entrance_prepared=u32(p+at+8)!=0;at+=16;
+        if(count>(size-TRAILER-at)/12)goto fail;
+        for(size_t i=0;i<count;++i) {
+            if(u32(p+at)!=tmp.actors[i].player)goto fail;
+            tmp.actors[i].stored_mount=u32(p+at+4);
+            tmp.actors[i].stored_mount_color=u32(p+at+8);at+=12;
         }
     }
     if(at!=size-TRAILER || !entities_valid(&tmp))goto fail;

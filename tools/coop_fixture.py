@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class Fixture:
-    def __init__(self, source):
+    def __init__(self, source, *, game_mode=0x14):
         self.source = source.resolve()
         self.data = bytearray(source.read_bytes())
         d = self.data
@@ -26,7 +26,7 @@ class Fixture:
         self.machine = self.end-self.word(self.end)
         m = self.machine
         self.version = self.word(m+4)
-        assert d[m:m+4] == b'CNR1' and self.version in (2, 3, 4, 5, 6)
+        assert d[m:m+4] == b'CNR1' and self.version in (2, 3, 4, 5, 6, 7)
         self.check_crc(m, self.end)
         self.core = m+64
         self.core_end = self.core+self.word(m+40)
@@ -38,7 +38,7 @@ class Fixture:
         # RTLS v9: ramAdr(4), legacy joypad(7), JoypadState(58).
         # v10 appends the one-byte RDNMI latch after the joypads.
         self.ram = extra-69-(self.guest_version >= 10)-0x20000
-        assert d[self.ram+0x100] == 0x14
+        assert game_mode is None or d[self.ram+0x100] == game_mode
         fields = [(int(a, 16), int(n)) for a, n in re.findall(
             r'COOP_FIELD\(\w+,\s*(0x[0-9a-f]+),\s*(\d+)\)',
             (ROOT/'src/mods/coop/coop_player_fields.def').read_text())]
@@ -73,7 +73,7 @@ class Fixture:
             assert d[at:at+4] == b'CAM1'
             self.focus = at
             at += 32
-        self.mounts, self.sources = {}, []
+        self.mounts, self.mount_records, self.sources = {}, {}, []
         if self.version >= 5:
             assert d[at:at+4] == b'YSH1'
             mounts, sources = self.word(at+4), self.word(at+8)
@@ -81,6 +81,7 @@ class Fixture:
             for _ in range(mounts):
                 identity, pending, visible = struct.unpack_from('<3I', d, at)
                 self.mounts[identity] = bytes(d[at+12:at+33])
+                self.mount_records[identity] = at
                 at += 33+(pending+visible)*540
             for _ in range(sources):
                 self.sources.append(struct.unpack_from('<6I', d, at))
@@ -105,6 +106,19 @@ class Fixture:
                     self.fireballs[player].append(dict(
                         id=identity, guest=guest, pending=pending, visible=visible, at=at))
                     at += 24+(pending+visible)*540
+        self.stored_mounts = {}
+        self.entrance_prepared = False
+        if self.version >= 7:
+            assert d[at:at+4] == b'MTR1' and self.word(at+4) == len(self.actors)
+            assert self.word(at+8) in (0, 1) and self.word(at+12) == 0
+            self.transport_at = at
+            self.entrance_prepared = bool(self.word(at+8))
+            at += 16
+            for _ in self.actors:
+                player, identity, color = struct.unpack_from('<3I', d, at)
+                assert player in self.actors and player not in self.stored_mounts
+                self.stored_mounts[player] = (identity, color)
+                at += 12
         assert at == self.end-4
 
     def word(self, at):

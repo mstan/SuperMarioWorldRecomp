@@ -48,6 +48,14 @@ replay pass focused checks. Invalid legacy duplicate-mouth states are rejected
 atomically before changing the running guest. Cross-ability outcomes and the
 remaining full mount contract are still open.
 
+The [mount entrance and parking milestone](validation/native-coop-mount-transport-2026-10-20.md)
+transports each rider through the original room entrance routine, retains
+separate no-Yoshi storage and introduces CNR7 prepared-entrance/parked-mount
+records. Sixty focused execution cases pass, including mixed riders,
+overworld return, retry and save/load. Mounted recovery beside a mounted
+survivor still has a diagnosed clearance defect; full mount and campaign
+acceptance remain open.
+
 Owner-approved specification, 2026-09-22. Implementation tracking:
 `beads-8wg.3.26`, branch `feat/native-simultaneous-coop`.
 

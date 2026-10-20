@@ -174,9 +174,12 @@ key cases, this milestone has **28 execution checks, 28 parity comparisons and
 ## Remaining work
 
 Open work includes cross-ability outcomes, baby-Yoshi
-eating, berries, shell abilities, mouth-object transport, mounted keyholes,
-and the complete source/save/recovery/campaign matrix. The native mouth indices
-must be remapped when transport moves their referenced normal-sprite slots.
+eating, berries, shell abilities, mounted keyholes,
+and the complete source/save/recovery/campaign matrix.
+The [room entrance audit](native-coop-mount-transport-2026-10-20.md) confirms
+that original pipe entry clears mouth contents; that native rule applies
+individually. In-room catch-up must preserve contents and timers, and any
+operation that relocates a retained mouth object must remap its native index.
 
 ## Invalid legacy mouth states
 

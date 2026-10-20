@@ -37,6 +37,10 @@ typedef struct CoopActor {
     CoopGuestPlayer guest;
     CoopVisual pending,visible; /* guest draws, then NMI presents next frame */
     CoopFireball fireballs[COOP_FIREBALL_SLOTS];
+    /* Native no-Yoshi/overworld storage has no physical sprite slot. Zero ID
+     * means none; a stored identity cannot also exist in the shared world. */
+    CoopEntityId stored_mount;
+    uint32_t stored_mount_color;
 } CoopActor;
 
 /* Stable native identities are separate from reusable guest sprite slots.
@@ -74,6 +78,7 @@ typedef struct CoopMachine {
     bool focus_initialized,focus_hold;
     bool mounts_initialized;
     bool fireballs_initialized;
+    bool entrance_prepared;
     CoopYoshiSource *sources;
     size_t source_count,source_capacity;
 } CoopMachine;
