@@ -41,6 +41,10 @@ def make(source, output, kind, actor, camera):
     d[r+0x14c8+slot] = 8 if kind in ('stomp', 'side') else 9
     d[r+0x157c+slot], d[r+0x1588+slot] = 1, 4
     f.camera(camera)
+    # These encounters intentionally pin a 448-pixel view. Record that same
+    # width in the copied policy state so loading it is not an aspect-change
+    # test that legitimately releases the synthetic camera hold.
+    f.put(f.core+92, 448)
     # Hold the chosen camera offset relative to the party's center. Merely
     # changing WRAM is insufficient: the saved co-op focus would undo it.
     records = [record for guest, record in f.actors.values()]

@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import wave
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -74,6 +75,10 @@ KeyboardPlayers=3
                SNESRECOMP_LLE_BOUNCE=str(int(args.bounce)))
     if args.turbo_burst:
         env['SNESRECOMP_TURBO_BURST'] = args.turbo_burst
+    if args.audio_frames:
+        env['SMW_AUDIO_FRAME_TRACE'] = str(out / 'audio-frames.csv')
+    if args.audio_capture:
+        env['SMW_AUDIO_OUTPUT_PCM'] = str(out / 'output.pcm')
     if args.minimal_trace:
         for key in ('SMW_COOP_TRACE', 'SMW_COOP_CONTACT_TRACE', 'SMW_RENDER_DIAGNOSTICS',
                     'SMW_RENDER_CAPTURE_FRAME'):
@@ -88,7 +93,8 @@ KeyboardPlayers=3
         env['SNESRECOMP_FRAMEDUMP_END'] = str(args.framedump)
         env['SNESRECOMP_FRAMEDUMP_PIXELS'] = '1'
     provenance = {'command': command, 'turbo_burst': args.turbo_burst,
-                  'minimal_trace': args.minimal_trace, 'inputs': {}}
+                  'minimal_trace': args.minimal_trace, 'audio_frames': args.audio_frames,
+                  'audio_capture': args.audio_capture, 'inputs': {}}
     for name in ('exe', 'rom', 'snapshot', 'script'):
         path = getattr(args, name)
         if path:
@@ -96,11 +102,15 @@ KeyboardPlayers=3
                 'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
     (out / 'inputs.json').write_text(json.dumps(provenance, indent=2) + '\n')
     with (out / 'stdout.log').open('w') as stdout, (out / 'stderr.log').open('w') as stderr:
-        result = subprocess.run(
-            command, cwd=out, env=env, stdout=stdout, stderr=stderr,
-            timeout=max(120, args.frames / 30),
-            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-    report = {'returncode': result.returncode, 'dispatch_misses': []}
+        try:
+            result = subprocess.run(
+                command, cwd=out, env=env, stdout=stdout, stderr=stderr,
+                timeout=max(120, args.frames / 30),
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+            returncode, timed_out = result.returncode, False
+        except subprocess.TimeoutExpired:
+            returncode, timed_out = 124, True
+    report = {'returncode': returncode, 'timed_out': timed_out, 'dispatch_misses': []}
     for directory in (out, args.exe.parent, args.exe.parent / 'playtest'):
         misses = directory / 'dispatch_misses.log'
         if misses.exists() and misses.stat().st_size:
@@ -108,9 +118,19 @@ KeyboardPlayers=3
     for line in (out / 'stdout.log').read_text().splitlines():
         if line.startswith('SNESRECOMP_BENCHMARK {'):
             report['benchmark'] = json.loads(line.split(' ', 1)[1])
+    if args.audio_capture and (out / 'output.pcm').exists():
+        pcm = (out / 'output.pcm').read_bytes()
+        if len(pcm) % 4:
+            raise ValueError('Incomplete stereo PCM capture')
+        with wave.open(str(out / 'output.wav'), 'wb') as wav:
+            wav.setnchannels(2)
+            wav.setsampwidth(2)
+            wav.setframerate(32040)
+            wav.writeframes(pcm)
+        report['captured_output_frames'] = len(pcm) // 4
     (out / 'result.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report), flush=True)
-    return result.returncode or int(bool(report['dispatch_misses']))
+    return returncode or int(bool(report['dispatch_misses']))
 
 
 def main():
@@ -123,6 +143,10 @@ def main():
     parser.add_argument('--framedump', type=int, help='Capture one completed frame, including native width')
     parser.add_argument('--players', type=int, choices=(1, 2), default=2)
     parser.add_argument('--audio-paced', action='store_true')
+    parser.add_argument('--audio-frames', action='store_true',
+                        help='Record audio counters around input/state load and guest execution')
+    parser.add_argument('--audio-capture', action='store_true',
+                        help='Capture muted device output to a stereo WAV (audio-paced only)')
     parser.add_argument('--minimal-trace', action='store_true',
                         help='Retain benchmark/audio counters without per-frame CSV/captures')
     parser.add_argument('--native', action='store_true')
@@ -130,6 +154,8 @@ def main():
     parser.add_argument('--bounce', action='store_true')
     parser.add_argument('--turbo-burst', help='Process-local start_frame,count')
     args = parser.parse_args()
+    if args.audio_capture and not args.audio_paced:
+        parser.error('--audio-capture requires --audio-paced')
     for name in ('exe', 'rom', 'snapshot', 'script', 'out'):
         if getattr(args, name):
             setattr(args, name, getattr(args, name).resolve())

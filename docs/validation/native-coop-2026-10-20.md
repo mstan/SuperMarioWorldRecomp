@@ -169,3 +169,61 @@ out during shutdown after printing its failing benchmark; the output remains
 failed. Next observation separates counters before input/state load and after
 guest execution. No audio fix or relaxed acceptance threshold has been applied.
 Framework investigation is tracked in `beads-8wg.2.139`.
+
+### Audio producer pacing and current acceptance
+
+The passive before-input/before-guest/after-guest counters locate audible loss
+before any snapshot load: boot first loses audible samples on frame 2, and
+frame 95's title loader adds a large burst. In the delayed-load control, all
+19,706 audible drops precede the frame-180 state load; that load adds no further
+audible drops through frame 799. This supersedes the initial queue hypothesis.
+
+The selected framework's `runner/src/desktop/host_main.c` already handles long
+native loaders with producer backpressure at the outermost APU unlock. The
+separate SMW host lacked that integration. It now uses the same 4,096-sample
+high-water behavior: release the recursive mutex so the device can consume,
+and stop waiting after 250 ms without a healthy consumer. A stalled device is
+not waited on repeatedly until callbacks resume. This applies to ordinary
+local audio playback; turbo, throughput/no-device tests and the existing netplay
+path retain their previous scheduling. Guest SPC/DSP generation is unchanged.
+No framework source, ROM, generated C, or audio acceptance threshold was changed.
+
+The diagnostic CSV and raw device capture are optional and buffered. An early
+version synchronously flushed every frame and produced misleading extra
+underflows; those failed/partial runs remain retained. `run_coop_probe.py` now
+retains a result even after a timeout and can write muted stereo WAV captures.
+
+Current evidence:
+
+| Probe | Result |
+|---|---|
+| `audio-backpressure-control`, 800 frames | Strict gate passes; zero dropped samples; 3 instrumented underflows retained. |
+| `audio-backpressure-death`, 800 frames | Strict gate passes; zero dropped samples and underflows. |
+| `audio-fresh-entry-buffered`, 3,600 frames | Original menus, intro, overworld and YI2 entry; strict gate passes, zero dropped samples. One underflow at frame 424 in file-menu mode `$08` remains open. |
+| Same fresh entry, frames 3200?3599 | Zero drops/underflows; 213,600 samples produced, 213,595 consumed; captured stage output peak 4,104, RMS 681.5. |
+| `audio-turbo-buffered`, 120-frame turbo interval | Whole-run strict result remains failed because accelerated frames deliberately overflow the device-rate queue. It is not relabeled as passing. |
+| Same turbo run, frames 240?1199 (after release) | Separate recovery acceptance passes: zero drops/underflows, 512,640 produced, 501,529 consumed; output peak 4,418, RMS 677.2. No persistent silence. |
+
+All listed completed runs have no dispatch misses. Saved fresh-entry state
+`savequick.sav` contains two actors in level `$106`; frame 3500 of the earlier
+captured fresh-entry run was inspected. Capture uses a dummy output device so
+no sound reaches the owner's speakers. WAV data is retained for independent
+inspection; peak/RMS establish sustained non-silence, not musical fidelity.
+
+Reproduce interval acceptance without rerunning or altering any game state:
+
+```text
+python tools/check_coop_audio_probe.py <audio-fresh-entry-buffered> --start 3200
+python tools/check_coop_audio_probe.py <audio-turbo-buffered> --start 240
+```
+
+The native-camera bounce rerun also completed: both complete gameplay/contact
+CSVs and the inspected frame-220 image match the interpreter replay byte for
+byte. The earlier startup timeout remains in the evidence directory. Contact
+fixtures now explicitly store their intended 448-pixel viewport, so their
+synthetic fixed-camera offsets do not accidentally exercise viewport refitting.
+
+Remaining audio qualification: investigate the reproducible file-menu underflow,
+exercise stage-entry/recovery across the campaign and supported devices/platforms,
+and retain the distinction between routine normal-speed playback and intentional
+turbo sample disposal. These bounded checks do not close the full audio issue.
