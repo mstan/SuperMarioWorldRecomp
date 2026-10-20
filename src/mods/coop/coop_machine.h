@@ -75,6 +75,7 @@ CoopEntity *coop_machine_entity_slot(CoopMachine *m,unsigned kind,unsigned slot)
 CoopEntity *coop_machine_spawn_entity(CoopMachine *m,unsigned kind,unsigned slot,unsigned type);
 void coop_machine_forget_entity(CoopMachine *m,CoopEntityId id);
 void coop_machine_focus(CoopMachine *m,int32_t x,int32_t y,uint32_t active);
+void coop_machine_refit_view(CoopMachine *m);
 void coop_mount_capture(CoopEntity *e,const uint8_t *ram);
 void coop_mount_bind(const CoopEntity *e,uint8_t *ram);
 CoopYoshiSource *coop_yoshi_source(CoopMachine *m,unsigned level,unsigned layer,

@@ -1005,6 +1005,7 @@ static void recover_and_frame(CoopMachine *m) {
         Die("Native co-op camera framing failed");
     s->camera.x=(int)read16(0x1a)-SmwViewOffset(g_smw_viewport,(int)read16(0x1a),(g_ram[0x5e]+1)*256);
     s->camera.y=(int)read16(0x1c);
+    if(resized)coop_machine_refit_view(m);
     if(!coop_camera_check_separation(s,resized))Die("Native co-op separation check failed");
     /* Drop before recovery binds a new position: objects stay at departure. */
     apply_object_drops(m);

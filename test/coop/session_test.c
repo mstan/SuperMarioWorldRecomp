@@ -228,6 +228,24 @@ static void native_states(size_t players) {
     assert(a.focus_x==300 && a.focus_hold);
     coop_machine_focus(&a,243,378,(uint32_t)players-1);
     assert(a.focus_x==303);
+    /* A stationary survivor hidden by a narrower restored viewport must
+     * become visible through gradual focus motion, without teleporting it.
+     * A view that still contains the survivor preserves death continuity. */
+    for(size_t i=0;i<players;++i)a.session.players[i].life=COOP_DYING;
+    CoopPlayer *survivor=&a.session.players[0];
+    survivor->life=COOP_PLAYING;survivor->x=24;survivor->y=378;
+    survivor->half_width=8;survivor->height=12;
+    a.session.camera=(CoopCamera){.x=0,.y=192,.width=448,.height=224};
+    coop_machine_refit_view(&a);assert(a.focus_hold && a.focus_x==303);
+    a.session.camera.x=98;a.session.camera.width=256;
+    a.session.camera.autoscroll=true;
+    coop_machine_refit_view(&a);assert(a.focus_hold);
+    a.session.camera.autoscroll=false;
+    coop_machine_refit_view(&a);assert(!a.focus_hold && a.focus_x==303);
+    coop_machine_focus(&a,24,378,(uint32_t)players-1);
+    assert(a.focus_x==299);
+    a.focus_x=303;
+    for(size_t i=0;i<players;++i)a.session.players[i].life=COOP_PLAYING;
     coop_machine_focus(&a,4000,5000,(uint32_t)players);
     assert(a.focus_x==307 && a.focus_y==382 && !a.focus_hold);
     CoopEntity *held=coop_machine_spawn_entity(&a,COOP_ENTITY_NORMAL,3,0x80);assert(held);

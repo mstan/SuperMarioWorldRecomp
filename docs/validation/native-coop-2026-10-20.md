@@ -130,16 +130,42 @@ near state loading. The current working hypothesis is a restored full host
 audio queue; source inspection and a focused reproduction must establish that
 before changing the framework. These results are in `audio-*-minimal`.
 
-The native-width owner-state screenshot also exposed an acceptance failure:
+The native-width owner-state screenshot exposed an acceptance failure, now fixed:
 the saved wide camera remains at X=98 while the sole surviving Luigi is at
 center X=24. His view exclusion persists while he is stationary, after Mario
 enters the death bubble. Loading at another aspect must refit that active
 survivor without reintroducing death-driven camera jumps. Reproduction:
-`owner-native-render`, screenshot/WRAM frame 220 and `coop.csv`. No missing
-actor is counted as a rendering pass merely because the process exited cleanly.
+`owner-native-render`, screenshot/WRAM frame 220 and `coop.csv`. The fix releases a held death-camera offset only when a changed viewport excludes
+an active actor. It does not change the guest scroll directly or override
+autoscroll. The existing four-pixel focus step and native terrain streaming
+bring the survivor back onscreen. `camera-refit-native` frame 220 was inspected:
+Luigi is visible at X=24 with camera X=0. The saved v10 state reloads with that
+framing. `camera-refit-wide` retains camera X=98 and both frame-80/220 captures
+are byte-identical to the earlier wide replay. Roster tests at 2/3/4/17 cover
+viewport refit, continued death-camera holds when the survivor still fits, and
+autoscroll exclusion. Live window resizing and the complete camera matrix
+remain acceptance work. A separate bounce replay timed out in host startup
+before gameplay; it is retained as unverified, not counted as a pass.
 
 Still unverified: full campaign and all routes/exits; remaining approved
 gameplay implementation; expanded solo/disabled/save/input acceptance;
 game-specific Linux/macOS/package checks; sustained performance; current
 live audio health. The passing framework audio harness alone does not resolve
 the previously recorded 574/1,307 dropped audible samples in live SMW runs.
+
+### Audio investigation after the integration milestone
+
+Compiled structure offsets from the actual framework headers locate the saved
+DSP output cursors at guarded-state offsets 99308/99312 on this Windows build.
+Both the entrance and individual-death fixtures contain write=8192/read=0:
+a full host output queue. The diagnostic source/layout and decoded observations
+are retained as `audio-layout.c`, `audio-layout.json`, and
+`audio-snapshot-queue.json` in the evidence directory.
+
+An isolated copy changed only the read cursor to match write and repaired the
+outer CRC. Its replay still reported 3,793 audible drops. Therefore the full
+restored queue alone does not explain the audio failure. That run also timed
+out during shutdown after printing its failing benchmark; the output remains
+failed. Next observation separates counters before input/state load and after
+guest execution. No audio fix or relaxed acceptance threshold has been applied.
+Framework investigation is tracked in `beads-8wg.2.139`.

@@ -135,6 +135,24 @@ void coop_machine_focus(CoopMachine *m,int32_t x,int32_t y,uint32_t active) {
     }
     m->focus_count=active;m->focus_center_x=x;m->focus_center_y=y;
 }
+void coop_machine_refit_view(CoopMachine *m) {
+    const CoopCamera *c=&m->session.camera;
+    if(c->autoscroll)return;
+    for(size_t i=0;i<m->session.player_count;++i) {
+        const CoopPlayer *p=&m->session.players[i];
+        if(p->life!=COOP_PLAYING)continue;
+        if((int64_t)p->x-p->half_width<c->x ||
+           (int64_t)p->x+p->half_width>(int64_t)c->x+c->width ||
+           (int64_t)p->y-p->height/2<c->y ||
+           (int64_t)p->y+p->height/2>(int64_t)c->y+c->height) {
+            /* A new viewport invalidates the previous death-camera offset.
+             * Release the hold; the normal focus step and ROM camera still
+             * perform every scroll/terrain-streaming update. */
+            m->focus_hold=false;
+            return;
+        }
+    }
+}
 size_t coop_machine_save_size(const CoopMachine *m) {
     if(!m || m->actor_count!=m->session.player_count || m->actor_count>UINT32_MAX)return 0;
     size_t core=coop_session_save_size(&m->session);
