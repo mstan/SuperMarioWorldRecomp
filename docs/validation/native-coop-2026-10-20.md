@@ -371,3 +371,38 @@ The combined asynchronous build passes:
 All runs complete with no dispatch misses. The old failed results remain
 retained. Supported-platform, full campaign and device audio qualification
 remain open; these checks resolve the observed menu-write failures.
+
+CI for framework `1c31f29` passes its [analyzer/runtime/content-pack matrix](https://github.com/RetroPortingToolKit/snesrecomp/actions/runs/39401397475),
+[CLI build](https://github.com/RetroPortingToolKit/snesrecomp/actions/runs/39401397680)
+and [Lua matrix](https://github.com/RetroPortingToolKit/snesrecomp/actions/runs/39401397427).
+The game `6457cb6` [Linux co-op core/storage workflow](https://github.com/mstan/SuperMarioWorldRecomp/actions/runs/39401727263)
+passes as well. Framework PR #191 is ready for review; game PR #19 remains draft.
+
+## Independent projectile allowance: retained negative control
+
+`projectiles/before-shared-limit` on the combined contact/storage build stages
+two fire-powered actors at the stock YI2 entrance and presses both actual fire
+buttons twice, with twelve released frames between attempts. The first saved
+state contains two type-5 shots, in native slots 8 and 9, and both actors'
+shooting timers equal 8. The second contains the same two moving shots;
+both shooting timers are zero. Both second attempts were refused by the
+original shared slot limit. The frame-80 image was inspected, and the run has
+no dispatch misses.
+
+The ROM's `$00:FEA8` `ShootFireball` searches only extended slots 8–9. The
+once-per-world loop at `$02:9B0A` updates ten extended slots through `$02:9B16`.
+Its twelve sprite tables occupy `$170B–$1782`. Per-player fireball allowance
+is therefore still unimplemented at this checkpoint; two control images or
+independent fire-button input do not establish independent ammunition.
+
+The initial control script used save slot 12, which is the Quick slot and writes
+`savequick.sav`. The first inspection incorrectly looked for `save12.sav`;
+the game log establishes the actual path. A redundant 120-frame rerun is
+retained under `before-shared-limit-complete`. The reusable
+`make_coop_projectile_fixture.py` uses ordinary slots 11 and 9 instead.
+
+The source audit also identifies a required collision boundary: `ProcessFireball`
+can increment Chuck's `$1528` hit count without setting a contact cooldown.
+Extending the projectile pool alone would permit duplicate damage in one frame.
+Projectile ownership, original motion/drawing, shared damage arbitration and
+snapshot support must be implemented and validated together.
