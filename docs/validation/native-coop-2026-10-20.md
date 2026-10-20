@@ -227,3 +227,104 @@ Remaining audio qualification: investigate the reproducible file-menu underflow,
 exercise stage-entry/recovery across the campaign and supported devices/platforms,
 and retain the distinction between routine normal-speed playback and intentional
 turbo sample disposal. These bounded checks do not close the full audio issue.
+
+## Default contacts, ordinary items and transformation ownership
+
+All artifacts in this section are under
+`build-adaptive/playtest/goal-20261019/contact-arbitration/`.
+
+### Negative controls and root causes
+
+`before-stomp` uses two identically positioned falling actors against one
+stock Koopa. At policy frame 756, only Mario gets the native bounce. In the
+following frames Luigi continues down while Mario rises. The initial sprite
+scheduler bound only the nearest actor to both AI and contact processing.
+
+The new adapter separates contact queries from the once-per-world update.
+At the same frame, both actors now receive velocity -48 and their individual
+stomp-chain increment. The Koopa changes status 8 to 9 once; the additional
+stomper does not create another native score sprite. Actual before/after
+captures at frames 70/80 were inspected.
+
+The first broad contact run, `full-matrix`, passed 132 contact/winner checks
+and 330 cross-execution trace/image comparisons. **That was insufficient
+acceptance:** the stronger saved-state check in `strengthened-recheck.json`
+fails eight cases because Mario's flower/cape animation remains active.
+`native-matrix` confirms four corresponding failures among its 44 cases.
+These earlier runs remain retained and are not counted as final passes.
+
+`flower-freeze-writer` uses the existing passive WRAM write logger, watching
+`$009D` without pausing or halting. It records the flower routine setting
+`SpriteLock=$20` on host frame 60, then `PlayerState00_HandleLRScrolling`
+writing zero on frame 61 and subsequent frames. The ROM's `$00:CDDD` routine
+always copies `CameraIsScrolling` to that lock. Merely masking L/R input did
+not disable this singleton side effect for the idle partner.
+
+The correction disables that manual-look routine in active co-op and retains
+the freeze until all roster transformations finish. Unequal simultaneous
+transformations exercise both orderings: Mario finishes first, and Luigi
+finishes first. Both keep the world frozen for the original mushroom's 48
+frames, then accept actual rightward movement. `transform-pilot` passes all
+eight cases across both execution paths and all 20 compared files.
+
+The subsequent `final-wide` run passed 136 of 144 cases and all 360 execution
+comparisons, exposing eight cape failures confined to the expanded margins.
+`final-native` passed 48 cases and 96 comparisons. In the failed margin saves,
+the cape was awarded, but `$71=$00`, `$1496=$00`, and `$9D=$01`: there was no
+animation to release the lock. The original `$01:C5AE` viewport guard bypasses
+animation setup, while its caller increments `SpriteLock` unconditionally.
+The co-op adapter now starts the original 24-frame cape animation for these
+collectors too. It retains the original guard for the separate smoke effect,
+whose coordinates have no high bytes. Widescreen smoke presentation remains
+unverified and requires a separate presentation adapter; it is not claimed
+fixed by this gameplay correction.
+
+`cape-fixed` reruns both collectors at center/left/right in both execution
+paths: **12/12 pass**, with **30/30** trace/capture comparisons identical.
+The saved-state and trace recheck additionally requires exactly 24 frozen
+frames in every case. Captures at frames 70 and 80 were inspected at all three
+camera positions: the center retains the original puff; margins do not display
+a wrapped puff at an unrelated location. This is an affected-case rerun on
+`build-9`, not a claim that the entire matrix ran on that binary.
+
+The preceding combined `build-8` also passes `final-single` (48/48 individual
+stomp/kick/pickup/damage cases, 96/96 comparisons) and `final-native` (48/48,
+96/96 comparisons). `final-wide` supplies the 136 passing non-failing cases;
+its eight failed cape cases are superseded by `cape-fixed`. The rejected
+results and binary/input hashes remain available.
+
+The build verifies 49 compiled and four interpreter-only hook sites. Core
+roster/state tests at 2/3/4/17, hook installation checks, v9/v10 preflight
+rejection/atomicity tests, and input configuration tests pass. Accepted live
+cases have no dispatch misses. Owner saves/settings still match all 27
+preserved hashes.
+
+### Scope and acceptance
+
+The shared default-contact prefix uses original ROM clipping and eligibility,
+then records candidates before responses. Power-ups use the separate original
+`$01:C4AC` qualification through `$01:C4C6`. The observer's phase 2 records
+candidate qualification; phases 0/1 record actual response entry/exit.
+Each accepted test requires an executed full-WRAM query audit, balanced guest
+stack, completed process, no dispatch misses, and retained capture.
+
+Checks cover:
+
+- Two stomps or spin jumps: both native bounces/chains, one enemy outcome and
+  one score sprite.
+- Spiny spin bounces, one shared star defeat, damage to both players, and
+  independent protection.
+- Contested shells: primary tie, nearer Luigi, Luigi as the only grab-eligible
+  actor, and a nearer Mario on the wrong side of actual Map16 net contacts.
+- Mushroom, flower, feather, star, moving coin and 1-up: both tie and nearer
+  Luigi cases; one item consumed, one reward, only the collector receives
+  equipment/star benefits. Saved states prove shared coin/life increments
+  and completed transformations with no lingering freeze.
+- Unequal simultaneous transformations: exact native freeze duration, both
+  ownership orderings, and movement after completion.
+
+The fixtures do not qualify terrain streaming or campaign routes. Their
+coordinates and, in the fence case, collision tiles are staged deliberately;
+VRAM is not rebuilt. Remaining custom sprite contacts, combined solid-object
+responses, cross-ability same-frame damage, projectiles, committed targets,
+mount interactions and campaign acceptance remain open.

@@ -244,7 +244,7 @@ following audited boundaries. The world update is not replayed for each actor.
 | `00:C47E` before `00:C569` | Original world/keyhole/effective-frame/shared timer work runs once. |
 | `00:C569` through `00:C592` | Scoped original player animation/motion/terrain, reserve-release and note-block state run for each actor. |
 | Secondary timer fields | Advance only the audited per-player timer bytes, with the original cadence. |
-| Normal sprites | Each original update runs once with a selected actor context; complete contact and attack-target arbitration remains in progress. |
+| Normal sprites | Each original update runs once. Default enemy contacts and ordinary power-ups query all eligible actors before a shared result; custom contacts and committed attack targets remain in progress. |
 | Extended sprites | Original world update runs once; ownership and multi-actor contact integration remain in progress. |
 | Player graphics | Primary draw/upload runs normally. Secondary body/cape draws run in a scoped scratch/OAM context; independent pictures join the OBJ renderer. |
 
@@ -438,8 +438,10 @@ remain part of the unfinished integration work.
 The normal-sprite scheduler (`01:8127`) runs each entity once, binding its owner
 for a carried/attached object, otherwise the nearest active actor. Exact distance ties use stable
 player IDs with primary-player priority. This supplies the actor context for the
-original AI and contact code; simultaneous contact collection, committed attack
-targets and special sprite policies remain unfinished.
+original AI. Default enemy contacts and ordinary power-ups now collect every
+eligible actor at their native contact boundaries before committing shared
+effects (see the October contact section below). Custom contact callers,
+committed attack targets and special sprite policies remain unfinished.
 The per-actor carry/platform occupancy fields are cleared at `01:808C` with the
 original cadence. That entry is explicitly interpreter-only in the dispatch
 table, and the hook verifier checks that fact instead of accepting absent code.
@@ -835,8 +837,9 @@ coverage. An immediate script `savestate` after a `press` now captures the last
 held frame before the script's neutral release frame; delayed snapshots retain
 their explicit delay. This makes held-object snapshots reproducible.
 
-Remaining work includes all loose-object contact candidates when players
-overlap, every carried-object/entrance type,
+The October contact adapter now arbitrates eligible overlapping grabs through
+the native default contact routine. Remaining work includes custom loose-object
+contacts and combined solid-object responses, every carried-object/entrance type,
 balloon conflicts, mounted keyholes, mounts, projectiles and full campaign validation.
 
 ### Carried goal rewards
@@ -1468,6 +1471,83 @@ gap was in one of these automated windows. These fixtures qualify contacts,
 not streaming or ordinary save-load correctness. Separate unmodified entrance
 and owner-F1 loads were captured at frames 65/80/100/140; the inspected captures
 do not show that gap. Original saves and settings are restored for handoff.
+
+## Native contact collection (2026-10-20)
+
+The selected AI target no longer limits default enemy contacts or ordinary
+power-up collection. At `$01:A7E4`, each active actor executes the original
+clipping, frame parity, fence, animation, velocity, previous-Y, cooldown and
+stomp eligibility logic. Scoped hooks stop before the actual response. The
+shared contact timer is restored after each query; the actor-local native
+star-chain reset is retained. World physics and AI still execute once.
+
+Responses distinguish side damage, star/slide defeat, normal and spin/mount
+stomps, safe spin bounces, eligible grabs, and loose-object responses. Every
+valid stomper receives the original player bounce and its own stomp-chain
+increment. One nearest eligible attacker, with primary/stable-ID ties, executes
+the enemy response and creates the shared reward. Nonwinning stompers stop
+before the native shared damage/reward code. Per-player side damage respects
+the original protection and riding rules. An eligible held-object grab wins
+over a loose contact that cannot grab; eligible grabs use distance and the
+same deterministic tie rule. Ownership is assigned to the actual collector.
+
+Ordinary mushroom, flower, star, feather, 1-up and moving-coin collection uses
+the separate `$01:C4AC` routine. Every actor must pass its original clipping,
+source-state, contact-delay and emergence-delay checks. Query execution stops
+at `$01:C4C6`, before removing the item or granting a benefit. The selected
+collector executes the original routine once, including reserve rules,
+transformation, score/life/coin rewards and sound.
+
+Transformation qualification also exposed a shared-freeze bug. The stock
+`$00:CDDD` manual-look routine writes `CameraIsScrolling` into `SpriteLock`
+even with no L/R input. An idle partner could therefore cancel the collector's
+freeze, causing the primary actor's animation timer to decrement twice and
+miss zero. Co-op now skips that manual-look routine entirely, as required by
+the agreed camera policy. The adapter retains the shared freeze while any
+active actor is in a power-up/damage transformation; each actor's native
+animation owns its own timer. One actor finishing cannot unfreeze the world
+while another is still transforming. This state is derived from the roster's
+existing saved animation fields.
+
+The adapters allocate candidates from the actual roster count. Transient query
+guards and scratch never enter a save state. Existing actor/entity ownership
+and the CNR5 snapshot format are unchanged. Hooks are declared in
+`coop_hooks.def`, installed reproducibly in generated blocks, and observed
+at the same PCs by the interpreter.
+
+`SMW_COOP_ARBITRATION_TRACE` records candidates, chosen winner, before/after
+responses, actor benefits, shared reward slots and audit execution counts.
+Optional `SMW_COOP_QUERY_AUDIT=1` compares all 128 KiB of WRAM around each query
+and rejects changes outside native scratch, the observed call-stack region,
+the shared contact timer and the actor's star-chain reset. It does not restore
+the whole world to conceal unexpected writes. Automated acceptance enables
+this audit; ordinary gameplay does not incur the diagnostic scan.
+
+Reproduction tools:
+
+```text
+python tools/test_coop_arbitration_live.py --exe <exe> --rom <stock-rom> \
+  --source <copied-CNR5-YI2-entrance> --out <new-directory> --cameras 0 192 384
+```
+
+Fixtures stage encounters, not outcomes. The wrong-fence-side fixture supplies
+actual Map16 net contacts because the original player code otherwise clears
+the behind-fence flag. Its VRAM is not rebuilt; it cannot qualify fence art.
+Detailed results and retained negative controls belong in
+[the October validation report](validation/native-coop-2026-10-20.md).
+
+This milestone does not complete custom-contact callers, all solid-object and
+reactive-platform responses, ON/OFF arbitration, projectiles, committed attack
+targets, Yoshi mouth interactions, or campaign acceptance. In particular, the
+custom-interaction tweaker's carry-result continuation remains with its
+individual native caller; it is not replayed generically as a default response.
+
+Cape pickup also separates animation setup from the original `$01:C5AE`
+viewport guard. The collector must run the native 24-frame transformation even
+outside the original 256-pixel view, because `GiveMarioCape` still sets the
+shared freeze there. The separate smoke effect retains that guard until its
+limited coordinate representation is extended; widescreen smoke presentation
+remains outstanding.
 
 ## Acceptance matrix
 

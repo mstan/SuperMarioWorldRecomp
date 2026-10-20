@@ -19,6 +19,14 @@ static unsigned camera_call_depth;
 static unsigned room_sprite_depth;
 static unsigned carried_reward_depth;
 static unsigned mount_draw_depth;
+static unsigned contact_call_depth;
+static bool contact_query,contact_bounce_only,powerup_query;
+typedef enum NativeContactKind {
+    CONTACT_NONE,CONTACT_STAR,CONTACT_BOUNCE,CONTACT_SIDE,CONTACT_SLIDE,
+    CONTACT_SPIN,CONTACT_STOMP,CONTACT_PICKUP,CONTACT_LOOSE,CONTACT_POWERUP
+} NativeContactKind;
+static NativeContactKind queried_contact;
+static uint64_t contact_query_audits;
 static CoopActor *bound_actor;
 static bool level_frame;
 static bool timer_had_time;
@@ -366,9 +374,24 @@ void SmwCoopSimulationBegin(void) {
     capture(m,primary_actor(m));
 }
 
+static void hold_transformations(CoopMachine *m) {
+    for(size_t i=0;i<m->actor_count;++i) {
+        const CoopActor *a=&m->actors[i];uint8_t animation=0;
+        coop_guest_peek(&a->guest,0x71,&animation);
+        if(animation>=1 && animation<=4 &&
+           coop_player_const(&m->session,a->player)->life==COOP_PLAYING) {
+            if(!g_ram[0x9d])g_ram[0x9d]=1;
+            return;
+        }
+    }
+}
 static void begin_gameplay_stage(CoopMachine *m) {
     if(gameplay_stage_started)return;
     gameplay_stage_started=true;
+    /* A completed actor animation may clear the singleton lock while another
+     * actor is still transforming. Their own animation code owns its timer;
+     * the once-per-world timer loop must remain frozen until all finish. */
+    hold_transformations(m);
     bool scene=true;
     for(size_t i=0;i<m->actor_count;++i) {
         CoopActor *a=&m->actors[i];CoopPlayer *p=coop_player(&m->session,a->player);
@@ -541,6 +564,7 @@ static void run_player_routines(CpuState *cpu,CoopMachine *m) {
         bound_actor=NULL;
         if(cpu->S!=caller.S)Die("Native co-op player routine unbalanced the guest stack");
         capture(m,a);
+        hold_transformations(m);
         mount=actor_mount(m,a);if(mount)coop_mount_capture(mount,g_ram);
         if(g_ram[0x100]!=0x14)break;
     }
@@ -567,6 +591,177 @@ static void trace_normal_contact(const CoopMachine *m,const CoopActor *actor,uns
         g_ram[0x19],g_ram[0x71],g_ram[0x72],g_ram[0x154c+slot],g_ram[0x148f],g_ram[0x15],
         g_ram[0x13f9],g_ram[0x1632+slot],g_ram[0x9d],g_ram[0x1656+slot],g_ram[0x167a+slot]);
     fflush(trace);
+}
+typedef struct NativeContact {
+    CoopActor *actor;
+    NativeContactKind kind;
+    uint64_t distance;
+    uint8_t scratch[16];
+} NativeContact;
+
+static uint8_t *contact_audit_buffer(void) {
+    static bool initialized;static uint8_t *image;
+    if(!initialized) {
+        initialized=true;const char *on=getenv("SMW_COOP_QUERY_AUDIT");
+        if(on && *on && strcmp(on,"0")) {
+            image=malloc(0x20000);
+            if(!image)Die("Native co-op could not allocate its contact query audit");
+        }
+    }
+    return image;
+}
+static void audit_contact_query(const uint8_t *before,unsigned slot) {
+    if(!before)return;
+    for(unsigned at=0;at<0x20000;++at) {
+        /* Native scratch, the observed call-stack area, and the two audited
+         * prefix writes. GameMode ($0100) is deliberately NOT excluded. */
+        if(at<16 || (at>=0x1c0 && at<0x200) || at==0x154c+slot || at==0x18d2)continue;
+        if(before[at]!=g_ram[at]) {
+            char error[96];
+            snprintf(error,sizeof(error),"Native co-op contact query changed non-query WRAM at $%05X",at);
+            Die(error);
+        }
+    }
+    ++contact_query_audits;
+}
+
+static void trace_arbitration(CoopMachine *m,unsigned slot,const NativeContact *c,
+                              unsigned phase,bool winner) {
+    static bool initialized;static FILE *trace;
+    if(!initialized) {
+        initialized=true;const char *path=getenv("SMW_COOP_ARBITRATION_TRACE");
+        if(path && *path)trace=fopen(path,"w");
+        if(trace) {
+            setvbuf(trace,NULL,_IOFBF,1024*1024);
+            fputs("frame,slot,player,kind,phase,winner,status,type,x,y,vy,animation,carry,chain,score,lives,cooldown,distance,power,reserve,star,rewards,coins,query_audits\n",trace);
+        }
+    }
+    if(!trace)return;
+    unsigned score=g_ram[0xf34]|(g_ram[0xf35]<<8)|(g_ram[0xf36]<<16);
+    unsigned rewards=0;for(unsigned i=0;i<6;++i)rewards+=g_ram[0x16e1+i]!=0;
+    fprintf(trace,"%llu,%u,%u,%u,%u,%u,%u,%u,%u,%u,%d,%u,%u,%u,%u,%u,%u,%llu,%u,%u,%u,%u,%u,%llu\n",
+        (unsigned long long)m->session.frame,slot,c->actor->player,c->kind,phase,winner,
+        g_ram[0x14c8+slot],g_ram[0x9e + slot],read16(0x94),read16(0x96),
+        (int8_t)g_ram[0x7d],g_ram[0x71],g_ram[0x148f],g_ram[0x1697],
+        score,g_ram[0xdbe],g_ram[0x154c+slot],(unsigned long long)c->distance,
+        g_ram[0x19],g_ram[0xdc2],g_ram[0x1490],rewards,g_ram[0xdbf],
+        (unsigned long long)contact_query_audits);
+}
+
+static uint32_t contact_response_hook(uint32_t pc,unsigned slot) {
+    if(contact_bounce_only && (pc==0x01a935 || pc==0x01a95d)) {
+        /* CODE_01AB46 increments this actor's chain before giving the shared
+         * reward. Every stomper retains its chain, but only the winner awards. */
+        ++g_ram[0x1697];return 0x01a91b;
+    }
+    if(!contact_query)return 0;
+    if(powerup_query) {
+        if(pc!=0x01c4c6)return 0;
+        queried_contact=CONTACT_POWERUP;return 0x01c4fa;
+    }
+    switch(pc) {
+    case 0x01a847:queried_contact=CONTACT_STAR;break;
+    case 0x01a8d8:queried_contact=CONTACT_BOUNCE;break;
+    case 0x01a8e6:
+        queried_contact=g_ram[0x13ed] && !(g_ram[0x190f+slot]&4)?
+            CONTACT_SLIDE:CONTACT_SIDE;break;
+    case 0x01a924:queried_contact=CONTACT_SPIN;break;
+    case 0x01a947:queried_contact=CONTACT_STOMP;break;
+    case 0x01aa66:queried_contact=CONTACT_PICKUP;break;
+    case 0x01aa74:queried_contact=CONTACT_LOOSE;break;
+    default:return 0;
+    }
+    return 0x01a91b; /* balanced RTS, before this response has any effects */
+}
+
+static void commit_contact(CpuState *cpu,CoopMachine *m,unsigned slot,
+                           const CpuState *caller,NativeContact *c,
+                           uint32_t entry,bool winner,bool bounce_only) {
+    restore_registers(cpu,caller);
+    memcpy(g_ram,c->scratch,sizeof(c->scratch));
+    coop_guest_bind(&c->actor->guest,g_ram);
+    coop_mount_bind(actor_mount(m,c->actor),g_ram);bound_actor=c->actor;
+    if(entry!=0x01a7e4 && entry!=0x01c4ac)g_ram[0x18d2]=0; /* non-star prefix */
+    trace_arbitration(m,slot,c,0,winner);
+    contact_bounce_only=bounce_only;
+    guest_jsr(cpu,entry);
+    contact_bounce_only=false;
+    trace_arbitration(m,slot,c,1,winner);
+    capture(m,c->actor);
+    CoopEntity *mount=actor_mount(m,c->actor);if(mount)coop_mount_capture(mount,g_ram);
+    if(g_ram[0x14c8+slot]==0x0b)
+        claim_carried(m,normal_entity(m,slot,false),c->actor);
+}
+
+static bool collect_native_contacts(CpuState *cpu,CoopMachine *m,bool powerup) {
+    unsigned slot=cpu->X&255;
+    /* Custom-contact callers consume carry and run their own response.
+     * Their individual adapters must retain that caller continuation. */
+    if(slot>=12 || (!powerup && (g_ram[0x167a+slot]&0x80)) || !bound_actor)return false;
+    CoopActor *original=bound_actor;capture(m,original);
+    CpuState caller=*cpu;uint8_t scratch[16];memcpy(scratch,g_ram,sizeof(scratch));
+    uint8_t cooldown=g_ram[0x154c+slot];
+    uint8_t knockback=g_ram[0x187b+slot];
+    NativeContact *contacts=calloc(m->actor_count,sizeof(*contacts));
+    if(!contacts)Die("Native co-op could not collect sprite contacts");
+    size_t count=0;NativeContact *winner=NULL;
+    int x=(g_ram[0xe4+slot]|(g_ram[0x14e0+slot]<<8))+8;
+    int y=(g_ram[0xd8+slot]|(g_ram[0x14d4+slot]<<8))+8;
+    uint32_t entry=powerup?0x01c4ac:0x01a7e4;
+    uint8_t *audit=contact_audit_buffer();
+    ++contact_call_depth;contact_query=true;powerup_query=powerup;
+    for(size_t i=0;i<m->actor_count;++i) {
+        CoopActor *a=&m->actors[i];const CoopPlayer *p=coop_player_const(&m->session,a->player);
+        if(p->life!=COOP_PLAYING)continue;
+        restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
+        coop_guest_bind(&a->guest,g_ram);coop_mount_bind(actor_mount(m,a),g_ram);
+        bound_actor=a;queried_contact=CONTACT_NONE;
+        if(audit)memcpy(audit,g_ram,0x20000);
+        guest_jsr(cpu,entry);
+        audit_contact_query(audit,slot);
+        /* The audited query writes only scratch/stack, the actor's star-chain
+         * reset and this shared contact timer. No response is allowed to run. */
+        g_ram[0x154c+slot]=cooldown;
+        capture(m,a); /* retain the native actor-local star-chain reset */
+        if(queried_contact==CONTACT_NONE)continue;
+        NativeContact *c=&contacts[count++];
+        c->actor=a;c->kind=queried_contact;
+        int64_t dx=(int64_t)p->x-x,dy=(int64_t)p->y-y;
+        c->distance=(uint64_t)(dx*dx+dy*dy);memcpy(c->scratch,g_ram,sizeof(c->scratch));
+        if(c->kind==CONTACT_SIDE || c->kind==CONTACT_BOUNCE)continue;
+        /* A real eligible grab beats a non-grabbing loose-object contact.
+         * Among eligible grabs/attacks, distance then primary/stable ID wins. */
+        if(!winner || (c->kind==CONTACT_PICKUP && winner->kind!=CONTACT_PICKUP) ||
+           ((c->kind==CONTACT_PICKUP)==(winner->kind==CONTACT_PICKUP) &&
+            (c->distance<winner->distance || (c->distance==winner->distance &&
+             coop_player_precedes(&m->session,a->player,winner->actor->player)))))winner=c;
+    }
+    contact_query=powerup_query=false;
+    for(size_t i=0;i<count;++i) {
+        coop_guest_bind(&contacts[i].actor->guest,g_ram);
+        trace_arbitration(m,slot,&contacts[i],2,&contacts[i]==winner);
+    }
+    /* Side damage is per actor. Resolve against the still-original enemy,
+     * before a winning stomp/star changes its type or status. */
+    for(size_t i=0;i<count;++i)if(contacts[i].kind==CONTACT_SIDE)
+        commit_contact(cpu,m,slot,&caller,&contacts[i],0x01a8e6,false,false);
+    if(winner)commit_contact(cpu,m,slot,&caller,winner,entry,true,false);
+    if(count && !cooldown && !winner)
+        g_ram[0x154c+slot]=8;
+    for(size_t i=0;i<count;++i) {
+        NativeContact *c=&contacts[i];if(c==winner)continue;
+        uint32_t entry=c->kind==CONTACT_STOMP?0x01a947:
+            c->kind==CONTACT_SPIN?0x01a924:c->kind==CONTACT_BOUNCE?0x01a8d8:0;
+        if(!entry)continue;
+        uint8_t after=g_ram[0x187b+slot];g_ram[0x187b+slot]=knockback;
+        commit_contact(cpu,m,slot,&caller,c,entry,false,true);
+        g_ram[0x187b+slot]=after;
+    }
+    free(contacts);--contact_call_depth;
+    restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
+    coop_guest_bind(&original->guest,g_ram);coop_mount_bind(actor_mount(m,original),g_ram);
+    bound_actor=original;
+    return true;
 }
 static bool run_normal_sprite(CpuState *cpu,CoopMachine *m) {
     unsigned slot=cpu->X&0xff;if(slot>=12)return false;
@@ -616,7 +811,9 @@ static bool run_normal_sprite(CpuState *cpu,CoopMachine *m) {
     if(unrelated_mount)coop_guest_bind(&saved_actor,g_ram);
     capture(m,a);
     if(!g_ram[0x14c8+slot])coop_machine_forget_entity(m,e->id);
-    else if(g_ram[0x14c8+slot]==0x0b)claim_carried(m,e,a);
+    else if(g_ram[0x14c8+slot]==0x0b) {
+        if(e->owner==COOP_NO_PLAYER)claim_carried(m,e,a);
+    }
     else if(e->flags&(COOP_ENTITY_HELD|COOP_ENTITY_ATTACHED))release_owner(m,e);
     restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
     coop_guest_bind(&primary->guest,g_ram);
@@ -734,6 +931,24 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
         carry_through_room(cpu,m);return 0x02ac5b;
     }
     if(!level_frame)return 0;
+    /* Masking L/R inputs alone is insufficient: CODE_00CDDD stores the
+     * singleton manual-camera flag to SpriteLock even with no buttons held.
+     * An idle partner therefore cancelled a transforming player's freeze. */
+    if(pc==0x00cddd)return 0x00cddc;
+    if(pc==0x01c5ae && (g_ram[0x81]|g_ram[0x7f])) {
+        /* GiveMarioCape locks the world even when this helper's original
+         * viewport guard rejects animation setup. Every co-op collector must
+         * run the native 24-frame transformation. Keep the guard for its
+         * separate smoke effect, whose coordinates have no high bytes. */
+        g_ram[0x71]=3;g_ram[0x1496]=0x18;
+        return 0x01c5eb;
+    }
+    uint32_t contact_return=contact_response_hook(pc,cpu->X&255);
+    if(contact_return)return contact_return;
+    if(pc==0x01a7e4 && !contact_call_depth && collect_native_contacts(cpu,m,false))
+        return 0x01a87c; /* default interaction returns carry clear */
+    if(pc==0x01c4ac && !contact_call_depth && collect_native_contacts(cpu,m,true))
+        return 0x01c4fa; /* power-up contact's balanced RTS */
     if(pc==0x01ea70 && !mount_draw_depth)return 0x01ea8e; /* each mount was drawn at E2BD */
     if(pc==0x0289e1) {
         unsigned slot=cpu->X&255,layer=read16(0x1933),x=read16(0x9a)&~15u,y=read16(0x98)&~15u;

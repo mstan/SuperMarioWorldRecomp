@@ -69,6 +69,7 @@ KeyboardPlayers=3
                SDL_AUDIODRIVER='dummy', SDL_AUDIO_DRIVER='dummy',
                SMW_COOP_TRACE=str(out / 'coop.csv'),
                SMW_COOP_CONTACT_TRACE=str(out / 'contacts.csv'),
+               SMW_COOP_ARBITRATION_TRACE=str(out / 'arbitration.csv'),
                SMW_RENDER_DIAGNOSTICS=str(out),
                SMW_RENDER_CAPTURE_FRAME=args.capture,
                SNESRECOMP_AUDIO_STATS=str(out / 'audio-stats.txt'),
@@ -77,10 +78,18 @@ KeyboardPlayers=3
         env['SNESRECOMP_TURBO_BURST'] = args.turbo_burst
     if args.audio_frames:
         env['SMW_AUDIO_FRAME_TRACE'] = str(out / 'audio-frames.csv')
+    if args.audit_queries:
+        env['SMW_COOP_QUERY_AUDIT'] = '1'
+    if args.wram_watch:
+        lo, hi = (int(value, 16) for value in args.wram_watch.split(':'))
+        if not 0 <= lo <= hi <= 0xffff:
+            raise ValueError('WRAM watch must be an inclusive 16-bit hex range')
+        env['SNESRECOMP_WLOG_ADDR'] = f'{lo:x}:{hi:x}:{out / "wram-writes.log"}'
+        env['SNESRECOMP_WLOG_STATE'] = '1'
     if args.audio_capture:
         env['SMW_AUDIO_OUTPUT_PCM'] = str(out / 'output.pcm')
     if args.minimal_trace:
-        for key in ('SMW_COOP_TRACE', 'SMW_COOP_CONTACT_TRACE', 'SMW_RENDER_DIAGNOSTICS',
+        for key in ('SMW_COOP_TRACE', 'SMW_COOP_CONTACT_TRACE', 'SMW_COOP_ARBITRATION_TRACE', 'SMW_RENDER_DIAGNOSTICS',
                     'SMW_RENDER_CAPTURE_FRAME'):
             env.pop(key, None)
     command = [str(args.exe), '--config', str(config), str(args.rom),
@@ -94,7 +103,8 @@ KeyboardPlayers=3
         env['SNESRECOMP_FRAMEDUMP_PIXELS'] = '1'
     provenance = {'command': command, 'turbo_burst': args.turbo_burst,
                   'minimal_trace': args.minimal_trace, 'audio_frames': args.audio_frames,
-                  'audio_capture': args.audio_capture, 'inputs': {}}
+                  'audio_capture': args.audio_capture, 'audit_queries': args.audit_queries,
+                  'wram_watch': args.wram_watch, 'inputs': {}}
     for name in ('exe', 'rom', 'snapshot', 'script'):
         path = getattr(args, name)
         if path:
@@ -145,6 +155,9 @@ def main():
     parser.add_argument('--audio-paced', action='store_true')
     parser.add_argument('--audio-frames', action='store_true',
                         help='Record audio counters around input/state load and guest execution')
+    parser.add_argument('--audit-queries', action='store_true',
+                        help='Reject unexpected WRAM changes during native contact queries')
+    parser.add_argument('--wram-watch', help='Passive guest write log, inclusive hex LO:HI')
     parser.add_argument('--audio-capture', action='store_true',
                         help='Capture muted device output to a stereo WAV (audio-paced only)')
     parser.add_argument('--minimal-trace', action='store_true',
