@@ -9,6 +9,7 @@ import argparse
 import csv
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -96,7 +97,7 @@ def main():
                    '--exe', str(args.exe.resolve()), '--rom', str(args.rom.resolve()),
                    '--snapshot', str(snapshot.resolve()), '--script', str(script),
                    '--out', str(out), '--frames', str(frames), '--framedump', str(capture),
-                   '--wram-watch', '160e:1619']
+                   '--wram-watch', '14a3:1619']
         if native:
             command.append('--native')
         if bounce:
@@ -135,6 +136,10 @@ def main():
                 first, last = state(out, 9), state(out, 8)
                 key_slot = 2 if two else 1
                 if two:
+                    starts = re.findall(r'^f(\d+)\s+01:14A3=12 w1.*?\bX=([0-9A-F]{4})\b',
+                                        (out/'wram-writes.log').read_text(), re.M)
+                    assert len(starts) == 2 and {x for _, x in starts} == {'0000', '0001'}, (name, starts)
+                    assert starts[0][0] == starts[1][0], f'{name}: secondary tongue input delayed'
                     mouth_slots = [e[2] for e in first.entities.values() if e[3] == 0x35]
                     mouths = [first.data[first.ram+0x160e+slot] for slot in mouth_slots]
                     assert mouths.count(key_slot) == 1 and mouths.count(255) == 1, (name, mouths)

@@ -586,6 +586,11 @@ static void draw_mounts(CpuState *cpu,CoopMachine *m) {
         if(e->owner!=COOP_NO_PLAYER && p->life!=COOP_PLAYING)continue;
         bool unrelated=e->owner==COOP_NO_PLAYER && p->mount!=COOP_NO_ENTITY;
         coop_guest_bind(&a->guest,g_ram);coop_mount_bind(e,g_ram);
+        /* The ROM draws/updates mouths before C569's actor motion. Primary
+         * input has already been decoded, but a secondary image otherwise
+         * still holds last frame's buttons at this earlier native stage. */
+        coop_guest_set_input(g_ram,SwapInputBits((uint16_t)p->held_input),
+                             SwapInputBits((uint16_t)p->pressed_input));
         if(unrelated)g_ram[0x187a]=g_ram[0x72]=0;
         memcpy(g_ram,scratch,sizeof(scratch));
         for(unsigned i=0;i<128;++i)g_ram[0x201+i*4]=0xf0;

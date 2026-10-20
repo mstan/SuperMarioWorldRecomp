@@ -77,6 +77,35 @@ automated replay mixed these forms and compared states one frame apart.
 `acceptance-fixed` uses a delayed snapshot for equal replay intervals. Earlier
 logs remain available and are not counted as passes.
 
+## Current input at the mouth stage
+
+The actual game loop (`$00:A2A9`) calls `DrawMarioAndYoshi` **before**
+`AdvancePlayerPosition` and `$00:C47E/$00:C569`. The latter is where the
+co-op actor-motion adapter previously supplied each actor's current input.
+The primary's WRAM already had decoded controller input at draw time, but a
+secondary actor image still contained the prior frame's buttons.
+
+`input-before` records original `$01:F30B` writes starting Mario's tongue at
+host frame 62 and Luigi's at frame 63 for the same input press. The preserved
+`before-mouth-input.exe` is checkpoint `9efb62c`, SHA256
+`5a525a80a2802736f175115d4f1e791e98ffcce7c26a61b08ddac1133d121e99`.
+
+`draw_mounts` now binds current held/pressed input from the actor's existing
+input lifecycle before the original mouth call. It does not create another
+input edge or another mouth update. `input-after` records **both** original
+timer writes at frame 62.
+
+`acceptance-input` passes the eight ownership/execution checks, eight complete
+WRAM/co-op comparisons and four save/replays again. The test now additionally
+requires both original tongue-start writes on the same frame in each of its
+four two-mounted executions. This establishes equal input timing; it does not
+establish correct arbitration when two tongues reach an object together.
+
+With timing corrected, `reverse-owner-tie-before` swaps the two mounts' player
+owners while leaving the actors and tongue geometry coincident. Luigi's
+earlier native slot takes the key. This is a **failed primary-tie requirement**,
+not accepted behavior, and is the next arbitration case to resolve.
+
 ## Remaining work
 
 This guard does not resolve same-frame nearest/primary arbitration between
