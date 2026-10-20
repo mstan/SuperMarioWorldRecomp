@@ -146,6 +146,56 @@ void SmwRendererGuestHook(CpuState *c,uint32_t pc) {
     return;
   }
   if(!active(c)) return;
+  if(pc==0x01F76C) {
+    /* A waiting placed egg uses IsSprOffScreen before its native proximity
+     * test. Preserve the vertical test and the native OAM ninth-bit byte;
+     * replace only this consumer's horizontal visibility decision. */
+    unsigned slot=c->X&0xffff;
+    if(slot>=12 || !c->m_flag) return;
+    int x=(int16_t)((r8(c,0xe4+slot)|(r8(c,0x14e0+slot)<<8))-r16(c,0x1a));
+    int left=left_margin(c);
+    unsigned result=r8(c,0x186c+slot) |
+        (x < -left || x >= g_smw_viewport.width-left);
+    c->A=(c->A&0xff00)|result;
+    c->_flag_Z=result==0;c->_flag_N=(result>>7)&1;
+    c->P=(c->P&~0x82)|(c->_flag_Z?0x02:0)|(c->_flag_N?0x80:0);
+    return;
+  }
+  if(pc==0x01A7F3) {
+    /* MarioSprInteractRt has ORed its alternating-frame predicate with
+     * $15A0. That byte also supplies native OAM X bit 8, so it must retain
+     * its 256px meaning. Produce this contact decision from the actual
+     * viewport instead; clipping and every interaction outcome stay native.
+     * The tweaker that requests every-frame contact bypasses this site. */
+    unsigned slot=c->X&0xffff;
+    if(slot>=12 || !c->m_flag) return;
+    int x=(int16_t)((r8(c,0xe4+slot)|(r8(c,0x14e0+slot)<<8))-r16(c,0x1a));
+    int left=left_margin(c);
+    unsigned result=((slot^r8(c,c->D+0x13))&1) |
+        (x < -left || x >= g_smw_viewport.width-left);
+    c->A=(c->A&0xff00)|result;
+    c->_flag_Z=result==0;c->_flag_N=0;
+    c->P=(c->P&~0x82)|(c->_flag_Z?0x02:0);
+    return;
+  }
+  if(pc==0x00E498) {
+    /* The body/cape helper's [-128,384) horizontal test precedes its OAM
+     * write. Let it publish the piece at any signed X; host scanout clips
+     * against the selected viewport. Hidden tiles, vertical culling and
+     * invulnerability flashing still take their original paths. */
+    c->_flag_C=0;c->P&=(uint8_t)~1u;
+    return;
+  }
+  if(pc==0x00E49A) {
+    /* A still holds the full 16-bit tile X just before STA $0300,Y.
+     * Capture at the draw, before later player movement/camera updates.
+     * OAM's ninth bit cannot distinguish right-side +256 from left -256. */
+    unsigned index=c->Y&255;
+    int x=(int16_t)c->A;
+    unsigned pos=(r8(c,0x301+index)<<8)|(c->A&255);
+    SmwRendererRecordOam(64+index/4,x,(uint16_t)pos,r16(c,0x302+index));
+    return;
+  }
   if(pc==0x0180AF || pc==0x029B0C) {
     SmwRendererBeginActor(pc==0x029B0C,c->X&0xffff);
     return;
@@ -341,7 +391,8 @@ void SmwRendererInstallHooks(void) {
   const uint32_t pcs[]={0x02A826,0x02A82E,0x01B844,0x01AC7C,0x02D076,0x03B8A8,0x02A1BE,0x02A204,
                         0x019E6D,0x019E93,0x019F5A,0x0180E5,0x02A916,0x02AFB3,
                         0x01A393,0x02D3A6,0x03B78E,
-                        0x0180AF,0x0180B2,0x029B0C,0x029B12,0x02A27E,0x02A2BE};
+                        0x0180AF,0x0180B2,0x029B0C,0x029B12,0x02A27E,0x02A2BE,
+                        0x00E498,0x00E49A,0x01A7F3,0x01F76C};
   for(unsigned i=0;i<sizeof(pcs)/sizeof(*pcs);++i)
     interp_bridge_set_pre_opcode_hook(pcs[i],SmwRendererGuestHook);
 }

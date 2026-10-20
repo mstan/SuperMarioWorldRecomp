@@ -1,0 +1,7 @@
+wait 60
+loadstate 10
+wait 40
+press p2.right 90
+wait 20
+press p2.left 90
+wait 30

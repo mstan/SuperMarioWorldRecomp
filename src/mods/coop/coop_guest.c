@@ -1,0 +1,97 @@
+#include "coop_guest.h"
+#include <string.h>
+
+static const CoopGuestField fields[] = {
+#define COOP_FIELD(name, address, count) {#name, address, count},
+#include "coop_player_fields.def"
+#undef COOP_FIELD
+};
+
+const CoopGuestField *coop_guest_fields(size_t *count) {
+    *count = sizeof(fields)/sizeof(*fields);
+    return fields;
+}
+
+void coop_guest_capture(CoopGuestPlayer *out,const uint8_t *ram) {
+    size_t at=0;
+    for(size_t i=0;i<sizeof(fields)/sizeof(*fields);++i) {
+        memcpy(out->bytes+at,ram+fields[i].address,fields[i].size);
+        at+=fields[i].size;
+    }
+}
+
+void coop_guest_bind(const CoopGuestPlayer *in,uint8_t *ram) {
+    size_t at=0;
+    for(size_t i=0;i<sizeof(fields)/sizeof(*fields);++i) {
+        /* $18E3 is shared challenge progress: the game cloud initializes and
+         * reads it, cloud coins increment it, and HurtMario resets it. Its
+         * old serialized actor byte remains padding so existing snapshots
+         * retain their exact layout/hash. The guest WRAM copy is authoritative. */
+        if(fields[i].address!=0x18e3)
+            memcpy(ram+fields[i].address,in->bytes+at,fields[i].size);
+        at+=fields[i].size;
+    }
+}
+
+bool coop_guest_peek(const CoopGuestPlayer *in,uint16_t address,uint8_t *value) {
+    size_t at=0;
+    for(size_t i=0;i<sizeof(fields)/sizeof(*fields);++i) {
+        if(address>=fields[i].address && address-fields[i].address<fields[i].size) {
+            *value=in->bytes[at+address-fields[i].address];return true;
+        }
+        at+=fields[i].size;
+    }
+    return false;
+}
+
+static unsigned read16(const uint8_t *r,unsigned a) {return r[a]|((unsigned)r[a+1]<<8);}
+static void put16(uint8_t *r,unsigned a,unsigned v) {r[a]=(uint8_t)v;r[a+1]=(uint8_t)(v>>8);}
+/* GetMarioClipping ($03:B664): $96 remains the top of the 32px pose frame
+ * even for small Mario. Using $96+height/2 places a small actor 18px too high.
+ * These four entries describe standing/small, then their mounted variants. */
+static const uint8_t clip_y[]={6,20,16,24};
+static const uint8_t clip_height[]={26,12,32,24};
+static unsigned clip_shape(const uint8_t *r) {
+    return ((r[0x73] || !r[0x19])?1u:0u)+(r[0x187a]?2u:0u);
+}
+
+void coop_guest_read_player(CoopPlayer *p,const uint8_t *r) {
+    p->power=(CoopPower)r[0x19];
+    p->reserve=r[0xdc2];
+    p->protection_ticks=r[0x1497];
+    p->star_ticks=(uint32_t)r[0x1490]*4;
+    unsigned shape=clip_shape(r);
+    p->half_width=6;
+    p->height=clip_height[shape];
+    p->x=(int32_t)read16(r,0x94)+8;
+    p->y=(int32_t)read16(r,0x96)+clip_y[shape]+p->height/2;
+    p->grounded=(r[0x77]&4)!=0 || r[0x1471]!=0;
+    p->swimming=r[0x75]!=0;
+    p->supported_flight=r[0x1407]!=0 || r[0x1891]!=0;
+    p->behind_fence=r[0x13f9]!=0;
+}
+
+void coop_guest_place_player(const CoopPlayer *p,uint8_t *r) {
+    put16(r,0x94,(unsigned)(p->x-8));
+    r[0x19]=(uint8_t)p->power;r[0xdc2]=(uint8_t)p->reserve;
+    r[0x73]=0;
+    unsigned shape=clip_shape(r);
+    put16(r,0x96,(unsigned)(p->y-clip_y[shape]-clip_height[shape]/2));
+    memcpy(r+0xd1,r+0x94,4);
+    r[0x7a]=r[0x7b]=r[0x7c]=r[0x7d]=0;
+    r[0x13da]=r[0x13dc]=0;
+    r[0x71]=r[0x1496]=0;
+    r[0x1497]=(uint8_t)(p->protection_ticks>255?255:p->protection_ticks);
+    r[0x1407]=r[0x1408]=r[0x140d]=0;
+    r[0x72]=p->grounded?0:0x24;
+}
+
+void coop_guest_set_input(uint8_t *r,uint16_t held,uint16_t pressed) {
+    /* Host input uses the SNES serial bit order (R=bit4 .. B=bit15),
+     * matching JOY1L/JOY1H. X and A contribute to the guest Y/B aliases. */
+    r[0x15]=(uint8_t)(held>>8);
+    r[0x16]=(uint8_t)(pressed>>8);
+    r[0x17]=(uint8_t)held&0xc0; /* manual L/R camera is disabled */
+    r[0x18]=(uint8_t)pressed&0xc0;
+    r[0x15]|=r[0x17];r[0x16]|=r[0x18];
+}

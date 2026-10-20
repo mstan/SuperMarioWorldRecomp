@@ -15,6 +15,7 @@ typedef struct RasterLine {
 typedef struct OamOwner { int x; uint16_t position, attr; bool valid; } OamOwner;
 static RasterLine lines[224];
 static PpuOverlayCapture obj_capture[224];
+static PpuOverlayCapture bg3_capture[224];
 static uint8_t frame_ram[0x20000];
 static OamOwner pending[128], latched[128];
 typedef struct SpriteOwner { int x,y; bool valid, exact; } SpriteOwner;
@@ -39,8 +40,11 @@ static int native_x;
 static bool level_scene;
 static Ppu raster;
 static uint16_t objects[SMW_RENDER_MAX_WIDTH];
+static uint16_t object_colors[SMW_RENDER_MAX_WIDTH];
+static uint64_t object_order[SMW_RENDER_MAX_WIDTH];
 static uint32_t native_control[256*224];
 int SmwRendererNativeOffset(void) { return g_smw_video.enabled ? native_x : 0; }
+bool SmwRendererIsLevelScene(void) { return level_scene; }
 static bool world_layer(unsigned layer) {
   return layer == 0 || (layer == 1 && frame_ram[0x1925] < 32 &&
                        (0x800081feu & (1u << frame_ram[0x1925])));
@@ -155,7 +159,7 @@ void SmwRendererLatchFrame(void) {
    * live RAM at scanout instead mixes the next camera with the uploaded tiles,
    * making a clamped viewport move by the changing per-tick camera delta. */
   if (g_smw_video.enabled) memcpy(frame_ram,g_ram,sizeof(frame_ram));
-  unsigned mode=frame_ram[0x100];
+  unsigned mode=g_ram[0x100];
   if (mode==0x13 || mode==0x14) level_scene=true;
   else if (mode!=0x0b && mode!=0x0f && mode!=0x15 && mode!=0x18)
     level_scene=false;
@@ -217,6 +221,7 @@ void SmwRendererCaptureLine(const Ppu *p, int line) {
   if (!g_smw_video.enabled || line < 1 || line > 224) return;
   RasterLine *l = &lines[line-1];
   obj_capture[line-1] = p->overlayCaptures[kPpuOverlaySource_Obj];
+  bg3_capture[line-1] = p->overlayCaptures[kPpuOverlaySource_Bg3];
   memcpy(l->regs, p, sizeof(l->regs));
   memcpy(l->palette, p->cgram, sizeof(l->palette));
   memcpy(l->oam, p->oam, sizeof(l->oam));
@@ -275,16 +280,22 @@ static bool window_condition(unsigned mode, bool inside) {
   return mode == 3 || (mode == 1 && !inside) || (mode == 2 && inside);
 }
 
+static unsigned pixel_colour(const uint16_t *palette,uint16_t pixel,int x) {
+  unsigned layer=(pixel>>8)&15;
+  if(g_ppu->extraObjectCount && (layer==4 || layer==6) && (object_colors[x]&0x8000))
+    return object_colors[x]&0x7fff;
+  return palette[pixel&255];
+}
 static uint32_t colour(const Ppu *p, const uint16_t *palette, const uint8_t *brightness, uint16_t main,
-                       uint16_t sub, bool inside) {
-  unsigned rgb = palette[main & 255], layer = (main >> 8) & 15;
+                       uint16_t sub, bool inside, int x) {
+  unsigned rgb = pixel_colour(palette,main,x), layer = (main >> 8) & 15;
   bool clipped = window_condition(p->cgwsel >> 6, inside);
   bool math = !window_condition((p->cgwsel >> 4) & 3, inside) &&
               ((p->cgadsub & 63) & (1u << layer));
   unsigned other = p->fixedColor;
   bool half = math && (p->cgadsub & 64) && !clipped;
   if (math && (p->cgwsel & 2)) {
-    if ((sub & 255) != 0) other = palette[sub & 255];
+    if ((sub & 255) != 0) other = pixel_colour(palette,sub,x);
     else half = false;
   }
   uint32_t result = 0;
@@ -334,6 +345,11 @@ static uint16_t background(const Ppu *p, const RasterLine *l, unsigned layer, in
     else return 0;
   }
   if (layer == 2 && (y <= 40 || frame_ram[0x1426]) && (x < 0 || x >= 256)) return 0;
+  if(layer==2 && y>=1 && y<=224) {
+    const PpuOverlayCapture *capture=&bg3_capture[y-1];
+    if((capture->flags&kPpuOverlayFlag_RemoveFromGame) && x>=capture->x0 && x<capture->x1 &&
+       y>=capture->y0 && y<capture->y1)return 0;
+  }
   unsigned tile_shift = PPU_bigTiles(p, layer) ? 4 : 3;
   int size = 1 << tile_shift;
   int bpp = layer == 2 ? 2 : 4;
@@ -383,6 +399,8 @@ static void sprite_piece(const Ppu *p,const RasterLine *l,int y,unsigned slot,
    * Verify its native position and current tile before moving it. */
   static const uint8_t item_tiles[4]={0x24,0x26,0x48,0x0e};
   unsigned item=frame_ram[0xdc2];
+  /* Overlay regions use native coordinates, before HUD relocation. */
+  int capture_x=x;
   if ((slot==56 || slot==0) && pos==0x0f78 && item>=1 && item<=4 &&
       (attr&255)==item_tiles[item-1]) x += g_smw_viewport.extra-native_x;
   if(attr&0x8000) row=size-1-row;
@@ -392,17 +410,24 @@ static void sprite_piece(const Ppu *p,const RasterLine *l,int y,unsigned slot,
   unsigned priority=((attr>>12)&3)*4+2;
   unsigned layer=attr&0x800?4:6;
   for(int col=0;col<size;++col) {
-    if(remove && x+col >= capture->x0 && x+col < capture->x1) continue;
+    if(remove && capture_x+col >= capture->x0 && capture_x+col < capture->x1) continue;
     int dest=x+col+native_x;
     if(dest<0 || dest>=g_smw_viewport.width) continue;
     int cx=attr&0x4000?size-1-col:col;
     unsigned tile=(((((attr&255)>>4)+row/8)&15)<<4)|(((attr&15)+cx/8)&15);
     unsigned pixel=tile_pixel(l->vram,base+tile*16,cx&7,row&7,4);
-    if(pixel) objects[dest]=(priority<<12)|(layer<<8)|palette|pixel;
+    if(pixel) {
+      objects[dest]=(priority<<12)|(layer<<8)|palette|pixel;
+      if(g_ppu->extraObjectCount)object_order[dest]=(uint64_t)slot<<32;
+    }
   }
 }
 static void sprites(const Ppu *p, const RasterLine *l, int y) {
   memset(objects,0,g_smw_viewport.width*sizeof(*objects));
+  if(g_ppu->extraObjectCount) {
+    memset(object_colors,0,g_smw_viewport.width*sizeof(*object_colors));
+    memset(object_order,0xff,g_smw_viewport.width*sizeof(*object_order));
+  }
   for (int slot=127;slot>=0;--slot) {
     unsigned pos=l->oam[slot*2],attr=l->oam[slot*2+1];
     unsigned hi=(l->high[slot/4]>>((slot%4)*2))&3;
@@ -420,6 +445,8 @@ static void sprites(const Ppu *p, const RasterLine *l, int y) {
     else if (x+sprite_sizes[p->obsel>>5][(hi>>1)&1]<=0 || x>=256) continue;
     sprite_piece(p,l,y,slot,pos,attr,hi,x);
   }
+  if(g_ppu->extraObjectCount)PpuComposeExtraObjects(g_ppu->extraObjects,g_ppu->extraObjectCount,
+      y,-native_x,(size_t)g_smw_viewport.width,0,objects,object_colors,object_order);
 }
 static uint32_t compose(const Ppu *p, const RasterLine *l, const uint8_t *brightness,
                         const uint16_t *bg, uint16_t object, int x) {
@@ -434,7 +461,7 @@ static uint32_t compose(const Ppu *p, const RasterLine *l, const uint8_t *bright
        (!(p->screenWindowed[sub]&16) || !window(p,4,x)) &&
        object>screens[sub]) screens[sub]=object;
   }
-  return colour(p,l->palette,brightness,screens[0],screens[1],window(p,5,x));
+  return colour(p,l->palette,brightness,screens[0],screens[1],window(p,5,x),x+native_x);
 }
 void SmwRendererDraw(uint8_t *pixels,size_t pitch,const uint8_t *stock) {
   int width=g_smw_viewport.width;

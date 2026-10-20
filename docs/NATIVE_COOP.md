@@ -1,0 +1,1761 @@
+# Native simultaneous co-op
+
+## Current integration checkpoint (2026-10-20)
+
+The owner has accepted the playable prototype and authorized merging it into
+game main as **Experimental**, with README screenshots and setup instructions.
+This accepts the documented alpha scope and limitations; the full product
+contract and [deferred work](NATIVE_COOP_DEFERRED.md) remain the roadmap.
+
+Implementation and campaign acceptance remain incomplete. On 2026-10-20 the
+owner changed the immediate delivery target to an alpha with a high-level
+first pass. The product rules below remain the intended behavior; exhaustive
+interaction matrices and full stock-content acceptance are later work.
+The [acceptance burndown](NATIVE_COOP_STATUS.md) summarizes completed milestones,
+the alpha checks, deferred work and known defects.
+
+### Alpha acceptance and testing scope (owner direction, 2026-10-20)
+
+Make a broad first pass through the major systems. Test a handful of common
+interactions, fix obvious blockers, record the result, and move on. Ordinary
+movement/collisions, pickups/reserves, common Yoshi use, death/recovery,
+room/stage transitions and saves/input should receive representative checks.
+Use existing valid evidence where it covers the behavior; after a change, rerun
+the checks needed for its concrete risks. Keep automated launches muted.
+
+The owner accepts some bugs in unusual combinations for the alpha and expects
+user reports to guide follow-up work. Record known defects and unverified
+features plainly. Save corruption, routine crashes/softlocks and common
+interactions that prevent ordinary co-op play remain blockers.
+
+Do not make the alpha depend on extreme Yoshi matrices, every permutation of
+player/backend/aspect/save timing, or the full stock-game coverage inventory.
+Retain existing tests and evidence for later targeted use. Continue the
+inventory-driven campaign audit after the alpha as follow-up qualification.
+The immediate delivery gate is the documented common-interaction first pass,
+required build/CI checks and an owner build with preserved saves/settings.
+Record newly identified corner cases in the [deferral list](NATIVE_COOP_DEFERRED.md)
+and move on. Investigate them during this alpha only if an observed failure
+blocks ordinary play or threatens saves, or the owner explicitly requests it.
+The [playable-alpha evidence](validation/native-coop-alpha-2026-10-20.md)
+records the selected common checks, reused evidence, actual boss/bonus outcomes,
+setup limitations and owner handoff.
+
+Owner follow-up, 2026-10-20: prioritize enemy interactions, abilities and hazards,
+with a small recovery/camera and rudimentary transition pass. Use one or two
+representative variations per area, expanding only to diagnose an observed
+failure. Additional boss/bonus breadth remains deferred. The overworld and
+special scenes may use the original single lead; a visible second participant
+is no longer a required feature. Preserve every participant's gameplay state
+when a scene returns to normal play.
+
+The 19 game commits have been rebased onto game main `8dedb28`, retaining the
+newer Falcon/cache-helper, isolated generation, disassembly-authority, capture
+and launcher changes. Framework pin `fa018f3` contains the merged co-op support
+from PR #95 (`6d6f432`), current framework main `9c6afcb`, and the explicit SRAM image writer
+and serializer-derived snapshot WRAM location query
+in [framework PR #191](https://github.com/RetroPortingToolKit/snesrecomp/pull/191).
+That additional dependency remains under review. The UI uses game main's
+`01bff94`. The old dependency conflict and Linux failure described in the
+September checkpoint are historical. The prior upstream pin's CI passed;
+the additional writer revision's CI is tracked on PR #191.
+
+The owner checkpoint, executable, saves and settings are preserved separately.
+Current integration findings and reproducible validation are recorded in
+[the October integration report](validation/native-coop-2026-10-20.md).
+The reproducible [stock content inventory](validation/SMW_STOCK_CONTENT.md)
+derives indexed rooms, overworld nodes, special variants and screen routes from
+the original ROM. Its coverage seed starts unverified; it does not grant passes
+for gameplay mechanics or transitions.
+PR #19 is the prototype delivery PR. Its alpha first pass and required checks
+passed, and the owner authorized its merge after the experimental label and
+README presentation update. The remaining full-contract work stays documented.
+
+The October projectile milestone adds an original two-fireball allowance per
+actor, native motion/drawing, shared fire-damage arbitration, direct boss
+fireball adapters and CNR6 snapshots. Its bounded checks pass; broader abilities,
+boss defeats/transitions and campaign acceptance remain incomplete. See the
+[implementation and reproduction audit](validation/native-coop-fireballs-2026-10-20.md).
+
+The extended-contact milestone applies the original hazard/coin clipping to
+every active actor, resolves shared destruction and cloud-coin rewards once,
+and corrects ownership of the shared cloud challenge counter without changing
+legacy snapshot layouts. See its
+[source audit and focused evidence](validation/native-coop-extended-contacts-2026-10-20.md).
+Producer/targeting, full bonus-game and campaign coverage remain open.
+
+The [mouth ownership and arbitration adapter](validation/native-coop-mouth-ownership-2026-10-20.md)
+prevents Yoshi from taking a partner's held object or another mount's mouth
+contents. Current input reaches both mouths in the same frame; accepted native
+tongue contacts resolve by distance and primary/stable ties, including reversed
+mount slots and multiple objects. Held/released objects and valid mouth-state
+replay pass focused checks. Invalid legacy duplicate-mouth states are rejected
+atomically before changing the running guest. Cross-ability outcomes and the
+remaining full mount contract are still open.
+
+The [mount entrance and parking milestone](validation/native-coop-mount-transport-2026-10-20.md)
+transports each rider through the original room entrance routine, retains
+separate no-Yoshi storage and introduces CNR7 prepared-entrance/parked-mount
+records. Sixty focused execution cases pass, including mixed riders,
+overworld return, retry and save/load. An additional ownership-aware placement
+correction resolves mounted recovery beside a mounted survivor; 32 focused
+cases cover safe/blocked placement, independent mouth timers and waiting
+bubbles through pipes. Full mount, complex recovery and campaign acceptance
+remain open.
+
+The [placed-egg and baby food milestone](validation/native-coop-baby-yoshi-2026-10-20.md)
+corrects the singleton hatch decision below the roster cap and prevents babies
+from reserving a partner's held food. Existing baby reservations also exclude
+other mouths and participate in atomic snapshot preflight. Forty-four focused
+execution checks pass, with native/bounce parity, save replay and unchanged
+disabled/One-Player behavior. A follow-up growth adapter starts new adult mount
+state independently and ends baby food claims when growth occurs inside a scan.
+Fifty-six additional growth cases cover both riders, four power-ups, five-food
+growth, actual carried babies, replay and native/bounce parity. Fresh
+mouth competition, full abilities and mount
+acceptance remain open.
+
+The [repeated placed-source adapter](validation/native-coop-placed-sources-2026-10-20.md)
+tracks roster-sized grants separately from block sources, retains history
+through rooms, defers allocation when all native slots are occupied, and saves
+pending eggs in CNR8. Fifty-six source cases and sixteen room/retry cases pass
+with replay and native/bounce comparisons. Babies cannot eat another pending
+mount grant. A follow-up viewport hook fixes expanded-margin hatching while
+preserving vertical culling and the original-width gate. Stock-location and
+full mount acceptance remain open.
+
+The [shell ability matrix](validation/native-coop-shell-abilities-2026-10-20.md)
+qualifies each actor's sixteen Yoshi/shell color combinations through original
+tongue acquisition, spitting, repeated wing motion and landing-effect creation.
+All 128 execution cases pass with exact replay and native/bounce parity.
+Damage outcomes, shared effect-pool pressure, berries and wing destinations
+still require acceptance.
+
+The [egg visibility and mounted-keyhole milestone](validation/native-coop-mount-visibility-keyholes-2026-10-20.md)
+adds fourteen focused viewport checks and twenty-six mounted-mouth keyhole
+checks, including both riders and isolation from another mount's empty mouth.
+Ordinary carried-key exits and competing goal arbitration retain identical
+native/bounce traces. Exact snapshot replay passes. Actual stock destinations,
+fresh acquisition beside a hole and full campaign mechanics remain open.
+
+The [body-berry alpha check](validation/native-coop-berries-alpha-2026-10-20.md)
+fixes two riders receiving credit for one berry. Three common cases pass:
+single rider, contested berry with primary priority, and two independent
+berries. Pending duplicate bites are rejected during snapshot preflight.
+Interrupted bites during bubble recovery are a known deferred defect; broader
+berry permutations and threshold rewards remain unverified for the alpha.
+
+Owner-approved specification, 2026-09-22. Implementation tracking:
+`beads-8wg.3.26`, branch `feat/native-simultaneous-coop`.
+
+This document is a permanent part of the game repository. It describes the
+approved behavior, architecture, implementation progress, and validation. The
+specification is not a claim that every feature below already works. The status
+and evidence sections distinguish implemented behavior from remaining work.
+
+## Product contract
+
+An optional, default-off native mod in the normal SMW executable enables
+simultaneous control when the user selects **2 Player**. Player 1 is Mario and
+Player 2 is Luigi. **1 Player** remains normal solo gameplay; disabling the mod
+restores stock alternating two-player gameplay. Setting changes apply at the
+next session launch. The original ROM is the only gameplay source. The abandoned
+IPS co-op build supplies neither code nor gameplay rules to this implementation.
+
+The first release supports local co-op throughout stock SMW, native width and
+widescreen, and the supported compiled/interpreted execution modes. Other games,
+ROM hacks, online play, and character replacements are outside this release.
+Incompatible character mods must be rejected explicitly rather than partly
+activated. Widescreen's selected enemy-activation policy remains authoritative.
+
+### Future player counts (owner addition, 2026-09-22)
+
+The architecture must support a session-sized roster of N players. Two is the
+initial product/input/UI limit, not a simulation or serialization invariant.
+Do not encode "the other player", fixed two-element actor arrays, 1-minus-player
+indexing, two-bit participation masks, or one Mario/one Luigi state fields in
+the core. Use stable player IDs, explicit actor ownership, and roster iteration.
+Connection/controller identities are distinct from player IDs and character IDs.
+
+For future larger rosters, the same rules generalize as follows:
+
+- P1 is the primary player for overworld authority and deterministic final ties;
+  remaining exact ties use stable ascending player IDs.
+- Team failure means no active player remains. Any eligible survivor can anchor
+  recovery. Selection uses safe placement, then proximity, then stable ID.
+- Camera fitting considers all active actors; exclude bubbles and dead actors.
+  Resolve separation without bubbling the final surviving active actor.
+- Each player owns equipment, reserve, projectile allowance, and effect timers.
+  Pickups and enemy targeting compare every eligible participant.
+- The mount cap and maximum grants per Yoshi source equal the session roster
+  count (two in this release). Extra players do not increase ordinary item supply.
+- Counters, room events, checkpoint, timer, and lives remain team state. World
+  updates and rewards run once, independent of roster size.
+- States store explicit record counts and IDs, with checked allocation and
+  length validation. Presentation and event buffers grow with the roster.
+- Future counts need input/UI/character support and performance validation;
+  this work does not advertise unsupported player counts as playable.
+
+## Agreed gameplay
+
+### Players, camera, and recovery
+
+| Area | Rule |
+|---|---|
+| Characters | Mario and Luigi have identical SMW movement physics and distinct appearances. |
+| Contact | Players pass through; no player bouncing, body blocking, or carrying one another. Mario's complete picture draws in front of Luigi when they overlap on the same fence side; remaining actors use primary/stable ID order. |
+| Camera | Frame active players equally within room bounds. Follow established travel direction during excessive separation; the primary player breaks ambiguous opposite-direction ties. Preserve the survivor's framing when someone dies, and never follow a death pose. Limit focus movement so the native terrain streamer visits every column. |
+| Catch-up | One-second edge warning, then bubble the trailing player. No voluntary bubble. |
+| View changes | Reframe and restart separation grace after window/aspect changes. View changes never damage players. |
+| Manual camera | Disable L/R camera look during co-op. |
+| Autoscroll | Preserve level scrolling, pits, crushing, and hazards. Catch-up is not a rescue from failing the level's scrolling requirements. |
+| Lethal/catch-up tie | Resolve lethal contact first. |
+| Individual death | World and survivors continue during the death animation. Play a short native fall sound without interrupting level music. After the animation, show an identified bubble for three gameplay seconds before safe recovery. |
+| Death recovery | Return small, preserve a stored reserve, give two seconds of damage protection; pits and crushing remain lethal. |
+| Catch-up recovery | Preserve equipment and mount, drop held objects at departure, and grant no new protection. |
+| Placement | Return beside a survivor with room for both bodies. Prefer safe footing. Permit safe water/supported-air recovery only when the returning actor can survive there. Keep the bubble visible if no nearby position is safe; never fall back to overlapping the survivor. |
+| Mounted bubble | Wait for clearance for rider and mount together. |
+| Team failure | Bubbles are out of play. No active players means one shared life lost, once. Play the original death music and finish the original death animations before entrance/checkpoint restart. Freeze the camera and world during this final death sequence. |
+| Retry | All restart small with stored reserves intact; clear mounts and carried objects from the failed attempt. |
+| Input on return | Held movement applies immediately; jump, fire, grab, and reserve release require fresh presses. |
+| Timers in bubbles | Temporary benefits keep expiring with gameplay time; preserved Yoshi mouth timers are the exception. |
+
+All durations use simulation time. Pause, message boxes, shared transformations,
+and frozen entrance/cutscene phases do not consume gameplay countdowns.
+
+### Resources, mounts, and interactions
+
+- Share lives, coins, score, Dragon Coins, and bonus stars. Use normal SMW
+  starting lives, maximum counters, game over, and continue behavior.
+- Power-up state and reserve slots are individual. Stars benefit their collector
+  only. Give every fire-powered player the normal independent fireball allowance.
+- Keep original ordinary block supply. Exclusive contested pickups go to the
+  nearest eligible player; exact ties use primary/stable player order.
+- Nonlethal damage drops the damaged player's reserve above them; either player
+  can collect it. Lethal damage preserves a reserve still in storage. Previously
+  released items remain world objects and are not also preserved in storage.
+- Mounts belong to the shared world. Either player can ride any unoccupied Yoshi.
+  At most two mounted/unmounted Yoshis exist in a room for this release; bubbles
+  retain ownership of their transported mount and count toward the cap.
+- Each Yoshi source can grant two mounts. Keep the block visibly usable for its
+  remaining reward; a second hit releases the second egg when the cap permits.
+  At the cap, use the normal alternate reward. Do not duplicate grant/egg state.
+- Each mount has its own mouth contents, abilities, and swallow timer. Catch-up
+  preserves contents and the remaining swallow timer. A surviving mount stays
+  in the world when its rider dies. Objects held by another player can only be
+  swallowed after release.
+- Kicked shells and other normal world hazards can hurt any player.
+- Ordinary enemies select the nearest eligible active player and keep a target
+  through committed attacks. Audit player-facing behavior, including Boos.
+- Same-frame attacks cause one damage event per enemy, respecting existing
+  invulnerability. Every valid stomping player gets a bounce; defeat rewards
+  occur only once.
+- Reactive platforms combine riders; equal opposing influences cancel. Simple
+  occupied triggers activate once. Same-frame ON/OFF activations switch once.
+- Fence sides are individual. Player-relative darkness illuminates each active
+  actor, combining areas; preserve scripted lighting.
+
+### Transitions, progression, and special scenes
+
+- Any player can initiate a valid pipe, door, or exit for the team. Apply normal
+  entrance rules individually to each held object and mount. Waiting bubbles
+  travel to the destination and return after the entrance sequence when both
+  recovery delay and safe-placement requirements are met.
+- Either player activates the shared checkpoint and upgrades every small player
+  to big, including actors awaiting recovery. Preserve stronger power-ups.
+- Share the level timer. Timeout costs one life and restarts the team.
+- Conflicting same-frame exits favor a secret exit, then primary/stable player
+  order. A valid level clear wins over same-frame death; a dead player returns
+  small without charging a team life.
+- Goal tape awards bonus stars once per clear; simultaneous touches use the
+  highest valid result. Both players participate in bonus games; rewards are
+  shared.
+- Bosses retain normal health and timing. Aimed attacks choose the nearest active
+  actor at attack start; scripted attacks remain scripted. Repeated recovery
+  beside a survivor remains available in bosses.
+- Mario controls one overworld party position and level choice; the normal
+  single party sprite is sufficient. Preserve the normal lead in castle
+  destruction and ending scenes; no second visible participant is required;
+  retain all participants' state when gameplay resumes.
+- Power-up/damage transformations briefly freeze the world. Messages freeze it
+  and either player can dismiss them after the normal delay with fresh input.
+- Either player can pause/resume. Only Mario can invoke the normal early-exit
+  command in an eligible already-completed level.
+
+## Menus, input, and persistence
+
+With the mod enabled, select player count **before** save files. Reuse SMW's
+original player-count and save-file screens, including their art, text, cursor,
+input, and sound. One Player opens normal files; Two Player opens the separate
+co-op files through the same regular file menu. When disabled, keep the original
+order. Select the persistence namespace before loading file lists or writing
+campaign/automatic-resume data.
+
+Owner correction, 2026-09-22: no custom co-op menu overlays or extra co-op file
+labels. This supersedes the initial custom count selector and file banner. Keep
+the separate save storage. The custom assignment overlay was also removed.
+
+Co-op saves are unique and separate from normal SRAM, state slots, and resume
+files. New co-op campaigns start fresh; no import/copy feature in this release.
+Use normal SMW save opportunities and preserve the normal risk of losing unsaved
+progress on game over. Never write co-op extra state into normal SRAM.
+
+Both players need usable controller/keyboard assignments before gameplay. Shared
+keyboard bindings qualify. An assigned controller disconnect freezes the session
+for reconnection/reassignment. Inputs must not remain latched through reassignment.
+
+Save states support the full session, including all actors, mounts, bubbles,
+ownership, source grants, pending outcomes, camera state, and timers. Validate
+ROM/mode/schema and complete payloads before committing a load. Reject normal
+states in co-op, co-op states in normal play, unsupported/corrupt states, and
+incomplete actor records without partly modifying the running session.
+
+## Architecture and implementation
+
+### Boundaries
+
+SMW's original player RAM, graphics upload, camera, sprite interactions, and
+death/transition state are shared single-player machinery. Calling the complete
+level update once per player would duplicate enemies, timers, rewards, and
+transitions. Co-op instead owns explicit actor state and brokers shared events.
+
+1. An activation plugin enables a session controller only for selected co-op.
+2. A dynamic roster contains stable player IDs and independently owned player
+   state. Team state owns counters, checkpoint, timer, and outcomes.
+3. Scoped adapters expose audited original player logic and terrain collision;
+   preserve registers/scratch memory and classify every shared side effect.
+4. Run world logic once per frame; run player logic once per active actor.
+   Collect competing interactions before deterministic resolution.
+5. Capture independent graphics/palette/animation data before guest state is
+   reused. Render actors independently with native-width/widescreen depth,
+   fence, spotlight, and Mode 7 handling.
+6. Versioned state records and preflight validation make loads transactional.
+
+Hooks must cover compiled and interpreted paths, compose with widescreen hooks,
+and be generated reproducibly. Required sites are verified. Never hand-edit
+`src/gen/` or build on the abandoned patched-ROM implementation. General engine
+capabilities belong in the shared framework; SMW rules remain in the game.
+
+HUD: two labeled reserve slots in this release, shared counters once, readable
+player/bubble identity and separation warnings. Actor draw storage and HUD models
+must accept a roster rather than assume two.
+
+Owner correction, 2026-09-23: use the original reserve-box artwork and original
+item sprites. Only add small red **M** / green **L** corner labels. No replacement
+box drawing. The original-menu requirement continues to apply.
+
+### Sequence
+
+1. Package/session foundation, permanent specification, player ownership audit,
+   isolated saves, roster/policy tests, and stock baseline.
+2. Native dual-actor movement/collision, rendering, shared camera, deterministic
+   contacts, and input routing.
+3. Complete recovery, resources, mounts, all room transitions, enemies/bosses,
+   overworld, bonus games, and special scenes.
+4. Full save-state support, execution-path parity, compatibility, packaging.
+5. Campaign-level acceptance evidence before closing the issue.
+
+### Initial player stage adapter
+
+The first live adapter is deliberately a development milestone, with the
+following audited boundaries. The world update is not replayed for each actor.
+
+| Stage | Current treatment |
+|---|---|
+| NMI, input polling and overworld | Original once-per-frame path. |
+| Level entry | Seed each actor from the original entrance state; retain its own equipment on later room entries. |
+| `00:D273` room request | Collect entrant IDs, resolve primary/stable priority once, publish the selected actor's coordinates to the original room loader. |
+| `00:C47E` before `00:C569` | Original world/keyhole/effective-frame/shared timer work runs once. |
+| `00:C569` through `00:C592` | Scoped original player animation/motion/terrain, reserve-release and note-block state run for each actor. |
+| Secondary timer fields | Advance only the audited per-player timer bytes, with the original cadence. |
+| Normal sprites | Each original update runs once. Default enemy contacts and ordinary power-ups query all eligible actors before a shared result; custom contacts and committed attack targets remain in progress. |
+| Extended sprites | Original world update runs once; ownership and multi-actor contact integration remain in progress. |
+| Player graphics | Primary draw/upload runs normally. Secondary body/cape draws run in a scoped scratch/OAM context; independent pictures join the OBJ renderer. |
+
+Each scoped call preserves the caller's registers, scratch bytes and stack
+balance, while retaining elapsed machine clocks and bus state. Original player
+routines can produce shared effects: room changes, transformations, projectiles
+and terrain rewards still require their event/ownership adapters. Individual
+death and recovery adapters are under live validation as described below.
+The initial motion result does not establish those behaviors as correct.
+
+### Shared pipe and door destination
+
+`00:D273` normally increments `SublevelCount` and starts the level fade
+immediately. The adapter records a request from the bound actor, leaving both
+actor updates able to submit requests. After resolving gameplay events, it
+commits at most one request using the roster's primary/stable-ID priority.
+`05:D796` chooses the exit table entry from `$95` or `$97` (horizontal/vertical
+screen). Only the selected entrant's `$94..$97` coordinates are published into
+guest loader state. Canonical actor images retain separate equipment and
+reserves; the original fade and loader still run once.
+
+The request exists only within the current host frame. Snapshots during the
+fade already contain the committed guest loader inputs and all canonical
+actors. The machine's `room` field and CSV `level_data` record `SpriteDataPtr`
+at `$CE..$D0`. This is diagnostic only: empty rooms can share a sprite list.
+It is not a unique room identity. Transitions are detected through native mode
+changes; `LoadingLevelNumber` is reused by the ROM after loading. The ownership
+adapter now captures the complete nine-bit level number from `$0E..$0F` at
+`05:D8B7`, before the loader multiplies it into a table index. Machine `level`
+and CSV `level` retain that identity (unknown for an imported older state until
+its next entrance). The CSV includes this identity, the sprite pointer, selected
+entrant, sublevel count, mode, and each reserve for validation.
+
+This boundary covers the shared pipe/door request routine. Door, vertical-room,
+mount transport, additional carried-object entrance types, waiting-bubble,
+conflicting room/clear, and other exit
+paths still need their own live acceptance evidence and remaining adapters.
+
+### Shared checkpoint
+
+The `00:F2CD` hook receives only a valid midway-tape contact, before the original
+tile removal, sparkle, sound, and collector upgrade. It records a core
+checkpoint event; frame-end resolution upgrades every small actor, preserves
+stronger equipment and reserves, and remembers the upgrade for waiting actors.
+An actor still in its death animation keeps the small death pose and receives
+the big form on recovery. The event applies once per frame regardless of roster
+size. The native checkpoint key is `TranslevelNo + 1`, with zero for no checkpoint.
+
+Immediate retries bypass stock `04:8F35` overworld checkpoint publication. Before
+retrying, the adapter transfers a live `MidwayFlag` into bit `$40` of that
+translevel's `OWLevelTileSettings`. The original `05:D796` loader then selects
+the midpoint entrance. A new primary level entry resynchronizes the core key
+from the selected level's own flag, avoiding a stale checkpoint from another
+level. The restart policy still makes every actor small and retains reserves.
+
+The regular launcher exposes both input seats. `[GamepadMap] KeyboardPlayers`
+persists its keyboard assignments (bits 0 and 1 are the current two host seats);
+reloading hotkeys preserves those assignments. Recorded input accepts `p1.` and
+`p2.` button prefixes, for example `press p2.right+p2.b 45`. Unprefixed buttons
+retain their existing player-1 meaning. These are host input limits, separate
+from the dynamic simulation roster.
+
+### Goal tape and shared victory sequence
+
+The goal tape moves and draws once. At `01:C0C2`, after motion and before its
+player crossing tests, the adapter runs the original post-X/bottom-Y checks
+against each eligible actor image. `01:C0E7` records accepted crossings before
+music, freeze, sprite conversion, or reward effects. The tape's custom-contact
+flag makes `01:A7E4` a contact query; the original clipping/fence/animation
+rules determine whether the actor also touched the moving tape for stars.
+
+Frame-end core resolution selects secret before normal, then primary/stable
+player ID. The highest valid tape result is retained separately from the exit
+owner. The ROM table at `07:F1AA` stores packed BCD (including `$50` for fifty
+stars); that representation is monotonic and is the adapter's event value.
+The winning tape's original `01:C0E7` effects run once. At `01:C107`, its contact
+branch uses the collected team result; `07:F252` receives the highest valid
+tape height and executes the original star and exceptional three-life reward.
+The original sprite-to-coin conversion also runs once.
+
+Only the primary actor executes the shared `00:C915` victory director: palette
+fade, score conversion, music, peace-sign phase, spotlight, and game-mode change.
+Other actors use the original actor motion and peace-pose routines, keeping
+their own equipment and positions. Primary executes first even if serialized
+actor records are reordered. Dead/waiting actors return small with their own
+reserves; catch-up actors retain their equipment. A valid clear overrides
+same-frame death/timeout without charging a life. The next gameplay entry
+returns the core outcome to normal and preserves the surviving equipment.
+
+Goal spheres use the same actor collection at `01:8773`, after their single
+graphics/sparkle update. Each actor runs the native contact query, including its
+alternate-frame contact rule. `01:8778` records accepted contacts before the
+one-time sphere removal/music/end-timer effects. If a sphere wins an exit tie
+while another actor validly touches a tape, that tape's accepted-bonus tail at
+`01:C109` still runs once. It preserves the chosen exit and supplies the team's
+star reward and original coin conversion. Equal star rewards select the
+primary/stable actor. The stock sprite-slot bound is separate from roster size.
+
+Goal collection state is temporary within one host frame; committed scene
+state is already in the guest and native actor snapshot. No snapshot schema
+change or custom UI is needed. Mounted keyhole activation is covered by the
+October adapter below. Mount rewards, bonus-room participation, and full
+campaign coverage still require their own adapters and validation.
+
+### Native keyhole completion
+
+At `01:E1C8`, query every active actor's explicitly owned, carried key or ridden
+Yoshi. The
+stock global scan chooses only the highest occupied key slot, which can hide
+another player's valid contact. Each candidate instead enters `01:E1DB` with
+its own key slot (or `$FF`) and its mount's private globals. Original `$187A`
+and `$191C` select mounted rider clipping or carried-key clipping at
+`01:E1F3`. The original riding/key, carried-status, overlap and keyhole
+cooldown checks remain authoritative. `01:E210` records an accepted secret exit
+before shared effects; `01:E23A` stops queries before graphics. The hole is
+drawn once by its ordinary sprite update. This iterates the dynamic roster;
+normal-sprite slot capacity is independent of player count.
+
+The existing broker chooses secret before normal, then primary/stable actor.
+Only the chosen hole executes the original `01:E210` timer, music, freeze and
+window-center effects. `00:C47E` continues to own the whole keyhole sequence
+once per world frame. Core gameplay clocks stop, and pause input cannot
+interrupt a committed exit. `00:C9FE` retains the original secret-exit value.
+Other actors keep their equipment; dead/waiting actors return small with their
+own reserves. A same-frame valid clear prevents timeout from charging a life.
+
+A simultaneous tape reward needs an extra handoff: a keyhole skips the normal
+score-tally scene and freezes score-sprite credit timers. After the accepted
+tape tail, its BCD stars are credited by the original `05:CF05` counter writer,
+stopping at `05:CF36` before tally graphics/phase changes. The bounded credit
+loop supplies the routine's eligible frame phase and restores the true-frame
+byte afterwards; it advances no gameplay ticks. For fifty stars, `02:AD22`
+records the exact native 3-up popup slot. The original `02:AE03` life writer
+queues its reward once, stopping at `02:AE38` before popup motion. That popup's
+timer moves past its consumed credit threshold, preventing duplicate lives
+after restoration/unfreeze. Ordinary stars, life queues, timers and pictures
+already belong to the complete snapshot; no new save format is required.
+
+The stock status-bar handler still applies the hundred-star threshold. If that
+earns a bonus room, keyhole completion at `00:C9FE` uses the normal bonus-room
+entrance settings while preserving the secret route. The next gameplay entry
+restores the whole roster in the original bonus room. Completing every bonus
+interaction and mounted/Yoshi-mouth key activation remain separate work.
+
+### Native scripted completion
+
+A zero-to-nonzero transition of the original `EndLevelTimer` registers the
+completion already produced by a native boss or switch script. Actor updates
+record the actual initiating player for switch activation; a world-only boss
+script uses the primary party lead. The original script and its shared effects
+are not replayed. Donut Secret House's native boss-secret rule comes from
+`00:C9FE` (`CutsceneID` with translevel `$13`). A pending valid tape contact can
+still supply its reward independently of a scripted exit's ownership.
+
+The policy accepts an explicit exit while gameplay clocks are frozen, provided
+the session is connected and has no committed outcome. Other gameplay events
+remain rejected in that state. Resolving the exit advances no recovery,
+protection, or frame counters and emits one terminal action. If a dead actor
+owns the winning exit, returning actors use a surviving primary/stable actor's
+pose instead of the dead owner's position. Full all-dead/scripted-scene placement
+and per-boss acceptance remain outstanding.
+
+The Yellow Switch Palace was validated in the original room `$0CA`, using
+native falling contact and the original switch tiles. Core scripted-exit tests
+cover completion while frozen; this does not establish every boss as validated.
+
+### Independent graphics
+
+`coop_presentation.c` captures the ROM's body/cape pieces after selecting each
+actor's original pose and palette. The wrapper enters after Yoshi/shared music
+work, retains only audited player fields, and restores scratch/OAM before the
+primary draws. It resolves the original `MarioGFXDMA` sources into private
+picture memory. NMI and world sprite graphics still run once. Seven body/cape
+pieces is the original draw routine's maximum, checked at runtime; the actor
+list remains dynamic.
+
+The framework's opt-in `PpuExtraObject` capability adds private RGB15 pictures
+at the OBJ stage. It preserves native sprite ordering, background priority,
+windows, brightness and color math. The legacy, fast and Mode 7 renderers use
+the same private colors. The SMW widescreen renderer uses the same compositor.
+With no extra objects, the existing native path and snapshot layout stay intact.
+This is actor rendering; it does not add menus or a co-op UI overlay.
+
+Each actor stores both its pending guest draw and its visible draw latched at
+NMI. The native `CNR1` container introduced schema version 2 to serialize both,
+including coordinates, piece attributes and pixels. Preflight bounds-checks
+counts and attributes before replacing the session. Development snapshots from
+schema 1 are rejected; separate campaign SRAM remains compatible. Schema 3 now
+adds explicit entity ownership, described below. Mount and projectile behavior
+remain part of the unfinished integration work.
+
+### World contacts, camera and recovery
+
+The normal-sprite scheduler (`01:8127`) runs each entity once, binding its owner
+for a carried/attached object, otherwise the nearest active actor. Exact distance ties use stable
+player IDs with primary-player priority. This supplies the actor context for the
+original AI. Default enemy contacts and ordinary power-ups now collect every
+eligible actor at their native contact boundaries before committing shared
+effects (see the October contact section below). Custom contact callers,
+committed attack targets and special sprite policies remain unfinished.
+The per-actor carry/platform occupancy fields are cleared at `01:808C` with the
+original cadence. That entry is explicitly interpreter-only in the dispatch
+table, and the hook verifier checks that fact instead of accepting absent code.
+
+The character selector at `$0DB3` also selects score/progression slots in stock
+SMW. Gameplay always uses the shared party slot; character selection is confined
+to drawing. Collision centers now use the original `03:B664` clipping table:
+small actors have a 12-pixel box starting 20 pixels below `$96`, large actors a
+26-pixel box starting six pixels below it. `$96` is the pose-frame origin.
+
+Camera focus uses the active roster's bounds and the established travel leader
+when players cannot fit. The original camera code retains smoothing, scrolling
+settings and layer parallax. Edge checks use the actual rendered viewport;
+viewport changes restart separation grace. The normal 256-pixel screen clamp
+at `00:E9A1` is replaced by room boundaries during free scrolling. The terrain
+crush check at `00:E9FB` and original autoscroll path remain. Autoscroll, vertical
+rooms and resize transitions still require live acceptance evidence.
+
+Lethal damage has two audited entrances: `00:F606` supplies the initial enemy/
+crush velocity, while `00:F60A` preserves pit fall velocity. Both are hooked:
+the generated F606 block includes the F60A instructions without a second block
+boundary. Intercepting F60A alone missed compiled enemy deaths; a live contact
+trace exposed the shared freeze, and the adapter now covers both entrances.
+The death animation retains the original falling motion and four-frame timer
+cadence while omitting the global music/freeze and individual life charge.
+The primary death timer is excluded from the otherwise once-per-world timer
+stage, matching the cadence of secondary actors.
+
+After event resolution, the adapter checks separation and safe recovery. The
+read-only Map16 query follows the original collision pointers and P-switch
+remapping. It checks actual footing and body clearance, including collidable
+Layer 2, and waits when live sprites occupy the recovery area. Foot height is
+preserved when a small actor returns beside a large survivor. The current query
+is conservative: slope, moving-platform, mounted and supported-air placement
+need their remaining adapters. These cases are not yet acceptance-complete.
+Team failure enters the original level loader with the shared checkpoint flag
+and one life charged. Game-over presentation uses the original game modes.
+
+Shared controls are gathered before the original level-mode handler. Start is
+available to an actor awaiting recovery; either player can pause/resume, using
+the original debounce and sounds. Select for the stock early-exit command stays
+on the primary player's input. Message dismissal combines fresh action presses
+and uses the original message-box handler and delay. No additional menu is drawn.
+Gameplay countdowns begin at the actual post-pause branch, so both the pause and
+resume frames have the correct timing. Frozen entrance/scene phases also leave
+co-op gameplay countdowns unchanged. Returning from game over resets the session
+lifecycle and equipment before the next level; full continue/campaign coverage
+remains part of acceptance testing.
+
+The hook manifest can declare an interior boundary's audited containing entry.
+The verifier accepts interpreter coverage only while every variant of that entry
+is explicitly interpreter-only. If code generation later compiles any variant,
+the interior hook must appear in the generated blocks or the build fails.
+
+### Status and evidence
+
+- Worktree created from `main` at `f36d99f73d775febcf396e874b86a264c25d91da`.
+- Beads issue claimed. This specification includes the later N-player requirement.
+- Implemented the standalone dynamic-roster policy core in `src/mods/coop`,
+  including camera/separation, recovery, team failure, shared event arbitration,
+  fresh-action input handling, and explicit actor field capture/bind.
+- `tools/test_native_coop.py` passes with `-Wall -Wextra -Werror` at roster sizes
+  2, 3, 4 and 17. Tests cover deterministic contested contacts, one-time shared
+  outcomes, death/clear priority, safe recovery, checkpoint upgrades, disconnects,
+  and scoped guest WRAM ownership. CRC-protected little-endian state records
+  round-trip and reject every single-byte corruption and truncated prefix without
+  replacing the destination session.
+- Fresh stock generation and the unmodified native game baseline build passed
+  using the pinned framework and SDL3/MinGW. No IPS image was used.
+- Added a default-off development package to the normal executable, with the
+  same menu boundaries instrumented in generated C and the interpreter. Live
+  scripted runs confirm player-count selection precedes the native file list,
+  separate co-op files load, and missing input assignments stop entry to gameplay.
+  The first UI used custom overlays; the owner's later correction replaces these
+  with the ROM's existing menu routines and removes all co-op menu overlays.
+- Persistence selects `saves/native-coop-v1` for co-op and `saves` for solo.
+  The small `last-mode.txt` in the co-op directory selects the correct namespace
+  before automatic resume on a subsequent launch. With no previous selection,
+  SRAM and snapshots remain unavailable until the player chooses a count.
+  Changing namespaces first retains an immutable image of the old SRAM for
+  durable writing. It clears the live buffer before restoring the target's
+  newest queued image or reading its file.
+- Native actor-image records store player ID and input seat separately. The
+  codec includes the stock ROM identity and an ownership-layout signature;
+  tests cover reordered/non-contiguous IDs and 2/3/4/17 players. Invalid,
+  truncated, corrupt, and duplicate-owner records leave the destination intact.
+- Shared framework work lives on `feat/native-coop-runtime`, issue
+  `beads-8wg.2.68`: optional integrity/mode envelopes, preflight/session gates,
+  save-stream error propagation, and composable interpreter hooks. A redirected
+  hook restarts opcode classification at its destination. The bridge contract
+  harness passes 119 checks, including composition and redirected calls/returns.
+- Corrected the playtest script's mod-state location to
+  `mods/preloaded/state.toml`; the prior `mods/state.toml` was ignored. Added
+  optional game arguments for recorded input and finite live runs. Existing
+  settings/saves remain in `build-adaptive/playtest`.
+- Current menu evidence: `build-adaptive/playtest/native-coop-stock-menu-check`
+  (ignored local artifacts), frames 390 and 480, shows the ROM's original count
+  screen and regular file menu with no co-op overlay/banner. The earlier
+  `native-coop-menu-check` captures are superseded. Live slot 3 to slot 4 restore
+  also passed through the guarded loader, restoring two native actor records.
+  Native movement/rendering, mount adapters, complete state payloads, and the
+  campaign acceptance matrix remain under implementation.
+- Implementation is in progress. No playable-completion or campaign-validation
+  claim has been made. Update this section as code and evidence land.
+- The initial native movement adapter builds and runs through the intro,
+  overworld, and Yoshi's Island 2. The recorded `native-coop-seats` run contains
+  422 level frames per actor: Mario moves from x=24 to x=16 under P1 input,
+  Luigi moves from x=24 to x=93 under P2 input, and each jumps independently.
+  Both finish on the terrain at y=360 in that trace's old center convention
+  (the corrected collision-box center is y=378); the guest stack remains 511. The trace
+  is an ignored local artifact at `build-adaptive/playtest/native-coop-seats.csv`.
+  Its frame-680 screenshot predates secondary rendering and shows only Mario.
+  This is movement evidence,
+  not full co-op acceptance.
+- `tools/test_coop_input.py` passes against the actual config implementation:
+  shared keyboard assignment, launcher assignment changes, hotkey reload, and
+  write/read persistence. The existing roster/state tests also continue to pass.
+- Independent graphics now run in a fresh 3,400-frame menu-to-level recording.
+  `native-coop-draw-check` frames 3130, 3190 and 3300 show both actors, separate
+  jumps and original palettes. The shared timer follows its original cadence.
+  The earlier concern about a zero timer was a misreading of the small capture:
+  magnification and the recorded RAM show 394, 393, 391 and 390 as expected.
+- Live schema-2 state restore preserves both actors and their graphics.
+  `native-coop-256-check/frame-000090.bmp` verifies the 256-pixel PPU path;
+  `native-coop-compiled-check` verifies compiled guest dispatch. The 200-frame
+  restore/input run produces byte-identical actor traces with default interpreter
+  dispatch and `SNESRECOMP_LLE_BOUNCE=1`. These bounded checks do not validate
+  the remaining rooms, abilities or interaction rules.
+- Framework `tests/ppu/test_extra_objects.py` passes private-color, opaque-black,
+  transparency, native/Mode7, legacy/fast, background depth, windows, color math,
+  clipping, rotated OAM and stable 17-object ordering checks. The existing PPU
+  composition regression matches its previous digest `436319d369c4a1e3`.
+- The 2026-09-23 normal-sprite/camera/recovery build verifies 11 compiled hook
+  sites and one explicitly interpreter-only entry. `tools/test_coop_hooks.py`
+  checks idempotence and rejects missing or partly compiled coverage claims.
+  Terrain tests cover small recovery beside a large anchor, hazards despite
+  protection, world sprites, collidable Layer 2, P-switch remapping, bounds,
+  truncated ROM data and a query leaving all WRAM unchanged.
+- Live `native-coop-recover-mario.csv` and `native-coop-recover-luigi.csv` runs
+  each contain 1,040 level frames per actor. The dying actor enters death at
+  simulation frame 672, finishes the original animation at 863, waits 180
+  gameplay frames and recovers at 1043. The survivor and world keep advancing;
+  lives stay at five and the stack stays at 511. The Luigi trace also records
+  exactly 120 protection ticks on return. Screenshots in the matching `-check`
+  directories show the survivor continuing and the recovered actor at safe
+  footing. Characters can occupy the same position after recovery.
+- `tools/check_coop_recovery_trace.py` validates those live lifecycle, world
+  cadence, life, protection and stack invariants. The 1,100-frame Luigi recovery
+  run produces byte-identical actor traces with default dispatch and
+  `SNESRECOMP_LLE_BOUNCE=1`. The latter runs the scheduler through compiled
+  dispatch; scoped interpreter calls can call compiled guest functions in both
+  modes, which is why both lethal entry points require instrumentation.
+- Native slots 12 (during death) and 13 (during the recovery delay) were saved
+  and restored in `native-coop-recover-state`. Its 1,248 repeated actor records
+  match the uninterrupted baseline with zero divergences. No dispatch misses
+  were recorded. This validates those state phases, not the unfinished mount,
+  transition, enemy-contact and campaign coverage.
+- In `native-coop-individual` both actors die before recovery; the shared life
+  count changes once from five to four and the native loader returns the team
+  to Yoshi's Island 2. The earlier `native-coop-enemy-death` trace exposed the
+  missed compiled kill entrance and is superseded by the validated builds above.
+- Shared-control hooks add two interior sites in interpreter-only `GM14Level`:
+  pause handling (`00:A21B`) and the gameplay branch (`00:A28A`). The build now
+  verifies 11 compiled sites and three interpreter sites. Hook tests also reject
+  absent or partly compiled containing entries for interior-hook coverage.
+- `native-coop-shared-pause` loads a recovery-delay state. P2 presses Start while
+  awaiting recovery; P1 resumes. Across 92 paused host frames, the world frame
+  stays at 20 and recovery stays at 46. Recovery still occurs at simulation
+  frame 1043 with 120 protection ticks. The input recorder adds a release frame
+  between commands; the script's one press plus 90-frame wait spans 92 frames.
+  This exercises the requested in-game pause feature, without debugger pausing
+  or stepping.
+- In `native-coop-message-dismiss-check`, P2 jumps into Yoshi's House's original
+  message block and dismisses it with a later fresh B press. Frames 2270/2310
+  show the native message and a stationary world counter; frame 2440 shows the
+  message closed and gameplay resumed. The fresh menu run also verifies the
+  unchanged original count/file screens. No dispatch misses were recorded.
+- `tools/make_coop_pipe_fixture.py` makes an explicitly staged **copy** of a
+  local schema-2 YI2 entrance state (slot 9). It places one actor on the open
+  pipe in screen F and the other on screen E, or places both on the pipe. It
+  assigns distinct big/fire power-ups and mushroom/flower reserves. This is an
+  offline test fixture, not evidence of naturally reaching that location.
+  The source state is unchanged; the live run uses ordinary Down input and the
+  original collision, pipe animation, fade and loader.
+- `native-coop-pipe-mario.csv` and `native-coop-pipe-luigi-fixed.csv` each verify
+  either actor can take the team from sprite data `$07C532` to `$07C57F` (YI2's
+  underground room), with exactly one sublevel increment, five lives, balanced
+  stack 511, and independent equipment/reserves retained. The Luigi run has
+  582 destination actor records and is byte-identical with scheduler bounce
+  disabled/enabled (`native-coop-pipe-luigi-floor.csv` versus `-fixed.csv`).
+- `native-coop-pipe-both-fixed` verifies simultaneous entry selects primary ID
+  0 and increments the sublevel count once. Slot 15 is saved during the outgoing
+  fade, then restored; all 398 destination actor records from the first pass
+  match the replay in order, including the frozen entrance animation and
+  later independent movement. Frame 610 shows both actors in the underground
+  room. `tools/check_coop_pipe_trace.py` checks these invariants. Counters freeze
+  during pipe animations, so replay validation compares ordered records rather
+  than treating gameplay/world counters as a unique frame key.
+- Those pipe runs use the dispatch-boundary correction below. The earlier
+  `native-coop-pipe-both.csv` run exposed a skipped compiled sprite handler and
+  is not acceptance evidence. Corrected runs recorded no dispatch misses or
+  unresolved-abandon messages. Hook coverage is now 12 compiled sites and
+  three interpreter sites.
+- The shared offline `tools/coop_fixture.py` parser checks guard/native/core
+  checksums and field-layout identity before creating copied fixtures. Both
+  pipe and `make_coop_checkpoint_fixture.py` use it. No live state is patched.
+- `native-coop-checkpoint-waiting` stages small Mario in a recovery wait while
+  small Luigi approaches YI2's tape through normal Right input. At simulation
+  frame 436 both upgrade; Mario retains the upgrade flag while waiting and
+  returns big at frame 582 with 120 protection ticks. Reserves remain mushroom
+  and flower, lives remain five. In `native-coop-checkpoint-mario`, Mario's
+  tape contact upgrades himself and preserves fire Luigi throughout.
+- `native-coop-checkpoint-state` saves after the upgrade while Mario still
+  waits. All 484 repeated actor records match after restore, including return
+  size/protection and reserve ownership. `native-coop-checkpoint-retry` starts
+  from the recovered checkpoint state with the timer staged to expire. It
+  charges exactly one shared life (five to four), publishes the midpoint flag,
+  and restarts both small at the original YI2 midpoint entrance (center X 2328),
+  with separate reserves intact. Frame 880 shows the restarted team. The timer
+  was changed only in an offline copied state, not during execution.
+- `tools/check_coop_checkpoint_trace.py` checks checkpoint upgrades, preserved
+  stronger power, pending recovery upgrades, exact state replay, and midpoint
+  retry invariants. No dispatch misses or unresolved-abandon messages occurred
+  in these runs. Hook coverage is now 13 compiled and three interpreter sites.
+
+### Goal tape validation (2026-09-23)
+
+- `native-coop-goal` stages positions near YI2's original goal and uses real
+  controller input. Luigi owns the single exit while Mario remains behind;
+  powers big/fire, reserves mushroom/flower, five lives and stack 511 persist.
+  Frame 550 shows both actors in the original course-clear walk. The complete
+  victory trace reaches mode `$0C` with one shared timer decrement every two
+  frames, one peace phase, and one spotlight close.
+- `native-coop-goal-contacts` uses an explicit offline fixture with a second
+  copy of the naturally loaded goal sprite. Simultaneous normal exits choose
+  Mario, while Luigi's fifty-star contact wins the reward over Mario's six.
+  The original fifty-star graphic is visible at frame 140; exactly three lives
+  are awarded (five to eight). This synthetic conflict is not campaign evidence.
+- `native-coop-goal-secret-timeout` makes Luigi's tape secret and expires TIME
+  on the contact frame. The result is Luigi's secret exit and fifty stars;
+  Mario returns small, Luigi stays fire, both retain reserves, and no life is
+  charged. Captured WRAM confirms TIME 000 and `SecretGoalTape=1`. Both scheduler
+  settings produce identical 1,126 actor records. The final life total is nine:
+  native `05:CC77` independently grants one life when the existing bonus-star
+  tens digit matches both final time digits (zero/00), in addition to the tape's
+  three lives. The checker explicitly accounts for this original rule.
+- `native-coop-goal-waiting` starts Mario in a recovery bubble. Luigi's clear
+  brings Mario back small immediately for the scene, preserving his mushroom
+  reserve and awarding the same single fifty-star reward.
+- `native-coop-goal-state` restores the same mid-victory snapshot twice;
+  all 936 actor records through the scene transition match exactly.
+  `native-coop-goal-reenter` finishes the clear, returns to the overworld, and
+  enters YI3 using the normal selection button. Its 1,246 subsequent actor
+  records resume normal gameplay with big Mario/fire Luigi and separate
+  reserves; a fresh Luigi input moves only Luigi. Frame 1410 shows both actors
+  in that next level.
+- `tools/make_coop_goal_fixture.py` stages an entrance copy near the goal or,
+  with `--contacts normal|secret`, copies a naturally loaded goal into an empty
+  stock sprite slot for conflict tests. Capture that source with a normal
+  scripted save before crossing; script state slots are 0..15. `--timeout`
+  sets the divider to 0, because `UpdateStatusBar` decrements it before its BPL
+  test. These tools never modify or pause a running guest.
+  `tools/check_coop_goal_trace.py` validates owner/reward priority, single scene
+  cadence, equipment, stack, life totals, replay, and execution-mode equality.
+  No dispatch misses or unresolved-abandon messages occurred in accepted runs.
+  Hook coverage is 18 compiled and three interpreter sites.
+
+Goal sphere extension:
+
+- `native-coop-sphere` uses an offline fixture replacing the loaded goal with
+  the stock sphere type and its ROM tweaker data. Real Luigi movement triggers
+  the single team clear; all 1,196 actor records pass the same victory,
+  equipment, stack, and life invariants. Frame 70 shows the sphere before touch.
+- `native-coop-goal-mixed` stages Mario on a sphere and Luigi on a fifty-star
+  tape in one contact frame. Mario wins the normal-exit tie, and Luigi's tape
+  still awards fifty stars and exactly three lives. Frame 140 shows the original
+  fifty-star graphic with both actors. All 1,126 actor records are identical
+  under the default and compiled-bounce scheduler settings.
+- The mixed fixture aligns the true-frame parity with the sphere's slot:
+  stock sphere contacts run on alternate frames, whereas tape contacts run
+  every frame. This preserves the original contact query. These fixtures
+  validate the adapter; Sunken Ghost Ship water/campaign coverage remains open.
+  `--sphere` and `--contacts normal --mixed-sphere` reproduce the two cases.
+  Build and hook checks pass with 20 compiled and three interpreter sites;
+  accepted runs have no dispatch misses or unresolved-abandon messages.
+
+Native switch scene extension:
+
+- `tools/make_coop_palace_fixture.py --entrance` stages a copied state for the
+  original room loader, selecting screen exit `$CA` with the overworld submap
+  selector zero. `05:D796` derives the level's high byte from that selector;
+  a nonzero selector would load `$1CA`, the YI2 underground room. Save the loaded
+  room normally, then use the tool without `--entrance` to stage players above
+  the existing yellow switch. The tool verifies its actual Map16 tile and
+  unpressed switch flags; it adds no switch tiles or replacement scene.
+- `native-coop-palace` starts Mario waiting and lets Luigi fall onto the switch.
+  One exit belongs to Luigi, with native end timer 8. Mario returns small with
+  mushroom reserve; Luigi remains fire with flower reserve. The original yellow
+  flag becomes 1, the stock message is visible at frame 230, and native mode `$0B`
+  is reached with five lives. After the clear, core frame/recovery clocks remain
+  frozen while the original scene progresses. All 1,378 actor records match in
+  `native-coop-palace-compiled`. No dispatch misses occurred.
+- `tools/check_coop_palace_trace.py` checks the one-time activation, complete
+  8-to-0 scene countdown, unchanged shared lives, preserved equipment, waiting
+  actor return, frozen core clock, and scheduler equality. The C core tests also
+  reject ordinary gameplay events while frozen and verify an explicit scripted
+  exit resolves once without advancing recovery/protection clocks.
+- `native-coop-goal-dead-winner` adds same-frame timeout to the normal-goal tie.
+  Mario still owns the winning exit, returns small beside surviving Luigi, and
+  retains his reserve. Luigi's fifty-star reward is preserved. All 1,126 actor
+  records pass the exit/cadence/life checks, including the native TIME 000
+  matching-digit life; no death life is charged.
+
+### Carried-object ownership and transport
+
+`CoopMachine` owns a dynamic entity registry. Stable entity IDs are distinct
+from reusable native sprite slots, with explicit owner, target, kind, type and
+ownership flags. Reinitializing a slot at `07:F722` retires its old identity and
+clears old carrier/mount references. The normal and extended slot bounds are
+stock engine capacities (12 and 10), independent of the session roster count.
+The registry is also the foundation for later mount/projectile adapters; those
+behaviors are not implied by the existence of their record flags.
+
+Every normal sprite runs once through the scoped call, including sprites bound
+to the primary actor. A native pickup changing status to `$0B` records that
+actor as owner. An object already being carried always binds its owner, even
+when another actor is nearer. Native release, throw, death, removal and
+conversion retire carried ownership. Throw-block allocation uses the bound
+actor at native sprite initialization. A balloon uses attached ownership,
+without consuming the actor's exclusive hand-held object reference; complete
+balloon interaction rules still need validation.
+
+Occupancy bookkeeping mirrors `01:808C`: `$1470` (`CarryingFlag`) receives
+`$148F` (`IsCarryingItem`), then `$148F` is cleared for the coming sprite pass.
+The initial secondary adapter had these two bytes reversed; the source/symbol
+audit corrected that ordering. The native pickup and carried routines then
+publish each actor's own flags.
+
+Catch-up executes the native `01:A015` Down-release branch before recovery
+changes the actor's coordinates, leaving the object at departure. A failed
+attempt discards all owned entities before entering the loader, including an
+object held by a survivor when the shared timer expires. Clear arbitration
+still takes priority over retry cleanup.
+
+The native cleanup at `02:ABF2` assumes one carried object and moves it into
+slot zero. Its co-op adapter retains the owned carried records, runs the shared
+cleanup once, then recreates every transported object with the same native
+`07:F7D2` initializer and preserved type, position and palette. New slots are
+assigned deterministically; logical IDs and owners survive. Room initialization
+seeds each actor's carrying flags from its own object. No unowned carried sprite
+is assigned to an arbitrary nearby player.
+
+`CNR1` schema 3 appends an `ENT1` section after the actor pictures: record count,
+next identity, persistent level number, then 28-byte little-endian records
+(`id`, `kind`, `slot`, `type`, `owner`, `target`, `flags`). Preflight checks ID and
+slot uniqueness, bounds, valid player references, mutually exclusive ownership
+flags and both directions of held/mount references. The entire native container
+remains CRC protected and load remains transactional. Schema 2 imports only
+when its actors have no held, mounted or attached state; ownership cannot be
+reconstructed safely from an old single-player slot. Ordinary campaign SRAM
+and its separation from co-op SRAM are unchanged.
+
+Focused evidence (2026-09-23, copied/staged fixtures, original pickup routines):
+
+- `native-coop-carry-near.csv`: 560 actor records. Luigi retains the same key
+  during nine frames when Mario is nearer and also holds grab. After release,
+  Mario picks up that same ID. Slot 4 captures actual held ownership and both
+  native carry flags in schema 3.
+- `native-coop-carry-pipe.csv` and `native-coop-carry-pipe-compiled.csv`:
+  **1,444 identical records** with bounce disabled/enabled. Big Mario and fire
+  Luigi independently pick up keys in slots 7 and 4; Luigi enters the YI2 pipe.
+  Both keys arrive in level `$1CA`, relocated to slots 1 and 0, with unchanged
+  logical IDs/owners, equipment and reserves. Slot 6 preserves both held keys.
+- `native-coop-carry-state.csv`: load that two-key snapshot twice and replay
+  the same input; **306 consecutive actor records match exactly**. The initial
+  neutral load input releases the objects through native logic; the saved
+  registry and guest flags are separately verified as held at the boundary.
+- `native-coop-carry-catchup.csv`: 580 records. Luigi holds the key through
+  separation grace 59, drops it at x=99 on frame 463, then safely returns at
+  x=4748 on frame 486 with his power/reserve and no new protection.
+- `native-coop-carry-timeout.csv`: 1,008 records. Timeout charges one shared
+  life (5 to 4), clears the surviving carrier's ownership before retry, and
+  returns both players small to level `$106`, keeping reserves 1 and 2.
+- The simultaneous goal/death/TIME-000 regression still passes all 1,126
+  arbitration/victory records after this scheduler change. All accepted runs
+  retain stack `$01FF` and produce no dispatch misses.
+- Portable entity/snapshot tests pass at rosters 2/3/4/17, including slot reuse,
+  forged duplicate IDs, wrong owners, every-byte corruption and truncation.
+
+Reproduction tools: `make_coop_carry_fixture.py`, `check_coop_carry_trace.py`, and
+the shared schema-2/3 `coop_fixture.py` parser. `--pipe` deliberately stages two
+stock keys; `--catchup` stages excessive separation; `--timeout` stages TIME 001
+with sixty ticks left on its divider. These are focused cases, not campaign
+coverage. An immediate script `savestate` after a `press` now captures the last
+held frame before the script's neutral release frame; delayed snapshots retain
+their explicit delay. This makes held-object snapshots reproducible.
+
+The October contact adapter now arbitrates eligible overlapping grabs through
+the native default contact routine. Remaining work includes custom loose-object
+contacts and combined solid-object responses, every carried-object/entrance type,
+balloon conflicts, mounted keyholes, mounts, projectiles and full campaign validation.
+
+### Carried goal rewards
+
+The original `00:FB00` gift table reads the currently bound player's power,
+reserve and riding state. At a co-op clear, each invocation now binds the
+carried object's explicit owner, cancels that actor's star as the original
+clear does, and executes the unchanged native conversion once. The completed
+registers and scratch return to the original world conversion loop; the
+previous actor context is restored. This applies to the roster, with no
+Mario/Luigi selection built into reward conversion.
+
+The gift's `07:F722` initialization retires the carried object's identity. Its
+native status is briefly still `$0B` during initialization, before `00:FB00`
+sets `$0C`; that interval must not claim the replacement as another carried
+object. A scoped conversion guard prevents this false claim. The replacement
+is a new, unowned world reward that either eligible actor can collect, and the
+former carrier's hand reference and both carrying flags are cleared. Snapshot
+schema 3 already represents all of this state.
+
+The first two-shell test exposed the old failure: converting Mario's object
+while Luigi was the goal winner attempted to assign both objects to Luigi and
+hit the exclusive-ownership check. The corrected adapter completes the scene.
+Focused validation (2026-09-23):
+
+- `native-coop-goal-carry.csv` / `native-coop-goal-carry-floor.csv`: **1,194
+  identical actor records**. Both original pickup routines acquire a shell;
+  Luigi crosses the naturally loaded tape. Big Mario has a flower reserve and
+  gets the native mushroom gift. Big Luigi has a mushroom reserve, so the
+  native duplicate-item rule makes his gift a 1-up. The viewed running frame
+  capture shows the two different rewards above their former carriers.
+- `native-coop-goal-carry-swapped.csv`: swapping reserves swaps those gifts,
+  with Luigi still owning the exit. The saved native sprite slots are `$0C`,
+  contain the expected distinct types, have new unowned IDs, and retain no
+  carried references or flags. The original 1,194-record victory completes.
+- `native-coop-goal-carry-replay.csv`: restoring the actual converted-gift
+  snapshot repeats **1,100 identical actor records** through native victory,
+  without resurrecting either shell. All successful runs have stack `$01FF`
+  and no dispatch misses. Release build passes; hook coverage is now 31
+  compiled boundaries and three interpreted boundaries.
+
+`tools/make_coop_goal_carry_fixture.py` stages loose shells and reserves in an
+offline copy of a naturally loaded YI2 goal. Other nearby enemies are removed
+from that fixture; a four-frame native sprite contact cooldown lets the
+scripted grab arrive before neutral input would kick the shells. This isolates
+the conversion case. Hold `y+p2.y+p2.right` for 45 frames, save, and allow the
+native victory to finish. `--swap` exchanges reserves.
+`tools/check_coop_goal_carry.py` checks both the running trace and actual saved
+registry; `--replay` checks two loads of that converted state. Mounted reward
+selection still requires the independent mount adapter and its own evidence.
+
+### Keyhole validation
+
+Focused evidence (2026-09-23). The keys are picked up by original routines;
+holes, conflicting tapes and exceptional starting counters are explicit offline
+fixture inputs, not claims about original level layouts. All runs use the
+original ROM, Screen-based spawning, an uninterrupted runtime and stack `$01FF`,
+with no dispatch misses. Release build, hook coverage (30 compiled boundaries
+and three interpreted boundaries), and core tests for 2/3/4/17 actors pass.
+
+- `native-coop-keyhole.csv` / `native-coop-keyhole-compiled.csv`: 320 identical
+  actor records. Luigi's slot-4 key opens the hole while Mario retains his
+  separate slot-7 key. The accepted clear leads to exactly 122 world frames of
+  native window animation, game mode `$0B`, secret exit `$02`, five lives,
+  unchanged equipment/reserves and no accepted pause during the scene. Running
+  frame captures show the native keyhole window and its center.
+- `native-coop-keyhole-both.csv`: two accepted keyholes on the same frame,
+  one commit, Mario wins, 320 actor records. `native-coop-keyhole-waiting.csv`
+  has Luigi finish while Mario awaits recovery; Mario returns small, keeping
+  reserve 1, and Luigi retains fire/reserve 4.
+- `native-coop-keyhole-conflict.csv`: simultaneous normal tape and keyhole at
+  TIME 000. Luigi's secret exit wins; Mario's native timeout death still makes
+  him small, but no shared life is charged. A dead actor's invalid physical
+  tape touch awards no stars. The two valid exit requests resolve once.
+- `native-coop-keyhole-tape.csv`: simultaneous live Mario tape contact earns
+  fifty stars while Luigi wins the secret exit. The actual shared star counter
+  receives 50, and the native life queue grants exactly three lives (5 to 8).
+  The keyhole cadence stays 122 frames, with no time-score tally substituted.
+- `native-coop-keyhole-secret-tie.csv`: marking that tape as another secret exit
+  instead chooses Mario. The tape's original victory sequence runs, no keyhole
+  window starts, and 1,126 actor records pass the existing goal validator.
+- `native-coop-keyhole-bonus.csv` / `native-coop-keyhole-bonus-floor.csv`:
+  **1,174 identical actor records** through the same mixed exit starting at
+  eighty stars. The result is eight lives, thirty remaining stars, secret route
+  `$02` and original bonus-room `$100` entry with both actor states intact.
+  A running capture confirms the original bonus-room presentation.
+- `native-coop-keyhole-replay.csv`: an actual mid-keyhole state repeats 166
+  identical actor records. `native-coop-keyhole-reward-replay.csv` repeats 200
+  records from a snapshot with stars already credited and two lives still in
+  the native queue; final totals remain fifty stars and eight lives.
+
+Reproduction tools: `tools/make_coop_keyhole_fixture.py` and
+`tools/check_coop_keyhole_trace.py`. From an unowned YI2 entrance copy, the
+default fixture has two loose keys and Luigi's hole; `--both` supplies both
+holes; `--waiting` makes Mario await recovery. Hold `y+p2.y+p2.right` for Luigi's
+case or `y+right+p2.y+p2.right` for both. Save during the 122-frame animation
+for the replay check. For conflicts, first capture an actual two-key state
+while holding `y+p2.y`; use that copy with `--contacts`, optionally `--timeout`,
+`--tape-secret`, or `--bonus-start 80`. The added hole uses a higher sprite slot
+so its native query observes the held keys before the script's neutral load
+frame releases them. The trace's `exit_candidates` proves simultaneous contact;
+star/life counters distinguish a recorded award from a credited one.
+
+### Disabled-mod input correction
+
+Tracked as `beads-8wg.3.27`. The two-key compiled/interpreted comparison exposed
+an existing inactive Falcon hook at `01:80D2`: `smw_falcon_clear_carry_bridge`
+unconditionally removed Y/Down from the native controller bytes, preventing
+Mario from grabbing a key. A running pre-opcode trace localized the change
+between `01:80AC` and `01:80AF`, before the co-op sprite adapter. The temporary
+probe was removed after diagnosis.
+
+The helper now clears its private latch and returns without editing input when
+Falcon is inactive. Its four cleanup call sites (handoff, after-physics fallback,
+sprite pass, and state-load paths) share that guard; active Falcon cleanup keeps
+its existing behavior. `falcon_kick_guard_test` now exercises all 256 native
+controller-byte combinations across inactive physics, sprite and load hooks.
+The focused test passes alongside its existing active Punch/Kick/Dive checks.
+Its sprite-only fixture supplies empty-terrain stubs for the newer block-query
+dependencies. The repaired two-key runtime comparison above proves the original
+compiled failure no longer occurs. No framework/compiler change was required.
+The standalone Windows `test/falcon_kick_guard/build.bat` points to the current
+game-owned `src/foreign_controller.c` so this regression remains reproducible.
+
+### Compiler table-boundary correction found by co-op validation
+
+The compiled simultaneous-entry test exposed an existing dispatch decoder bug
+at `01:85C8`: the sprite-main table was inferred as 54 entries. Unused sprite
+`$36` points to declared data at `01:E41F`, but valid sprites `$37..$C8` follow
+it. The emitted out-of-range path skipped their handlers. The authoritative
+inline table occupies `01:85CC..875E`, already declared in `recomp/bank01.cfg`.
+
+The framework decoder now uses an aligned data region beginning exactly at an
+inline dispatch table as its byte boundary. Within that boundary, an unused
+data-target slot retains its index and target; data targets remain ineligible
+for compilation and use the interpreter if reached. Without an exact table
+boundary, the existing conservative inference remains in effect. This also
+prevents reading adjacent data as additional table entries. No ROM bytes or
+generated C were hand-edited.
+
+An audit of 86 stock-ROM inline `ExecutePtr`/`ExecutePtrLong` sites found these
+17 changed entry counts. The other 69 are unchanged. The byte boundaries come
+from existing game metadata, not new per-sprite exceptions.
+
+| Dispatch site | Containing label | Previous entries | Corrected entries |
+|---|---|---:|---:|
+| `01:8133` | HandleSprite | 14 | 13 |
+| `01:8179` | CallSpriteInit | 203 | 201 |
+| `01:85C8` | CallSpriteMain | 54 | 201 |
+| `01:BDE6` | Magikoopa | 7 | 4 |
+| `01:C550` | TouchedPowerUp | 10 | 6 |
+| `01:D119` | CODE_01D116 | 3 | 2 |
+| `01:D75E` | CODE_01D75C | 4 | 3 |
+| `02:B008` | CallGenerator | 16 | 15 |
+| `02:B3AC` | CODE_02B3AB | 7 | 3 |
+| `02:D40B` | Layer3SmashMain | 7 | 5 |
+| `02:DCDD` | CODE_02DCB7 | 6 | 4 |
+| `02:DFBE` | CODE_02DF93 | 4 | 3 |
+| `02:E132` | CODE_02E0CD | 4 | 3 |
+| `03:8A48` | BowserStatue | 5 | 4 |
+| `03:9244` | FallingSpike | 3 | 2 |
+| `0C:C9BC` | CODE_0CC9B3 | 7 | 6 |
+| `0C:CA45` | CODE_0CCA2F | 5 | 4 |
+
+The 17 focused decoder/padding/PHK-PER-dispatch tests pass, including new short
+and long table regressions with an interior unused data target and a plausible
+pointer immediately beyond the table. Regeneration emits 3,237 exact AOT and
+622 interpreter variants; the Windows release build passes. Full campaign
+coverage remains outstanding. The owner approved the post-class-fix review
+required by `NES/PRINCIPLES.md` section 8b on 2026-09-23. The framework fix is
+committed as `84177df` on the isolated `feat/native-coop-runtime` branch.
+
+### Owner playtest corrections: terrain, death, recovery and HUD
+
+Tracked as `beads-8wg.3.28` on `feat/native-simultaneous-coop` (2026-09-23).
+These corrections supersede the earlier presentation and immediate-retry
+behavior described in the implementation history above.
+
+**Terrain and camera.** The owner confirmed the grass columns existed before
+either player died. In `owner-bugs-before/wipe.csv`, separation changed the
+camera focus from the group center to its leader, jumping the camera from 58
+to 209 in one frame. The original `05:86F1` terrain streamer updates one column
+at a crossing; that jump skipped columns and left stale VRAM tiles. The older
+`native-coop-recover-luigi-check/frame-000660.swr` contains 56 static tile
+mismatches against the original Map16 definitions, including solid platform
+graphics where Map16 says air.
+
+The native camera now follows a persistent focus, moving at most four pixels
+per axis per frame. Removing a dying actor preserves the current framing and
+then follows survivor movement with that offset. Death poses are excluded
+immediately; a team with no active actors freezes camera streaming deltas.
+Recovery releases the offset gradually. Room initialization resets the focus.
+Original room bounds, parallax and camera routines still apply. This prevents
+the discontinuity that skipped terrain streaming; it does not replace Map16
+or manufacture terrain. The corrected Luigi recovery capture at frame 880
+has all 700 checked visible static tiles matching the native level data.
+
+**Death and retry.** Individual deaths request native `SFX_FALL` (`$1DF9=$23`)
+once, retain level music, and allow survivors/world simulation to continue.
+The committed team-failure outcome charges one shared life, requests original
+death music (`$1DFB=9`) once, and keeps the original actor death timers/motion
+running before the room loader proceeds. Timeout gives all remaining actors
+the same native death pose. Camera/world freeze through the final sequence.
+Zero lives stay zero rather than being reread as 256 from guest `$0DBE=$FF`.
+
+The castle scene was an incorrect retry destination: `$7E:D000`, originally
+the overworld translevel map, is reused as level Map16 RAM. Direct retry had
+reread that overwritten map and selected castle `$101` instead of YI2 `$106`.
+The new `05:D83E` hook supplies the preserved current translevel to the original
+`05:D8A2` translation/submap path. Original entrance/checkpoint loading follows;
+there is no special-case YI2 destination or custom castle scene.
+
+**Recovery and overlap.** Bubbles are now visible during death recovery,
+catch-up, and separation warnings. Death recovery waits three gameplay seconds
+after the native animation; catch-up displays its bubble for at least half a
+second. Placement tries offsets `+24,-24,+40,-40,+56,-56` beside a survivor,
+preserves the feet position across different actor heights, requires support
+under both feet, and checks body/hazard/sprite/active-player clearance. If all
+candidates are unsafe, the bubble remains. Mario's completed native body/cape
+picture masks overlapping secondary pixels at the same PPU priority, using
+primary/stable ID order. Original world and opposite-fence priorities remain.
+
+**Original reserve art.** Each actor gets the original BG3 reserve box decoded
+from VRAM, with original item tiles and palette selection from ROM tables
+`00:8DFA`, `00:8DFE`, and `00:8E02`. Only the red M / green L corner letters are
+new. The original single box/item is captured out of the game picture to avoid
+duplication. At native width the original TIME label/digits move 24 pixels
+right to fit the second box; shared lives, bonus stars, coins and score remain
+visible once. Both the native PPU and wide renderer honor the capture. Storage
+grows with the roster, and additional reserve boxes wrap into rows when needed.
+Normal save-file menus and isolated co-op saves remain the session interface.
+
+**Snapshots.** Machine schema version 4 appends a 32-byte `CAM1` record after
+the existing entity records: focus position, previous group center, active
+count, initialized flag and hold flag. CRC, length, counts and values are
+validated before replacing a live machine. Versions 2 and 3 remain readable
+under their existing ownership restrictions; their focus initializes on the
+next active frame. The core `COOP` schema and normal SRAM namespace are unchanged.
+
+Validation artifacts are local under `build-adaptive/playtest/` and are not
+committed because states/raster captures contain ROM-derived data:
+
+| Evidence | Result |
+|---|---|
+| `tools/test_native_coop.py`, `tools/test_coop_hooks.py` | Roster 2/3/4/17, recovery, camera continuity, atomic snapshots, and compiled/interpreted hook coverage pass. |
+| `owner-feedback/0/trace.csv`, `1/trace-0.csv` | Both individual deaths preserve five lives, request the short cue, leave world unlocked, preserve stationary survivor framing, and recover beside the survivor with 120 protection ticks. |
+| `owner-feedback/1/trace-{0,1}.csv` | 1,480 identical compiled/interpreted actor records. |
+| `owner-feedback/both/trace-{0,1}.csv` | 1,354 identical records; complete native death sequence, one life/music charge, correct `$106` retry, reserves retained. |
+| `owner-feedback/timeout/trace.csv`, `gameover/trace.csv` | Full actor death sequences and single life/music charge; zero-life result preserved through native game-over transition. |
+| `owner-feedback/checkpoint/trace.csv` | Timeout finishes the native death sequence, charges one life, and retries at the original YI2 midway entrance with both actors small and reserves retained. |
+| `owner-feedback/overlap/trace-{0,1}.csv` | 1,480 identical records. Coincident small Mario/big Luigi capture preserves all 197 independently decoded opaque Mario pixels. |
+| `owner-feedback/native`, `owner-feedback/overlap`, frame 100 | Inspected original reserve boxes, mushroom/feather contents, M/L labels, TIME and shared counters at 256 and 342 pixels; Mario overlap pixels also pass at native width. |
+| `owner-feedback/both-replay.csv`, `1-replay.csv` | Actual mid-death version-4 states replay 1,070 and 1,196 identical actor records respectively, including final death/retry or bubble/recovery. |
+| `owner-recovery-luigi`, `owner-recovery-mario` | Natural recorded-input recovery checks pass for either player; inspected visible bubbles and adjacent recovery. |
+
+Reproduction: `tools/make_coop_feedback_fixture.py SOURCE COPY --scenario`
+accepts `0`, `1`, `both`, `timeout`, `gameover`, or `overlap`, starting from an
+unowned version-2 YI2 entrance copy. It clears normal sprites and explicitly
+stages positions, reserves and native Spiny contacts. `--checkpoint` stages
+the native midway flag for a team retry. Run a finite recorded script through
+`tools/run_adaptive_renderer.ps1`, setting `SMW_COOP_TRACE` and optional
+`SMW_RENDER_DIAGNOSTICS` / `SMW_RENDER_CAPTURE_FRAME`. Use
+`tools/check_coop_feedback.py trace`, `terrain`, and `primary` for assertions;
+`--individual`, `--gameover`, and `--compare` select trace expectations. Actual
+mid-sequence replay states come from running `savestate` commands, without
+pausing or patching those saved camera/death fields.
+
+At this September checkpoint, audio qualification remained open: two 800-frame real-time audio runs with the
+individual-death fixture produced audible-range output at 60.05 FPS and passed
+the cue/music trace checks, but the strict audio-health gate reported 574
+dropped audible samples. Removing the script's mid-run save did not change
+that result. A no-death control reported 1,307 dropped audible samples too.
+All runs had zero output underflows and enqueue failures. This demonstrates
+that sample loss also occurs without the new cue; it does not establish its
+cause or qualify audio health. The audio follow-up is `beads-8wg.3.29`.
+The October producer-pacing and namespace-write corrections now pass the
+recorded control/death/menu-entry cases; current evidence and remaining
+campaign/device qualification are in the October validation report.
+
+This is focused regression evidence, not complete campaign acceptance. Mounts,
+independent projectiles, remaining contacts, exceptional rooms, bosses, bonus
+games and campaign coverage remain under the main implementation issue.
+
+## Mounted recovery, corner badges, and additional Yoshi grants (2026-09-23)
+
+Follow-up owner reports are tracked in `beads-8wg.3.28` and mount work in
+`beads-8wg.3.30`. This increment addresses the buried Luigi picture, badge
+placement, and the block's second egg. The full mount acceptance matrix remains
+open; the limitations below are part of the implementation status.
+
+### Persistent drawing offset
+
+The owner's untouched slot 0 contains Mario riding with `$187A=1,$188B=6` and
+Luigi on foot with `$187A=0,$188B=6`. Luigi's collision feet match the pipe top;
+`00:E33E` adds the stale six-pixel saddle offset when drawing. Recovery had copied
+the mounted anchor's native pose. The secondary body entry bypasses `01:EA70`,
+which normally clears that offset before drawing.
+
+Recovery now explicitly sets riding state from the returning actor's owned
+mount and resets `$188B`. Both on-foot draw paths clear the saddle offset,
+including the first frame after importing an older snapshot. Mounted catch-up
+uses the mounted collision shape, checks 48 pixels of vertical clearance and
+a 32-pixel width, then moves the same owned mount with its returning rider.
+Death detaches the mount and returns the actor on foot. Unsafe placement still
+waits in the bubble.
+
+### Original reserve art with corner badges
+
+The original blue border and item tiles remain unchanged. A seven-pixel black
+badge with a five-pixel red M or green L overlaps the upper-left corner instead
+of floating above the box. Occupied-box captures exposed an additional problem:
+the wide renderer moved the original reserve sprite before testing its overlay
+removal rectangle. It now checks the native coordinates before relocation,
+preventing a duplicate item from appearing between the two boxes. Both occupied
+boxes were inspected at 256 and 342 pixels. No save menu changes were made.
+
+### Mount ownership and block grants
+
+The native `02:89E1` egg path previously consulted SMW's singleton baby/adult
+Yoshi state and selected `$78` (1-up) whenever another Yoshi existed. The adapter
+now counts active adults, babies and pending Yoshi eggs against the session
+roster size, excluding the egg slot currently being allocated. It selects the
+original adult/1-up table at `02:89FB`; native egg motion and hatching still run.
+At the cap the native alternate reward is used. Each successful allocation
+consumes one of the source's N rewards, including an alternate reward.
+
+Sources are a dynamic collection keyed by full room number, layer and aligned
+Map16 coordinates, with the original tile and consumed reward count. The stock
+Yoshi block generates tile `$16` (used block with item memory), not only `$0D`.
+The `00:C0C1` and `00:C0FB` hooks preserve its item-memory bit and restore the
+original Map16/VRAM tile while rewards remain. The last reward uses the original
+used-block path. Source records survive subroom visits and snapshot reloads;
+a new attempt clears them. The tested YI2 source is `$106`, layer 0, `(864,336)`,
+tile `$126`; no level or source coordinate is hardcoded in the adapter.
+
+Adult Yoshi records now own their native globals, rider identity and private
+rendered pictures. Selection prefers the existing owner, otherwise the nearest
+eligible unmounted actor with primary/stable-ID tie breaking. An actor cannot
+claim two mounts. Native sprite updates run once per world frame, and each mount
+runs the original `01:EA70` animation/drawing/mouth stage once with its own state.
+Its dynamic head/body tiles are captured before another mount changes the same
+native DMA slots. The original singleton draw is bypassed after those scoped
+draws. Dismount releases ownership; death detaches; catch-up retains ownership
+and freezes that mount's mouth stage while waiting.
+
+The 21 scoped bytes are `$0DC1,$13C7,$1410,$141E,$14A3,$18AC..$18B3`,
+`$18D4..$18D6,$18DA,$18DE,$18E7,$18E8,$191C`: entrance carry/color, wings,
+tongue/swallow/walk/start-eat/duck state, mouth coordinates, berry counts/type,
+egg contents/lay timer, stomp/growth and key flag. Native per-sprite tables keep
+the mouth slot, tongue position and animation. `$18DF/$18E2` are derived from the
+currently bound mount. Roster and source storage remain dynamic; the 12 native
+normal-sprite slots are a guest hardware/game limitation, not a player-count
+constant. Mount pictures have a checked 16-piece capacity.
+
+### Snapshot version 5 and evidence
+
+The mount implementation introduced CNR version 5 with a `YSH1` extension after
+`CAM1`. The October fireball work extends it to version 6, described in
+[the owned-fireball implementation audit](validation/native-coop-fireballs-2026-10-20.md).
+It contains the adoption flag, stable mount IDs, private globals, pending/visible
+pieces and source records. Length/count/identity/CRC validation occurs before
+atomic replacement. Core tests preserve different mount data and reject corrupt
+picture counts or excess grants for rosters 2, 3, 4 and 17. Versions 2–4 remain
+readable under their existing restrictions. A legacy native ridden Yoshi is
+adopted when exactly one actor identifies its owner. CNR2's missing room number
+is recovered from the original sprite-data pointer table when unambiguous,
+preferring the matching original primary entrance conversion. An unresolved
+legacy room cannot create a source with an invalid saved key. New snapshots
+require this build; normal SRAM and the isolated co-op save namespace are unchanged.
+
+Local, uncommitted ROM-derived evidence is under
+`build-adaptive/playtest/mount-feedback/`:
+
+| Evidence | Result |
+|---|---|
+| `owner-final.csv`, `owner-images/frame-000{100,200}.bmp` | Original owner state imports Mario's mount, clears Luigi's offset to zero, and draws his feet on the pipe. |
+| `control-{0,1}.csv` | 680 identical records for compiled/interpreted dispatch: two independent riders, separate tongue timers, Luigi movement and dismount with Mario remaining mounted. |
+| `catchup.csv`, `catchup-images` | Mounted Luigi waits 30 ticks and returns beside Mario with the same mount identity. |
+| `fall.csv` | Mounted Luigi falls, detaches, completes native death animation and 180-tick bubble, then returns small/on foot with zero saddle offset; Mario remains riding. |
+| `first-grant.sav`, `second-grant.sav` | Two native Yoshi hatches from the same block; first use leaves tile `$126`, second leaves `$132`; state reload between hits preserves consumption. |
+| `second-yoshi.sav`, `at-cap.sav` | Second adult hatches while Mario rides the first; the following capped hit produces native `$78` and exhausts the block. |
+| `control-images`, `native-images`, frames 100/200 | Two original-colored riders and original reserve art with corner badges at 342/256 pixels; occupied reserves have no duplicate sprite. |
+
+The build, `tools/test_native_coop.py`, `tools/test_coop_hooks.py`, and
+`tools/check_coop_mount_trace.py build-adaptive/playtest/mount-feedback` pass.
+Coverage is 36 compiled and three interpreter hook sites. No dispatch misses
+were recorded. These are finite running tests, never paused/stepped observations.
+
+Reproduce fixtures with `tools/make_coop_mount_fixture.py SOURCE COPY --scenario`.
+`riders`, `source`, `source-empty`, and `cap` take a version-5 YI2 entrance copy
+without mounts; `catchup` and `fall` take the actual two-mounted running state.
+Save backups before using test slots 10/11. A grant script waits 60 frames,
+loads slot 10, waits 80, presses `p2.b` for 18, waits 180 and saves slot 11.
+Use the first resulting save as the next input to test repeat use. For control
+parity, load the same two-mounted state, wait 20, press `p2.y` for 1, wait 50,
+press `p1.y` for 1, wait 50, press `p2.right` for 20, wait 20, then press `p2.a`
+for 1; compare `SNESRECOMP_LLE_BOUNCE=0/1`. Run through the normal adaptive
+wrapper with `SMW_COOP_TRACE`; create the capture directory before enabling
+`SMW_RENDER_DIAGNOSTICS`. The staged source fixtures move the camera offline,
+so their initial VRAM is not evidence of correct terrain streaming.
+
+**Remaining mount work:** multiple mounted actors through room/level entrances
+and no-Yoshi rooms, placed/baby egg sources, mouth-object exclusivity and the
+full swallowed-shell/berry/wing/key ability matrix, and campaign coverage.
+The previous carried-object room adapter still does not transport secondary
+mounts. This increment is suitable for testing the reported in-room behavior;
+it does not qualify complete mount support. Audio health remains tracked in
+`beads-8wg.3.29` as described above.
+
+## HUD motion and overworld fade correction (2026-09-23)
+
+The owner's moving HUD report exposed a frame-boundary mismatch. The renderer
+latched the camera before the simulation tick, while co-op placed the reserve
+boxes and TIME using the live camera after that tick. Near a viewport clamp,
+the HUD moved by the difference between those two projections. The original
+movement trace's left HUD origin ranged from 135 to 142 instead of staying at
+139 in a 342-pixel view.
+
+`SmwDrawPpuFrame` now starts the renderer before preparing co-op overlays.
+Co-op uses `SmwRendererNativeOffset()` for all screen-fixed HUD pieces. The
+artwork, corner badges, reserve contents and ordinary save menus are unchanged.
+The corrected trace keeps the HUD origin at 139 through all 300 gameplay
+frames of the same camera traversal (camera 0 through 117).
+
+A separate natural overworld re-entry test found a crash after leaving Yoshi's
+House and entering Yoshi's Island 2. Fade modes are shared by levels and the
+overworld. Co-op classified every fade as a level once a room had initialized,
+so it captured the overworld border's decorative Mario as an actor. That
+native drawing path deliberately sets `$13F9` (PlayerBehindNet) to 3; the level
+actor schema correctly rejects that value. The failure was `Invalid native
+co-op fence side` at the next stage's fade, not the owner's continuing gameplay
+with silent sound.
+
+The renderer's existing scene classification now supplies both co-op latching
+and presentation. `RunOneFrameOfGame` latches the renderer before co-op, and the
+scene classifier reads the current mode even when widescreen is disabled.
+Actual outgoing level pictures persist through their fades; overworld fades do
+not create level bodies or reserve overlays. No actor validation was weakened.
+
+### Reproduction and validation
+
+Local ROM-derived captures are in `build-adaptive/playtest/av-feedback/`:
+
+| Evidence | Result |
+|---|---|
+| `hud-before` | Pixel checker rejects the old build: reserve borders and TIME move during camera traversal. |
+| `hud-after`, `hud-native` | At 342 and 256 pixels, 13 captures each preserve all 468 original blue reserve-border pixels and 70 TIME-label pixels at identical screen positions. |
+| `stage-before` | Natural re-entry terminates at frame 3756 with the invalid fence selector. |
+| `stage-after` | The 4600-frame route completes; captures at 3900/4200/4550 show YI2 after overworld entry. |
+
+The build, `tools/test_native_coop.py`, `tools/test_coop_hooks.py`, and the
+following pixel regression pass. The checker requires camera movement and, at
+wide width, a changing viewport offset; stationary captures cannot pass it.
+The old capture is also checked as a negative control. No dispatch misses
+were recorded.
+
+```powershell
+python tools/check_coop_hud_motion.py `
+  build-adaptive/playtest/av-feedback/hud-after `
+  build-adaptive/playtest/av-feedback/hud-native
+```
+
+For a new motion capture, back up the owner settings and slots 10/11, place the
+actual `mount-feedback/two-mounted.sav` fixture in co-op slot 10, and run
+`tools/coop_hud_motion.script` for 360 benchmark frames through
+`tools/run_adaptive_renderer.ps1`. Enable `SMW_RENDER_DIAGNOSTICS` with an
+existing output directory and set `SMW_RENDER_CAPTURE_FRAME` to
+`100,110,120,130,140,150,160,170,180,200,210,220,230`. Run at adaptive 16:9 and at
+the widescreen mod's `4_3` setting. Restore owner settings and saves afterward.
+`tools/coop_overworld_reentry.script` records the 4600-frame natural route
+through the original menus, with co-op enabled and save A at the starting
+Yoshi's House node; it does not load a state. Back up SRAM before this route.
+
+**Audio status:** the owner confirmed that persistent silence occurred entering
+YI2 while gameplay continued, then asked to set it aside as a possible turbo
+fluke on this fork. The scripted re-entry still produced DSP music samples;
+it did not reproduce persistent silence. No turbo or silence fix is claimed.
+Temporary APU and device-output probes were removed. The earlier strict audio
+sample-loss issue (`beads-8wg.3.29`) was unresolved at that checkpoint; the instrumented
+4600-frame run also failed that gate (66,992 audible samples dropped, two
+underflows), despite reaching the stage. HUD/transition validation does not
+qualify audio health.
+The October integration report supersedes this historical status with upstream
+turbo-recovery evidence, corrected producer pacing and namespace writes, and
+passing bounded audio captures. Full campaign/device qualification remains open.
+
+## Player visibility across wide-screen boundaries (2026-09-23)
+
+The owner supplied an F1 state in cave room `$1CB`: Mario disappeared when
+Luigi walked right, then returned when Luigi walked left. Sprinting Mario from
+the YI2 entrance with Luigi idle reproduced the complementary right-edge
+failure. Both were presentation failures, with the actors alive and no damage
+flashing or catch-up transition causing the disappearance.
+
+The renderer already retained signed horizontal coordinates for ordinary
+sprites, but the native player body/cape helper had no ownership observer.
+Unowned OAM was rejected outside the embedded 256-pixel view. In the cave,
+Mario stayed at world X=52 while the native camera reached 73: the valid tile
+X=-21 was rejected despite still appearing at wide-screen X=52. In the sprint,
+tile X=269 wrapped through the nine-bit OAM encoding to -243 and was rejected.
+
+Two targeted observers in `SmwRendererGuestHook` now cover the shared native
+body/cape helper, for each actor that calls it:
+
+| Native instruction | Enhancement |
+|---|---|
+| `$00:E498`, `BCS +5` | Let the helper finish horizontal tile writes; the host renderer clips full coordinates to the selected viewport. This also removes the helper's older `[-128,384)` drawing limit. |
+| `$00:E49A`, `STA $0300,Y` | Associate that exact tile/attribute image with the full signed 16-bit X still held in A, before it becomes a wrapped OAM coordinate. |
+
+This uses the existing renderer ownership/latching path. The original hidden
+tile, vertical cull, invulnerability flash, palette, animation, OAM priority and
+P1 overlap rules remain in force. No simulation, camera or recovery policy was
+changed. Native width and disabled widescreen do not activate these observers.
+There is no roster-size constant or secondary-player exception in the fix.
+
+The two hook sites are installed in generated code by
+`tools/apply_renderer_hooks.py` and explicitly registered for interpreted code
+in `SmwRendererInstallHooks`. Regeneration changed one generated bank; generated
+C was not hand-edited. The pinned ROM bytes at `$00:E498` are `B0 05 99 00 03`.
+The generator requires both sites and was checked for idempotence.
+
+### Evidence and replay
+
+Local private artifacts are under `build-adaptive/playtest/visibility-feedback`.
+`owner.sav` is the owner's unmodified F1 state, copied before testing. Use
+backed-up test slot 10 with the ordinary adaptive wrapper and
+`SMW_COOP_TRACE`/`SMW_RENDER_DIAGNOSTICS`; never pause or step.
+
+| Run | Result |
+|---|---|
+| `cave-long-before`, `cave-after-{0,1}` | 340 frames using `tools/coop_cave_visibility.script` at 21:9. Mario remains visible while Luigi moves away and back. Fourteen captures verify 2,758 opaque native Mario pixels per execution path. |
+| `sprint-before`, `sprint-after-{0,1}` | 360 frames using `tools/coop_sprint_visibility.script`, with `mount-feedback/entrance-v5.sav` in slot 10. Twenty captures verify 4,216 opaque native Mario pixels across the right boundary. |
+| `far-after` | A copied cave fixture places small Mario at X=400 and fire Luigi at X=52, Y=352, camera=0; 32:9 rendering verifies the helper's formerly culled X=400, then camera movement. Four captures verify another 788 pixels. This staged fixture qualifies visibility, not terrain streaming or campaign progression. |
+| `native-after` | The prior two-mounted HUD-motion fixture at 4:3 produces 13 entire BMPs byte-identical to the pre-fix golden captures in `av-feedback/hud-native`. |
+
+For cave captures use frames
+`100,130,140,150,160,170,180,190,200,220,240,260,280,300`. For sprint captures
+use `100,120,130,140,150,160,170,180,190,200,210,220,230,240,250,260,270,280,290,300`.
+Suffixes 0/1 select `SNESRECOMP_LLE_BOUNCE=0/1`. Both complete gameplay CSVs
+and all corresponding BMPs match between compiled and interpreted runs; their
+gameplay CSVs also match the original failing build. The far fixture uses
+`wait 60; loadstate 10; wait 100` as separate script lines, 170 benchmark frames,
+and captures 63/65/70/100. Generate it with `Fixture.actor` and `Fixture.camera`
+from `tools/coop_fixture.py`, always writing a copy.
+
+`tools/check_coop_visibility.py build-adaptive/playtest/visibility-feedback`
+passes: 7,762 independently decoded original OBJ pixels, both boundary cases,
+execution parity, unchanged gameplay/native images, and negative controls.
+The original disappearance images fail the same pixel oracle. The build and
+co-op hook checks pass; no dispatch misses were recorded. Owner saves and
+settings are restored after testing. This fixes the two reported visibility
+cases; the broader co-op acceptance matrix remains open.
+
+## Player contacts in expanded screen margins (2026-09-23)
+
+The owner reported Mario walking through shells and falling through Koopas,
+especially outside the original screen boundary. Controlled copies of the
+YI2 entrance reproduced all four contact failures at 21:9: stomp, shell kick,
+shell pickup, and side damage. Identical world positions worked with camera
+X=192, and failed with camera X=0. This was a contact eligibility bug before
+clipping or response physics ran.
+
+`MarioSprInteractRt` at `$01:A7E4` tests the every-frame-contact tweaker, then
+combines `(sprite slot XOR $13) AND 1` with `$15A0,X` at `$01:A7F0`.
+`$15A0` still means outside the original 256-pixel window. The wide renderer
+draws those sprites, but the following `BEQ` at `$01:A7F3` rejected contact.
+Pinned ROM bytes at `$01:A7EB` are
+`8A 45 13 29 01 1D A0 15 F0 02 18 60`.
+
+The reader/writer audit covered every `SpriteOffscreenX` reference in the
+pinned `third_party/SMWDisX/bank_*.asm`. Its three generic producers are
+`GetDrawInfoBnk1`, `GetDrawInfo2`, and `GetDrawInfoBnk3`; initialization and
+special boss/bonus routines also write it. Crucially, bank 1 has three OAM
+writers that OR this byte into the X-high/size table. It cannot safely become
+a global widescreen Boolean. Other readers include offscreen despawning,
+enemy attacks, and special-object interactions.
+
+One targeted hook at `$01:A7F3` now computes the shared contact decision using
+the sprite's signed world X minus camera X and the current viewport offset:
+`[-left_margin, viewport_width-left_margin)`. It retains the original frame
+parity, accumulator high byte, and all flags other than the native result's
+N/Z. The every-frame tweaker still follows its original bypass. `$15A0`, OAM,
+collision boxes, previous player Y, velocity, contact cooldown, animation/net
+checks, and native response routines are unchanged. Disabled widescreen and
+native-width rendering leave the original decision untouched.
+
+This belongs to the existing widescreen enhancement, so every actor using the
+native shared contact routine receives the same behavior, including solo
+play. No fixed two-player assumption was added. It does not rewrite custom
+sprite contact routines or claim to complete the wider co-op contact matrix.
+`tools/apply_renderer_hooks.py` installs and requires the one native site in
+generated code; `SmwRendererInstallHooks` registers its interpreted equivalent.
+No generated C was edited manually. The hook installer reports 22 logical
+sites and is idempotent. This is a bespoke change to one guest decision, not
+a compiler class correction or multi-site source sweep.
+
+### Contact replay evidence
+
+Private artifacts live in `build-adaptive/playtest/contact-feedback`.
+`owner.sav`, `prior-saves`, `prior-config.ini`, and `prior-state.toml` preserve
+the owner's state before testing. Fixtures use a copied CNR5 YI2 entrance,
+stock ROM sprite tweakers, one controlled slot, and the normal native update.
+`SMW_COOP_CONTACT_TRACE` records actor-bound state before/after each normal
+sprite update without pausing execution. Its `offscreen_x` column deliberately
+continues to show the native flag, including 1 on successful wide contacts.
+
+| Encounter | First successful session frame | Native outcome |
+|---|---:|---|
+| Falling onto Koopa | 756 | Sprite status 8 to 9; player Y speed +70 to -48. |
+| Walking into stationary shell | 766 | Status 9 to 10 (kicked). |
+| Holding run while contacting shell | 766 | Status 9 to 11 (carried). |
+| Walking into live Koopa | 760 | Player animation 0 to 9; Y speed +6 to -112 (small-player death). |
+
+All 24 combinations passed: Mario/Luigi, four encounters, and center/right/left
+of the native window (camera 192/0/384). Before the fix, all four right-margin
+cases failed the contact oracle while all four center cases passed. The same
+oracle verifies the fixed cases. Eight additional forced-interpreter runs
+(Mario/right and Luigi/left, all encounters) produce byte-identical complete
+contact/gameplay CSVs and 16 matching BMPs. The normal sprite dispatcher itself
+already uses the interpreter; this comparison also checks the surrounding
+execution paths. Eight center-case BMPs match the pre-fix captures exactly.
+The build passes and every run was checked for dispatch misses: none recorded.
+
+Recreate an encounter with `tools/make_coop_contact_fixture.py SOURCE OUTPUT
+--kind stomp|kick|pickup|side --actor 0|1 --camera 0|192|384`, then place the copy
+in backed-up slot 10. Use the adaptive wrapper at 21:9, Screen-based spawning,
+150 benchmark frames, and a script starting `wait 60`, `loadstate 10`.
+For stomp, follow with `wait 80`. Otherwise press the chosen player's right
+for 60 frames (also hold Y for pickup), then `wait 20`. Capture frames 70/80.
+Run `tools/check_coop_contacts.py TRACE --kind KIND --actor ACTOR --region
+center|right|left`; `--expect-miss` checks the original failing control.
+
+**Fixture terrain limitation:** camera relocation changes the saved camera
+and co-op focus without reconstructing streamed terrain/VRAM. Some staged
+windows therefore show a 64-pixel visual gap. The owner confirmed the reported
+gap was in one of these automated windows. These fixtures qualify contacts,
+not streaming or ordinary save-load correctness. Separate unmodified entrance
+and owner-F1 loads were captured at frames 65/80/100/140; the inspected captures
+do not show that gap. Original saves and settings are restored for handoff.
+
+## Native contact collection (2026-10-20)
+
+The selected AI target no longer limits default enemy contacts or ordinary
+power-up collection. At `$01:A7E4`, each active actor executes the original
+clipping, frame parity, fence, animation, velocity, previous-Y, cooldown and
+stomp eligibility logic. Scoped hooks stop before the actual response. The
+shared contact timer is restored after each query; the actor-local native
+star-chain reset is retained. World physics and AI still execute once.
+
+Responses distinguish side damage, star/slide defeat, normal and spin/mount
+stomps, safe spin bounces, eligible grabs, and loose-object responses. Every
+valid stomper receives the original player bounce and its own stomp-chain
+increment. One nearest eligible attacker, with primary/stable-ID ties, executes
+the enemy response and creates the shared reward. Nonwinning stompers stop
+before the native shared damage/reward code. Per-player side damage respects
+the original protection and riding rules. An eligible held-object grab wins
+over a loose contact that cannot grab; eligible grabs use distance and the
+same deterministic tie rule. Ownership is assigned to the actual collector.
+
+Ordinary mushroom, flower, star, feather, 1-up and moving-coin collection uses
+the separate `$01:C4AC` routine. Every actor must pass its original clipping,
+source-state, contact-delay and emergence-delay checks. Query execution stops
+at `$01:C4C6`, before removing the item or granting a benefit. The selected
+collector executes the original routine once, including reserve rules,
+transformation, score/life/coin rewards and sound.
+
+Transformation qualification also exposed a shared-freeze bug. The stock
+`$00:CDDD` manual-look routine writes `CameraIsScrolling` into `SpriteLock`
+even with no L/R input. An idle partner could therefore cancel the collector's
+freeze, causing the primary actor's animation timer to decrement twice and
+miss zero. Co-op now skips that manual-look routine entirely, as required by
+the agreed camera policy. The adapter retains the shared freeze while any
+active actor is in a power-up/damage transformation; each actor's native
+animation owns its own timer. One actor finishing cannot unfreeze the world
+while another is still transforming. This state is derived from the roster's
+existing saved animation fields.
+
+The adapters allocate candidates from the actual roster count. Transient query
+guards and scratch never enter a save state. Existing actor/entity ownership
+and the CNR5 snapshot format are unchanged. Hooks are declared in
+`coop_hooks.def`, installed reproducibly in generated blocks, and observed
+at the same PCs by the interpreter.
+
+`SMW_COOP_ARBITRATION_TRACE` records candidates, chosen winner, before/after
+responses, actor benefits, shared reward slots and audit execution counts.
+Optional `SMW_COOP_QUERY_AUDIT=1` compares all 128 KiB of WRAM around each query
+and rejects changes outside native scratch, the observed call-stack region,
+the shared contact timer and the actor's star-chain reset. It does not restore
+the whole world to conceal unexpected writes. Automated acceptance enables
+this audit; ordinary gameplay does not incur the diagnostic scan.
+
+Reproduction tools:
+
+```text
+python tools/test_coop_arbitration_live.py --exe <exe> --rom <stock-rom> \
+  --source <copied-CNR5-YI2-entrance> --out <new-directory> --cameras 0 192 384
+```
+
+Fixtures stage encounters, not outcomes. The wrong-fence-side fixture supplies
+actual Map16 net contacts because the original player code otherwise clears
+the behind-fence flag. Its VRAM is not rebuilt; it cannot qualify fence art.
+Detailed results and retained negative controls belong in
+[the October validation report](validation/native-coop-2026-10-20.md).
+
+This milestone does not complete custom-contact callers, all solid-object and
+reactive-platform responses, ON/OFF arbitration, committed attack
+targets, Yoshi mouth interactions, or campaign acceptance. In particular, the
+custom-interaction tweaker's carry-result continuation remains with its
+individual native caller; it is not replayed generically as a default response.
+The subsequent owned-fireball milestone is documented above; broader projectile
+and ability interactions still require acceptance.
+
+Cape pickup also separates animation setup from the original `$01:C5AE`
+viewport guard. The collector must run the native 24-frame transformation even
+outside the original 256-pixel view, because `GiveMarioCape` still sets the
+shared freeze there. The separate smoke effect retains that guard until its
+limited coordinate representation is extended; widescreen smoke presentation
+remains outstanding.
+
+## Save selection and asynchronous SRAM persistence (2026-10-20)
+
+Selecting the count already prepared at boot resets the roster while retaining
+the current namespace's live SRAM. It does not write and reread the same file.
+The original path spent about 150 ms in a redundant durable write, causing the
+recorded file-menu audio underflow. Actual namespace changes also exposed
+durable writes exceeding 800 ms.
+
+`coop_storage.c` therefore copies the departing namespace's SRAM and exact file
+path on the main thread. A single SDL worker publishes those immutable images
+in order through the framework's `RtlWriteSramImage` service. That service uses
+the existing temporary-file, flush, backup, rename and failure-restoration
+protocol without consulting live SRAM or the currently selected save root.
+It does not change the guest's save opportunities.
+
+Returning to a namespace uses its newest retained image, even if its disk write
+is pending or failed. Enqueue rejection leaves the current namespace, live bytes
+and selection intact. Images stay available until shutdown; obsolete failed
+images cannot overwrite a newer successful write. Shutdown captures the active
+namespace, including while the count menu is open, drains the worker and retries
+the newest failed image for each path. A persistent failure offers a normal
+desktop error dialog with Retry as the default; discarding unsaved data requires
+an explicit Quit without saving choice. Disabled co-op retains its ordinary
+synchronous exit writer.
+
+The host queue is not simulation state: loading a state changes the active guest
+SRAM, while another namespace's queued bytes remain isolated. No worker reads
+or modifies emulated RAM, input, timing, actor state or mutable save paths.
+The queue uses portable SDL threads; the explicit writer retains Windows
+`_commit` and POSIX `fsync`. New platform acceptance is recorded separately.
+
+`tools/test_coop_storage.py` exercises the actual count/menu routing with
+sentinel namespaces and failed enqueue acceptance.
+`tools/test_coop_storage_queue.py` runs the actual SDL worker against a gated
+writer, checking that submission/readback continue while writing is blocked,
+then checks immutable images, ordering, superseded failures, retained failed
+data and retry. The framework's `tests/data_pack/check_sram.py` independently
+tests real file publication, backups and failures for both writer interfaces.
+Live audio results and retained negative controls belong in the October report.
+The game's `Native co-op checks` workflow runs ROM-free core, hook, namespace
+and SDL2 worker tests on Linux. Those checks complement local Windows SDL2/SDL3
+tests; they do not substitute for full game/platform or campaign acceptance.
+
+## Acceptance matrix
+
+| Area | Required evidence |
+|---|---|
+| Inert mode | Disabled mod and enabled-mod solo match stock behavior; normal saves unchanged. |
+| Roster | Core tests at 2, 3, 4, and a larger count; no partner-only assumptions or fixed participation masks. |
+| Input | Independent controllers/shared keyboard, connection loss, reassignment, fresh actions on release. |
+| Simulation | Trace world tick once per frame; deterministic event outcomes independent of actor update order. |
+| Rooms | Horizontal, vertical, water, autoscroll, Layer 2, moving platforms, fences, darkness, Mode 7 bosses. |
+| Abilities | Cape/flight, balloon, swimming, spin jump, independent fireballs, stars, reserve behavior. |
+| Recovery | Single/simultaneous death, catch-up, hazards on boundary, mounts, unsafe placement, timeout, game over. |
+| Progress | Checkpoint upgrade/retry, doors/pipes, conflicting exits, completion/death tie, secret exits. |
+| Contacts | Pickup arbitration, double stomp, ON/OFF ties, projectile ownership, two mouth states and egg grants. |
+| Special | Every boss, bonus games, overworld party, castle destruction, ending. |
+| Persistence | Normal/co-op namespace isolation; state round trips at transitions, bubbles, transformations, bosses; invalid load is atomic. |
+| Presentation | Native width and supported wide aspects, viewport resize, depth/palettes, darkness, both spawn settings. |
+| Execution | Compiled/interpreted paths and no-mod stock oracle comparisons. |
+| Delivery | Build/package checks; sustainable original frame cadence; campaign verification with recorded evidence. |
+
+Use live trace rings, recorded inputs, and screenshots; never pause/step a running
+game for investigation. Use `tools/run_adaptive_renderer.ps1` in this worktree,
+preserve `build-adaptive/playtest` settings/saves, and keep Screen-based spawning
+for owner playtests. Normal in-game pause/disconnect/message behavior requested
+by the owner is a product feature, not permission to pause for instrumentation.
+
+All stock gameplay remains in scope. An exceptional room needs an implementation,
+not silent fallback to alternating turns or removal of a player. Original SMW
+behavior governs aspects not deliberately changed above.

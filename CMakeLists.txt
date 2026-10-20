@@ -96,11 +96,15 @@ set(SMW_RENDERER_HOOK_STAMP ${CMAKE_CURRENT_BINARY_DIR}/smw_renderer_hooks.stamp
 add_custom_command(OUTPUT ${SMW_RENDERER_HOOK_STAMP}
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/apply_renderer_hooks.py
             --gen-dir ${SMW_GEN_DIR}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/apply_coop_hooks.py
+            --gen-dir ${SMW_GEN_DIR}
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/apply_overrides.py
             --check --gen-dir ${SMW_GEN_DIR}
             --manifest ${CMAKE_SOURCE_DIR}/overrides/falcon/overrides.manifest
     COMMAND ${CMAKE_COMMAND} -E touch ${SMW_RENDERER_HOOK_STAMP}
     DEPENDS ${CMAKE_SOURCE_DIR}/tools/apply_renderer_hooks.py
+            ${CMAKE_SOURCE_DIR}/tools/apply_coop_hooks.py
+            ${CMAKE_SOURCE_DIR}/src/mods/coop/coop_hooks.def
             ${CMAKE_SOURCE_DIR}/tools/apply_overrides.py
             ${CMAKE_SOURCE_DIR}/overrides/falcon/overrides.manifest
             ${SMW_STOCK_GEN_SOURCES}
@@ -148,6 +152,16 @@ set(SMW_RUNTIME_SOURCES
     src/mods/smw_widescreen_plugin.c
     # Trusted static plugin backing the MSU-1 audio mod package's activation.
     src/mods/smw_msu1_plugin.c
+    src/mods/smw_coop_plugin.c
+    src/mods/coop/coop_session.c
+    src/mods/coop/coop_state.c
+    src/mods/coop/coop_guest.c
+    src/mods/coop/coop_machine.c
+    src/mods/coop/coop_runtime.c
+    src/mods/coop/coop_storage.c
+    src/mods/coop/coop_simulation.c
+    src/mods/coop/coop_terrain.c
+    src/mods/coop/coop_presentation.c
     third_party/gl_core/gl_core_3_1.c
     ${SMW_OVERRIDE_SOURCES}
 )

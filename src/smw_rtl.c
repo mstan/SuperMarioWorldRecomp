@@ -11,6 +11,7 @@
 #include "cpu_trace.h"
 #include "snes/interp_bridge.h"   /* faithful LLE of the $806B main loop */
 #include "mods/falcon/smw_falcon_presentation_runtime.h"
+#include "mods/coop/coop_presentation.h"
 
 static SnesrecompExecutionMode smw_execution_mode(void) {
   /* LLE is the correctness floor. The hand-written frame driver remains an
@@ -20,6 +21,7 @@ static SnesrecompExecutionMode smw_execution_mode(void) {
 
 void SmwDrawPpuFrame(void) {
   SmwRendererBeginFrame();
+  SmwCoopPresentationPrepare();
   SimpleHdma hdma_chans[3];
 
   Dma *dma = g_dma;
@@ -63,9 +65,12 @@ void SmwDrawPpuFrame(void) {
   }
 }
 
+#include "mods/coop/coop_simulation.h"
+
 void RunOneFrameOfGame(void) {
   SmwRendererSpawnFrame();
   SmwRendererLatchFrame();
+  SmwCoopPresentationLatch();
   // First-call reset gate. Was previously `if (*(uint16*)$7F8000 == 0) I_RESET()`,
   // which silently relied on WRAM being zero-initialized at power-on. Real hardware
   // (and snes9x) power-on WRAM is 0x55, so that check would never fire and I_RESET
@@ -155,6 +160,7 @@ void RunOneFrameOfGame(void) {
    * available as a convenience override through the shared execution-mode
    * option rather than an SMW-specific scheduler switch. */
   {
+    SmwCoopSimulationBegin();
     if (smw_execution_mode() == SNESRECOMP_EXECUTION_MODE_LLE) {
       waiting_for_vblank = 0xFF;
       /* Bank $00: hardware reset leaves PB=$00 and the `BRA $806B` main loop
@@ -167,5 +173,6 @@ void RunOneFrameOfGame(void) {
     }
   }
   cpu_trace_px_breadcrumb(&g_cpu, 0x2003, "after_Internal");
+  SmwCoopSimulationEnd();
   g_first_frame_done = true;
 }

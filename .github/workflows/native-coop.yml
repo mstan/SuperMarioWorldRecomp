@@ -1,0 +1,31 @@
+name: Native co-op checks
+
+on:
+  pull_request:
+  push:
+    branches: [main, feat/native-simultaneous-coop]
+
+permissions:
+  contents: read
+
+jobs:
+  portable-core-and-storage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Load framework headers
+        run: git submodule update --init snesrecomp
+      - name: Install portable worker dependency
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libsdl2-dev
+      - name: Test roster, state, hooks and persistence
+        run: |
+          python tools/test_native_coop.py
+          python tools/test_coop_hooks.py
+          python tools/test_coop_storage.py
+          python tools/test_coop_storage_queue.py --sdl 2

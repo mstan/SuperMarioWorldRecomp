@@ -301,6 +301,10 @@ static int g_script_phase;    // 0=holding, 1=waiting
 static int g_script_counter;  // frames left in current phase
 
 static uint32 ParseButtonMask(const char *name) {
+  /* Script seats use the same packed input layout as controllers. Unprefixed
+   * names remain player 1 for existing recordings. */
+  if (strncmp(name, "p1.", 3) == 0) return ParseButtonMask(name + 3) & 0xfff;
+  if (strncmp(name, "p2.", 3) == 0) return (ParseButtonMask(name + 3) & 0xfff) << 12;
   if (strcmp(name, "start")  == 0) return 0x0008;
   if (strcmp(name, "select") == 0) return 0x0004;
   if (strcmp(name, "up")     == 0) return 0x0010;
@@ -406,6 +410,16 @@ static uint32 TickScript(void) {
     }
     // hold done â€” advance
     g_script_index++;
+    /* A snapshot directly after a press captures its last held frame. Do
+     * not synthesize a release frame first (that drops carried objects).
+     * Delayed snapshots keep their explicit wait; normal input cadence is
+     * otherwise unchanged. Snapshot commands are consumed exactly once. */
+    while (g_script_index < g_script_count &&
+           g_script_entries[g_script_index].wait_frames == 0 &&
+           (g_script_entries[g_script_index].mask & 0x40000000u)) {
+      RtlSaveLoad(kSaveLoad_Save, g_script_entries[g_script_index].mask & 0xF);
+      g_script_index++;
+    }
     if (g_script_index < g_script_count) {
       e = &g_script_entries[g_script_index];
       g_script_phase = 1;
@@ -503,11 +517,14 @@ static SDL_HitTestResult HitTestCallback(SDL_Window *win, const SDL_Point *pt, v
   return SDL_HITTEST_NORMAL;
 }
 
+#include "mods/coop/coop_runtime.h"
+#include "mods/coop/coop_storage.h"
+
 void RtlDrawPpuFrame(uint8 *pixel_buffer, size_t pitch, uint32 render_flags) {
   PpuSetExtraSpace(g_ppu, 0);
   PpuBeginDrawing(g_ppu, g_my_pixels, 256 * 4, render_flags);
   smw_falcon_presentation_prepare_ppu(g_ppu);
-  g_rtl_game_info->draw_ppu_frame();
+  if (!SmwCoopFrozen()) g_rtl_game_info->draw_ppu_frame();
   if (g_smw_video.enabled) {
     SmwRendererDraw(pixel_buffer, pitch, g_my_pixels);
   } else {
@@ -568,6 +585,15 @@ static uint8 *g_audiobuffer, *g_audiobuffer_cur, *g_audiobuffer_end;
 static int g_frames_per_block;
 static uint8 g_audio_channels;
 static SDL_AudioDeviceID g_audio_device;
+/* Match the shared desktop host's bounded producer backpressure. A long
+ * native loader may generate several hardware frames within one host call.
+ * Only the guest thread may wait, and it must release the consumer's mutex. */
+static _Thread_local bool g_audio_producer_active;
+static _Thread_local unsigned g_apu_lock_depth;
+static _Thread_local bool g_audio_consumer_stalled;
+static _Thread_local uint64_t g_audio_stalled_callback;
+static uint64_t g_audio_callback_count; /* protected by g_audio_mutex */
+#define HOST_AUDIO_HIGH_WATER 4096u
 static uint64_t g_benchmark_audio_output_frames;
 static uint32_t g_benchmark_audio_output_peak;
 static uint64_t g_benchmark_audio_enqueue_failures;
@@ -579,9 +605,34 @@ static size_t g_audio_stream_buffer_size;
 
 void RtlApuLock(void) {
   SDL_LockMutex(g_audio_mutex);
+  ++g_apu_lock_depth;
 }
 
 void RtlApuUnlock(void) {
+  --g_apu_lock_depth;
+  if (!g_apu_lock_depth && g_audio_producer_active &&
+      g_audio_consumer_stalled &&
+      g_audio_callback_count != g_audio_stalled_callback)
+    g_audio_consumer_stalled = false;
+  if (!g_apu_lock_depth && g_audio_producer_active &&
+      !g_audio_consumer_stalled &&
+      dsp_available(g_snes->apu->dsp) > HOST_AUDIO_HIGH_WATER) {
+    Uint64 start = SDL_GetPerformanceCounter();
+    Uint64 limit = SDL_GetPerformanceFrequency() / 4;
+    while (dsp_available(g_snes->apu->dsp) > HOST_AUDIO_HIGH_WATER) {
+      SDL_UnlockMutex(g_audio_mutex);
+      SDL_Delay(1);
+      SDL_LockMutex(g_audio_mutex);
+      if (SDL_GetPerformanceCounter() - start >= limit) {
+        /* A lost device cannot stall every subsequent APU access. Rearm
+         * only after its callback resumes, as in the shared desktop host. */
+        g_audio_consumer_stalled = true;
+        g_audio_stalled_callback = g_audio_callback_count;
+        g_audio_producer_active = false;
+        break;
+      }
+    }
+  }
   SDL_UnlockMutex(g_audio_mutex);
 }
 
@@ -597,6 +648,15 @@ static uint32_t BenchmarkAbsSample16(const uint8 *p) {
 
 static void BenchmarkObserveAudioOutput(const uint8 *stream, int len) {
   if (!g_benchmark_audio_paced || len <= 0) return;
+  static bool capture_initialized;
+  static FILE *capture;
+  if (!capture_initialized) {
+    capture_initialized = true;
+    const char *path = getenv("SMW_AUDIO_OUTPUT_PCM");
+    if (path && *path) capture = fopen(path, "wb");
+    if (capture) setvbuf(capture, NULL, _IOFBF, 1u << 20);
+  }
+  if (capture) fwrite(stream, 1, (size_t)len, capture);
   uint32_t peak = g_benchmark_audio_output_peak;
   for (int i = 0; i + 1 < len; i += 2) {
     uint32_t abs_sample = BenchmarkAbsSample16(stream + i);
@@ -636,6 +696,36 @@ static const char *BenchmarkModeName(void) {
   return "throughput";
 }
 
+/* Opt-in observation at the unpaused host frame boundary. The ordinary audio
+ * totals cannot distinguish startup, a state load and subsequent gameplay. */
+static void TraceAudioFrame(uint32 frame, const char *phase) {
+  static bool initialized;
+  static FILE *output;
+  if (!initialized) {
+    initialized = true;
+    const char *path = getenv("SMW_AUDIO_FRAME_TRACE");
+    if (path && *path) output = fopen(path, "w");
+    if (output) setvbuf(output, NULL, _IOFBF, 1u << 20);
+    if (output) fprintf(output,
+        "frame,phase,mode,produced,consumed,dropped,audible,underflows,queued,output_frames,turbo\n");
+  }
+  if (!output) return;
+  AudioTraceStats stats;
+  audio_trace_get_stats(&stats);
+  RtlApuLock();
+  uint32 queued = dsp_available(g_snes->apu->dsp);
+  uint64_t output_frames = g_benchmark_audio_output_frames;
+  RtlApuUnlock();
+  fprintf(output, "%u,%s,%u,%llu,%llu,%llu,%llu,%llu,%u,%llu,%u\n",
+      frame, phase, g_ram[0x100],
+      (unsigned long long)stats.produced,
+      (unsigned long long)stats.consumed,
+      (unsigned long long)stats.dropped,
+      (unsigned long long)stats.dropped_audible,
+      (unsigned long long)stats.output_underflows, queued,
+      (unsigned long long)output_frames, (unsigned)g_turbo);
+}
+
 static void FillAudioBuffer(Uint8 *stream, int len) {
   /* Boot-stage marker: proves the audio thread reached the mixer at
    * least once (the "crashed before the first sound" class of report). */
@@ -645,6 +735,7 @@ static void FillAudioBuffer(Uint8 *stream, int len) {
   Uint8 *stream_base = stream;
   int original_len = len;
   if (!snesrecomp_sdl_lock_mutex(g_audio_mutex)) Die("Mutex lock failed!");
+  ++g_audio_callback_count;
   while (len != 0) {
     if (g_audiobuffer_end - g_audiobuffer_cur == 0) {
       SDL_UnlockMutex(g_audio_mutex);
@@ -1320,11 +1411,7 @@ int main(int argc, char** argv) {
 #endif
       gi.region = "(USA)";
       gi.sram_path = "saves/save.srm";  /* generic SRAM path (RtlReadSram migrates legacy) */
-#ifdef SMW_COOP_BUILD
       gi.num_players = 2;
-#else
-      gi.num_players = 1;
-#endif
       gi.expected_crc = kSmwUsaCrc32;
       gi.has_expected_crc = 1;
 #if defined(RECOMP_LAUNCHER)
@@ -1572,6 +1659,10 @@ int main(int argc, char** argv) {
       return 1;
     }
     snes_mod_runtime_activate_plugins_c();
+    if (SmwCoopEnabled() && snes_foreign_active()) {
+      fprintf(stderr, "Native co-op cannot run with a character replacement. Disable one of these mods before Play.\n");
+      return 1;
+    }
   }
   if (!mods_ready)
     g_config.msu1_enabled = false;
@@ -1608,6 +1699,10 @@ int main(int argc, char** argv) {
   g_snes_width = g_smw_viewport.width;
   extern void SmwRendererInstallHooks(void);
   SmwRendererInstallHooks();
+  if (!SmwCoopInstallHooks()) {
+    fprintf(stderr, "Unable to install native co-op guest hooks.\n");
+    return 1;
+  }
   // The host compositor has no hardware sprite cap. The native 4:3 fallback
   // continues to honor the user's ordinary PPU settings.
   g_ppu_render_flags = g_config.new_renderer * kPpuRenderFlags_NewRenderer |
@@ -1863,7 +1958,7 @@ error_reading:;
 
   MkDir("saves");
     
-  RtlReadSram();
+  if (SmwCoopPrepareStorage()) RtlReadSram();
 
   {
 #if SNESRECOMP_SDL3
@@ -1899,7 +1994,7 @@ error_reading:;
     }
   }
 
-  if (g_config.autosave
+  if (g_config.autosave && SmwCoopPersistenceReady()
 #ifdef SMW_COOP_BUILD
       && !g_netplay_pending
 #endif
@@ -2106,6 +2201,11 @@ error_reading:;
      * it every frame is safe. */
     RefreshKeybindControllerBits();
 
+    g_audio_producer_active = g_audio_device != 0 && !g_turbo &&
+        (!g_benchmark_frames || g_benchmark_audio_paced);
+#ifdef SMW_COOP_BUILD
+    if (snes_netplay_active()) g_audio_producer_active = false;
+#endif
     uint32 inputs;
 #ifdef SMW_COOP_BUILD
     if (snes_netplay_active()) {
@@ -2140,6 +2240,7 @@ error_reading:;
     {
       inputs = g_input_state | g_pad_buttons | g_gamepad[0].axis_buttons |
                (uint32)g_gamepad[1].axis_buttons << 12;
+      TraceAudioFrame(frameCtr, "before_input");
       inputs |= TickScript();
       inputs |= debug_server_get_controller_inputs();
       inputs |= GetActiveControllers() | debug_server_get_controller_active_mask();
@@ -2147,7 +2248,9 @@ error_reading:;
       inputs = lua_bridge_frame_start(inputs);
 #endif
       uint64_t guest_phase = BenchmarkPhaseBegin();
-      RtlRunFrame(inputs);
+      TraceAudioFrame(frameCtr, "before_guest");
+      if (SmwCoopHostFrame(inputs)) RtlRunFrame(inputs);
+      TraceAudioFrame(frameCtr, "after_guest");
       BenchmarkPhaseEnd(kSnesRecompBenchmarkPhase_GuestFrame, guest_phase);
 #if SNESRECOMP_ENABLE_LUA
       smw_fire_stream_tick();
@@ -2233,6 +2336,7 @@ error_reading:;
       BenchmarkPhaseEnd(kSnesRecompBenchmarkPhase_PpuDraw, ppu_phase);
     }
     stall_t_draw = SDL_GetPerformanceCounter();
+    g_audio_producer_active = false;
 
     if (g_benchmark_frames > 0 &&
         frameCtr >= (uint32)g_benchmark_frames) {
@@ -2349,7 +2453,7 @@ error_reading:;
                   stall_t_draw, SDL_GetPerformanceCounter());
   }
 
-  if (g_config.autosave
+  if (g_config.autosave && SmwCoopPersistenceReady()
 #ifdef SMW_COOP_BUILD
       && !g_netplay_started &&
       !snes_netplay_return_to_lobby_requested()
@@ -2360,7 +2464,8 @@ error_reading:;
 #ifdef SMW_COOP_BUILD
   snes_netplay_shutdown();
 #endif
-  RtlWriteSram();
+  if (SmwCoopEnabled()) SmwCoopStorageShutdown(SmwCoopStorageSelected());
+  else RtlWriteSram();
 
   // clean sdl
   if (g_audio_device) {
@@ -2590,8 +2695,8 @@ static void RenderNumber(uint8 *dst, size_t pitch, int n, uint8 big) {
 
 static void RefreshKeybindControllerBits(void) {
   const uint8_t *keys = snesrecomp_sdl_get_keyboard_state();
-  uint16_t kb_p1 = keybinds_read_player(keys, 1);
-  uint16_t kb_p2 = keybinds_read_player(keys, 2);
+  uint16_t kb_p1 = (g_config.has_keyboard_controls & 1) ? keybinds_read_player(keys, 1) : 0;
+  uint16_t kb_p2 = (g_config.has_keyboard_controls & 2) ? keybinds_read_player(keys, 2) : 0;
   static const uint8 kKb2CtrlsIdx[12] = {
       7, 6, 5, 4, 9, 8, 3, 11, 2, 10, 1, 0};
   for (int i = 0; i < 12; i++) {
@@ -2811,6 +2916,7 @@ static void HandleCommand(uint32 j, bool pressed) {
 
   if (!pressed)
     return;
+  if (j <= kKeys_Save_Last && !SmwCoopPersistenceReady()) return;
   if (j <= kKeys_Load_Last) {
 #ifdef SMW_COOP_BUILD
     if (snes_netplay_request_load(j - kKeys_Load)) return;
@@ -2834,6 +2940,7 @@ static void HandleCommand(uint32 j, bool pressed) {
 #ifdef SMW_COOP_BUILD
       if (snes_netplay_active()) break;
 #endif
+      SmwCoopResetSession();
       RtlReset(1);
       break;
     case kKeys_Pause:
