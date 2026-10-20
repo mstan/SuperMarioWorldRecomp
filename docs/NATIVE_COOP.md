@@ -15,6 +15,10 @@ September checkpoint are historical; the selected framework's CI passed.
 The owner checkpoint, executable, saves and settings are preserved separately.
 Current integration findings and reproducible validation are recorded in
 [the October integration report](validation/native-coop-2026-10-20.md).
+The reproducible [stock content inventory](validation/SMW_STOCK_CONTENT.md)
+derives indexed rooms, overworld nodes, special variants and screen routes from
+the original ROM. Its coverage seed starts unverified; it does not grant passes
+for gameplay mechanics or transitions.
 PR #19 remains the delivery PR and stays in draft until the full contract and
 required acceptance coverage are satisfied.
 
