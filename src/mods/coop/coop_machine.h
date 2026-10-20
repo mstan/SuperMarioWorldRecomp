@@ -105,4 +105,7 @@ bool coop_machine_load(CoopMachine *m, const void *data, size_t size);
 /* Cross-check native mouth indices before a snapshot touches the live guest.
  * This validates references/ownership, not all native sprite mechanics. */
 bool coop_machine_mouths_valid(const CoopMachine *m, const uint8_t *ram);
+/* Adults retain mouth indices; babies reserve food while their native eat
+ * timer is above $20. At $20 the original routine consumes it. */
+bool coop_mount_mouth_active(const uint8_t *ram,unsigned slot);
 #endif

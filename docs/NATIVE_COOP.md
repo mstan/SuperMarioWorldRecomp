@@ -58,6 +58,14 @@ cases cover safe/blocked placement, independent mouth timers and waiting
 bubbles through pipes. Full mount, complex recovery and campaign acceptance
 remain open.
 
+The [placed-egg and baby food milestone](validation/native-coop-baby-yoshi-2026-10-20.md)
+corrects the singleton hatch decision below the roster cap and prevents babies
+from reserving a partner's held food. Existing baby reservations also exclude
+other mouths and participate in atomic snapshot preflight. Forty-four focused
+execution checks pass, with native/bounce parity, save replay and unchanged
+disabled/One-Player behavior. Repeated placed-source grants, fresh mouth
+competition, growth/abilities and full mount acceptance remain open.
+
 Owner-approved specification, 2026-09-22. Implementation tracking:
 `beads-8wg.3.26`, branch `feat/native-simultaneous-coop`.
 

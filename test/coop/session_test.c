@@ -265,6 +265,19 @@ static void native_states(size_t players) {
     assert(coop_machine_mouths_valid(&a,mouth_ram)); /* own carrier */
     held->owner=2000;mouth_ram[0x1616]=0xff;
     assert(coop_machine_mouths_valid(&a,mouth_ram));
+    mouth_ram[0x14d1]=9;mouth_ram[0xa7]=0x2d;mouth_ram[0x1647]=0x37;mouth_ram[0x1617]=3;
+    assert(!coop_machine_mouths_valid(&a,mouth_ram)); /* baby cannot reserve another carrier's food */
+    mouth_ram[0x1617]=4;
+    assert(coop_machine_mouths_valid(&a,mouth_ram));
+    mouth_ram[0x1616]=4;
+    assert(!coop_machine_mouths_valid(&a,mouth_ram)); /* adult/baby duplicate reservation */
+    mouth_ram[0x1616]=0xff;
+    mouth_ram[0x1617]=9;assert(!coop_machine_mouths_valid(&a,mouth_ram)); /* self */
+    mouth_ram[0x1617]=0xff;assert(!coop_machine_mouths_valid(&a,mouth_ram)); /* pending, but absent food */
+    mouth_ram[0x1647]=0x20;mouth_ram[0x1617]=17;
+    assert(coop_machine_mouths_valid(&a,mouth_ram)); /* post-consumption residue */
+    mouth_ram[0x1647]=0x21;
+    assert(!coop_machine_mouths_valid(&a,mouth_ram));
     free(mouth_ram);
     mount->pending.count=mount->visible.count=1;
     mount->pending.pieces[0]=mount->visible.pieces[0]=*piece;

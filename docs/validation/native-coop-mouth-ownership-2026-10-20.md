@@ -173,8 +173,10 @@ key cases, this milestone has **28 execution checks, 28 parity comparisons and
 
 ## Remaining work
 
-Open work includes cross-ability outcomes, baby-Yoshi
-eating, berries, shell abilities, mounted keyholes,
+The [baby-Yoshi audit](native-coop-baby-yoshi-2026-10-20.md) extends existing
+reservation and carrier exclusion to native baby eating and snapshot preflight.
+Open work includes cross-ability outcomes, fresh baby mouth competition,
+baby growth, berries, shell abilities, mounted keyholes,
 and the complete source/save/recovery/campaign matrix.
 The [room entrance audit](native-coop-mount-transport-2026-10-20.md) confirms
 that original pipe entry clears mouth contents; that native rule applies

@@ -656,7 +656,7 @@ static bool mouth_candidate_available(CoopMachine *m,unsigned mouth,unsigned slo
     if((object->flags&(COOP_ENTITY_HELD|COOP_ENTITY_ATTACHED)) && object->owner!=rider)
         return false;
     for(unsigned other=0;other<12;++other)
-        if(other!=mouth && g_ram[0x14c8+other] && g_ram[0x9e + other]==0x35 &&
+        if(other!=mouth && coop_mount_mouth_active(g_ram,other) &&
            g_ram[0x160e + other]==slot)return false;
     return true;
 }
@@ -1349,6 +1349,17 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
         carry_through_room(cpu,m);return 0x02ac5b;
     }
     if(!level_frame)return 0;
+    if(pc==0x01f78a) {
+        unsigned slot=cpu->X&255;
+        if(slot>=12)Die("Native co-op placed egg has no native slot");
+        cpu->A=(cpu->A&0xff00)|(mount_count(slot)<m->actor_count?0x2d:0x78);
+    }
+    if(pc==0x02ea8a) {
+        unsigned mouth=cpu->X&255,slot=cpu->Y&255;
+        if(mouth>=12 || slot>=12 || g_ram[0x9e + mouth]!=0x2d)
+            Die("Native co-op baby food query has no native mouth");
+        if(!mouth_candidate_available(m,mouth,slot))return 0x02eacd;
+    }
     if(pc==0x01f58e) {
         unsigned mouth=cpu->X&255,slot=cpu->Y&255;
         if(mouth>=12 || slot>=12 || g_ram[0x9e + mouth]!=0x35)
@@ -1437,7 +1448,8 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
     if(pc==0x01ea70 && !mount_draw_depth)return 0x01ea8e; /* each mount was drawn at E2BD */
     if(pc==0x0289e1) {
         unsigned slot=cpu->X&255,layer=read16(0x1933),x=read16(0x9a)&~15u,y=read16(0x98)&~15u;
-        CoopTerrain terrain={g_ram,g_rom,0x80000,&m->session};uint16_t tile;
+        CoopTerrain terrain={.ram=g_ram,.rom=g_rom,.rom_size=0x80000,.session=&m->session};
+        uint16_t tile;
         if(m->level>=512 || slot>=12 || !coop_terrain_block(&terrain,layer,x,y,&tile))
             Die("Native co-op Yoshi source has no terrain identity");
         CoopYoshiSource *source=coop_yoshi_source(m,m->level,layer,x,y,tile);

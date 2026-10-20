@@ -496,15 +496,24 @@ fail:
     coop_machine_destroy(&tmp);return false;
 }
 
+bool coop_mount_mouth_active(const uint8_t *ram,unsigned slot) {
+    if(!ram || slot>=12)return false;
+    unsigned status=ram[0x14c8+slot],type=ram[0x9e + slot];
+    return (status==8 && type==0x35) ||
+           (status>=9 && status<=11 && type==0x2d && ram[0x163e + slot]>0x20);
+}
 bool coop_machine_mouths_valid(const CoopMachine *m,const uint8_t *ram) {
     if(!m || !ram)return false;
     bool referenced[12]={false};
     for(unsigned slot=0;slot<12;++slot) {
-        /* Newly initialized and dead sprites can retain unrelated table
-         * residue. Only a live adult executes the native mouth routines. */
-        if(ram[0x14c8+slot]!=8 || ram[0x9e + slot]!=0x35)continue;
+        /* Initialization, death and a baby's completed meal can retain
+         * unrelated index residue. Only an active reservation owns food. */
+        if(!coop_mount_mouth_active(ram,slot))continue;
         unsigned object=ram[0x160e + slot];
-        if(object>=0x80)continue; /* original signed-empty convention */
+        if(object>=0x80) {
+            if(ram[0x9e + slot]==0x2d)return false; /* pending meal needs real food */
+            continue; /* adult's original signed-empty convention */
+        }
         if(object>=12 || object==slot || referenced[object])return false;
         referenced[object]=true;
         CoopPlayerId rider=COOP_NO_PLAYER;
