@@ -61,6 +61,7 @@ COOP_HOOK(0x00C9FE) /* Keep a keyhole's secret route when a tape earns the bonus
 COOP_HOOK(0x00FB00) /* Convert each carried goal reward using its own carrier */
 COOP_HOOK(0x01EA70) /* Singleton Yoshi draw replaced by one scoped draw per mount */
 COOP_HOOK(0x01F58E) /* Tongue candidate must respect carrier and other-mouth ownership */
+COOP_HOOK(0x01F59B) /* Accepted edible tongue contact, before claim or Pokey response */
 COOP_HOOK(0x0289E1) /* A Yoshi-block egg has a real allocated native sprite slot */
 COOP_HOOK(0x00C0FB) /* Native tile update after Map16 write, before VRAM queuing */
 COOP_HOOK(0x00C0C1) /* Do not consume item-memory until the Yoshi source is exhausted */

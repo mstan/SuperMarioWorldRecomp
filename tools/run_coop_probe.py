@@ -90,6 +90,8 @@ KeyboardPlayers=3
         env['SMW_COOP_PROJECTILE_TRACE'] = str(out / 'projectiles.csv')
     if args.extended_trace:
         env['SMW_COOP_EXTENDED_TRACE'] = str(out / 'extended.csv')
+    if args.mouth_trace:
+        env['SMW_COOP_MOUTH_TRACE'] = str(out / 'mouths.csv')
     if args.wram_watch:
         lo, hi = (int(value, 16) for value in args.wram_watch.split(':'))
         if not 0 <= lo <= hi <= 0xffff:
@@ -116,6 +118,7 @@ KeyboardPlayers=3
                   'audio_capture': args.audio_capture, 'audit_queries': args.audit_queries,
                   'wram_watch': args.wram_watch, 'storage_trace': args.storage_trace,
                   'projectile_trace': args.projectile_trace,
+                  'extended_trace': args.extended_trace, 'mouth_trace': args.mouth_trace,
                   'inputs': {}}
     for name in ('exe', 'rom', 'snapshot', 'script', 'normal_sram', 'coop_sram'):
         path = getattr(args, name)
@@ -177,6 +180,8 @@ def main():
                         help='Record buffered accepted/rejected native fire contacts')
     parser.add_argument('--extended-trace', action='store_true',
                         help='Record buffered per-actor extended hazard/cloud-coin contacts')
+    parser.add_argument('--mouth-trace', action='store_true',
+                        help='Record buffered tongue candidates and committed claims')
     parser.add_argument('--wram-watch', help='Passive guest write log, inclusive hex LO:HI')
     parser.add_argument('--audio-capture', action='store_true',
                         help='Capture muted device output to a stereo WAV (audio-paced only)')

@@ -24,6 +24,16 @@ static unsigned fireball_spawn_depth,extended_call_depth;
 static unsigned boss_fireball_depth;
 static unsigned extended_contact_depth;
 static bool extended_contact_query,extended_contact_found;
+typedef struct MouthContact {
+    CoopEntityId mount,object;
+    CoopPlayerId actor;
+    uint64_t distance;
+    CpuState cpu;
+    uint8_t scratch[16];
+} MouthContact;
+static MouthContact *mouth_contacts;
+static size_t mouth_contact_count,mouth_contact_capacity;
+static bool collecting_mouth_contacts;
 static bool owned_boss_bank;
 static bool contact_query,contact_bounce_only,powerup_query;
 typedef enum NativeContactKind {
@@ -572,11 +582,99 @@ static CoopActor *mount_target(CoopMachine *m,const CoopEntity *e) {
     }
     return best?best:primary_actor(m);
 }
+static bool mouth_candidate_available(CoopMachine *m,unsigned mouth,unsigned slot) {
+    CoopPlayerId rider=normal_entity(m,mouth,false)->owner;
+    CoopEntity *object=normal_entity(m,slot,false);
+    if((object->flags&(COOP_ENTITY_HELD|COOP_ENTITY_ATTACHED)) && object->owner!=rider)
+        return false;
+    for(unsigned other=0;other<12;++other)
+        if(other!=mouth && g_ram[0x14c8+other] && g_ram[0x9e + other]==0x35 &&
+           g_ram[0x160e + other]==slot)return false;
+    return true;
+}
+static void trace_mouth_contact(CoopMachine *m,const MouthContact *c,unsigned phase) {
+    static bool initialized;static FILE *file;
+    if(!initialized) {
+        initialized=true;const char *path=getenv("SMW_COOP_MOUTH_TRACE");
+        if(path && *path)file=fopen(path,"wb");
+        if(file) {
+            setvbuf(file,NULL,_IOFBF,1024*1024);
+            fputs("frame,actor,mount,object,mount_slot,object_slot,distance,phase,mouth,status\n",file);
+        }
+    }
+    if(file)fprintf(file,"%llu,%u,%u,%u,%u,%u,%llu,%u,%u,%u\n",
+        (unsigned long long)m->session.frame,c->actor,c->mount,c->object,c->cpu.X&255,c->cpu.Y&255,
+        (unsigned long long)c->distance,phase,g_ram[0x160e + (c->cpu.X&255)],
+        g_ram[0x14c8+(c->cpu.Y&255)]);
+}
+static void record_mouth_contact(CpuState *cpu,CoopMachine *m) {
+    unsigned mouth=cpu->X&255,slot=cpu->Y&255;
+    if(mouth>=12 || slot>=12 || !bound_actor)Die("Native co-op mouth contact has no owner context");
+    CoopEntityId mount=normal_entity(m,mouth,false)->id;
+    CoopEntityId object=normal_entity(m,slot,false)->id;
+    for(size_t i=0;i<mouth_contact_count;++i)
+        if(mouth_contacts[i].mount==mount && mouth_contacts[i].object==object)return;
+    if(mouth_contact_count==mouth_contact_capacity) {
+        size_t n=mouth_contact_capacity?mouth_contact_capacity*2:16;
+        if(n<mouth_contact_capacity || n>SIZE_MAX/sizeof(*mouth_contacts))
+            Die("Native co-op tongue candidate capacity overflow");
+        MouthContact *p=realloc(mouth_contacts,n*sizeof(*p));
+        if(!p)Die("Native co-op could not collect tongue candidates");
+        mouth_contacts=p;mouth_contact_capacity=n;
+    }
+    MouthContact *c=&mouth_contacts[mouth_contact_count++];
+    *c=(MouthContact){.mount=mount,.object=object,.actor=bound_actor->player,.cpu=*cpu};
+    memcpy(c->scratch,g_ram,sizeof(c->scratch));
+    const CoopPlayer *p=coop_player_const(&m->session,c->actor);
+    int x=(g_ram[4]|(g_ram[10]<<8))+g_ram[6]/2;
+    int y=(g_ram[5]|(g_ram[11]<<8))+g_ram[7]/2;
+    int64_t dx=(int64_t)p->x-x,dy=(int64_t)p->y-y;
+    c->distance=(uint64_t)(dx*dx+dy*dy);
+    trace_mouth_contact(m,c,0);
+}
+static void resolve_mouth_contacts(CpuState *cpu,CoopMachine *m,const CpuState *caller) {
+    uint8_t sprite=g_ram[0x15e9],track=g_ram[0x185e];
+    /* Preserve the ROM's descending object scan. A mouth that wins an object
+     * is unavailable for subsequent objects; eligible contenders for each
+     * object use distance, primary/stable player, then stable mount identity. */
+    for(unsigned n=12;n;--n) {
+        unsigned slot=n-1;MouthContact *winner=NULL;
+        for(size_t i=0;i<mouth_contact_count;++i) {
+            MouthContact *c=&mouth_contacts[i];
+            if((c->cpu.Y&255)!=slot)continue;
+            CoopEntity *mount=coop_machine_entity(m,c->mount),*object=coop_machine_entity(m,c->object);
+            if(!mount || !object || object->slot!=slot || mount->type!=0x35 ||
+               g_ram[0x14c8+mount->slot]!=8 || g_ram[0x160e + mount->slot]<0x80 ||
+               g_ram[0x14c8+slot]<8 || !mouth_candidate_available(m,mount->slot,slot))continue;
+            if(!winner || c->distance<winner->distance || (c->distance==winner->distance &&
+               (coop_player_precedes(&m->session,c->actor,winner->actor) ||
+                (c->actor==winner->actor && c->mount<winner->mount))))winner=c;
+        }
+        if(!winner)continue;
+        CoopActor *a=coop_machine_actor(m,winner->actor);
+        CoopEntity *mount=coop_machine_entity(m,winner->mount);
+        bool unrelated=mount->owner==COOP_NO_PLAYER && actor_mount(m,a)!=NULL;
+        coop_guest_bind(&a->guest,g_ram);coop_mount_bind(mount,g_ram);bound_actor=a;
+        if(unrelated)g_ram[0x187a]=g_ram[0x72]=0;
+        memcpy(g_ram,winner->scratch,sizeof(winner->scratch));
+        restore_registers(cpu,&winner->cpu);
+        cpu->S=caller->S; /* the query's enclosing draw calls already returned */
+        g_ram[0x15e9]=(uint8_t)mount->slot;
+        trace_mouth_contact(m,winner,1);
+        guest_jsr(cpu,0x01f59b);
+        mount=coop_machine_entity(m,winner->mount); /* Pokey may allocate a sprite */
+        if(!mount)Die("Native co-op winning tongue lost its mount");
+        coop_mount_capture(mount,g_ram);
+        if(!unrelated)capture(m,a);
+        trace_mouth_contact(m,winner,2);
+    }
+    g_ram[0x15e9]=sprite;g_ram[0x185e]=track;
+}
 static void draw_mounts(CpuState *cpu,CoopMachine *m) {
     CpuState caller=*cpu;uint8_t scratch[16],oam[0x2a0];
     memcpy(scratch,g_ram,sizeof(scratch));memcpy(oam,g_ram+0x200,sizeof(oam));
     CoopActor *primary=primary_actor(m);capture(m,primary);
-    ++mount_draw_depth;
+    ++mount_draw_depth;mouth_contact_count=0;collecting_mouth_contacts=true;
     for(unsigned slot=0;slot<12;++slot) {
         CoopEntity *e=coop_machine_entity_slot(m,COOP_ENTITY_NORMAL,slot);
         if(!e || e->type!=0x35 || !g_ram[0x14c8+slot])continue;
@@ -608,6 +706,8 @@ static void draw_mounts(CpuState *cpu,CoopMachine *m) {
         coop_mount_capture(e,g_ram);
         if(!unrelated) {mount_owner(m,e,a);capture(m,a);}
     }
+    collecting_mouth_contacts=false;
+    resolve_mouth_contacts(cpu,m,&caller);
     --mount_draw_depth;bound_actor=NULL;
     restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));memcpy(g_ram+0x200,oam,sizeof(oam));
     coop_guest_bind(&primary->guest,g_ram);restore_primary_mount(m);
@@ -1171,18 +1271,18 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
         unsigned mouth=cpu->X&255,slot=cpu->Y&255;
         if(mouth>=12 || slot>=12 || g_ram[0x9e + mouth]!=0x35)
             Die("Native co-op tongue candidate has no native mount");
-        CoopPlayerId rider=normal_entity(m,mouth,false)->owner;
-        CoopEntity *object=normal_entity(m,slot,false);
         /* A loose mount has no player entitled to somebody else's carried
          * object. Once released, the object's ordinary native eligibility
          * applies again; no global inedible bit or cooldown is introduced. */
-        if((object->flags&(COOP_ENTITY_HELD|COOP_ENTITY_ATTACHED)) &&
-           object->owner!=rider)return 0x01f609;
         /* Native mouth indices remain authoritative while a tongue retracts
          * and while swallowed status-7 objects wait for spit/swallow. */
-        for(unsigned other=0;other<12;++other)
-            if(other!=mouth && g_ram[0x14c8+other] && g_ram[0x9e + other]==0x35 &&
-               g_ram[0x160e + other]==slot)return 0x01f609;
+        if(!mouth_candidate_available(m,mouth,slot))return 0x01f609;
+    }
+    if(pc==0x01f59b && collecting_mouth_contacts && !(g_ram[0x1686+(cpu->Y&255)]&1)) {
+        /* Native clipping has accepted an edible candidate. Defer only its
+         * claim/response until every mouth has completed its one update.
+         * Inedible contacts retain the original bonk-and-continue behavior. */
+        record_mouth_contact(cpu,m);return 0x01f609;
     }
     if(pc==0x02a3f6 && !extended_contact_depth) {
         collect_extended_contacts(cpu,m);return 0x02a468;

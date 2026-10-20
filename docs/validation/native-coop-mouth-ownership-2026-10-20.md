@@ -103,14 +103,78 @@ establish correct arbitration when two tongues reach an object together.
 
 With timing corrected, `reverse-owner-tie-before` swaps the two mounts' player
 owners while leaving the actors and tongue geometry coincident. Luigi's
-earlier native slot takes the key. This is a **failed primary-tie requirement**,
-not accepted behavior, and is the next arbitration case to resolve.
+earlier native slot takes the key. This control exposed the primary-tie failure
+resolved by the following adapter.
+
+## Simultaneous tongue arbitration
+
+`$01:F59B` is the first instruction after the original clipping check succeeds.
+For edible objects, the adapter records the accepted native CPU/scratch context
+and returns through `$01:F609`, allowing the remaining mouths to query the same
+world state. Inedible contacts retain the original bonk-and-continue response.
+Each mount's motion, drawing and tongue timers still execute once.
+
+After all mouths have updated, the resolver considers objects in the ROM's
+descending sprite-slot order. For each object, eligible mouths compete by
+actor-to-object distance, primary/stable actor order, and stable mount identity.
+A mouth that wins one object cannot win another in that frame. Losing mouths
+can still take another contacted object. Rechecking live stable identities,
+status, carrier ownership and existing mouth ownership prevents committing a
+stale candidate.
+
+The winner resumes the **original** response at `$01:F59B` with its captured
+registers and clipping scratch. Its already-returned query stack is replaced
+with the enclosing draw caller's stack before a fresh scoped JSR. The ordinary
+return-balance check remains active. Mount/actor state is bound and captured
+around the response. Pokey can allocate a segment, so the resolver reacquires
+the winning mount by stable ID afterward. The collected array grows dynamically;
+the twelve-object scan is the original normal-sprite capacity, not a roster limit.
+Candidates exist only inside the frame; no snapshot format change is required.
+
+The preserved `before-mouth-arbitration.exe` is `cb7dc70`, SHA256
+`c415970b9c36e764b55d5b8e68ff942e675b769ec3dfdefe54311a0210074346`.
+The tested candidate is SHA256
+`2127afb2a2f47c03387cc45331fd6c2d704a86676bc6fb8bc070594f0a6e4b53`.
+`SMW_COOP_MOUTH_TRACE` / probe `--mouth-trace` records accepted candidates,
+selected commits and completed native responses with stable IDs and distances.
+This buffered diagnostic does not pause the guest.
+
+`acceptance-arbitration-first` passes **24/24** checks:
+
+- A partner's continuously held key remains protected and becomes edible after
+  release.
+- Equal simultaneous contacts favor Mario, including reversed mount slots.
+- A closer Luigi wins over Mario when both original clips succeed that frame.
+- Separated mouths claim their respective objects independently.
+- Two coincident mouths contacting two coincident objects obtain one each,
+  preserving the original descending object scan.
+
+Standard/wide and native/bounce runs match in **24 full WRAM/co-op snapshot
+comparisons**, with **20 exact save/load replays**. Every two-mounted run also
+requires both original tongue-start writes in the same frame. There are no
+dispatch misses, crashes or timeouts. Portable core checks for rosters 2/3/4/17
+and the hook installer checks pass; 27 owner files still match the preserved
+hashes (`arbitration-verification.json`).
+
+The Pokey fixture initially used a key's origin height, placing its 80-pixel
+body below the floor. Its native offscreen removal invalidated the later
+live-parent assertion (`acceptance-pokey`); this is not a passed terrain test.
+`pokey-footing` corrects only the initial position to y=304 on the y=384 floor:
+the original initialization creates five segments, Mario wins the coincident
+tie despite owning slot 1, and Luigi removes a distinct segment on the next
+frame. Both original spawned segments are consumed and the parent retains
+three segments. This exercises the native allocation response, not a fabricated
+successful eat or defeat.
+
+`acceptance-pokey-footing` passes all four standard/wide/native/bounce runs,
+four full WRAM/co-op comparisons and four save/load replays. Combined with the
+key cases, this milestone has **28 execution checks, 28 parity comparisons and
+24 save/load replays**. These are focused adapter checks, not campaign coverage.
 
 ## Remaining work
 
-This guard does not resolve same-frame nearest/primary arbitration between
-mouths competing for a loose object, or repair legacy snapshots that already
-contain duplicate mouth references. Those remain open, along with baby-Yoshi
+Legacy snapshots that already contain duplicate mouth references still need
+validation/handling. Other open work includes cross-ability outcomes, baby-Yoshi
 eating, berries, shell abilities, mouth-object transport, mounted keyholes,
 and the complete source/save/recovery/campaign matrix. The native mouth indices
 must be remapped when transport moves their referenced normal-sprite slots.

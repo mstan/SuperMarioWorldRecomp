@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Native carry/release and existing-mouth exclusivity, using copied YI2 states.
+"""Native carry/release and simultaneous tongue claims, using copied YI2 states.
 
 Positions and source sprites are staged; mounting, grabbing and eating occur
 through original routines and inputs. These checks do not qualify campaign
-routes or arbitration between tongues contacting a loose item in one frame.
+routes, source grants, shell/berry abilities or mount transport.
 """
 import argparse
 import csv
@@ -78,12 +78,47 @@ def encounter(source, output, two):
     f.save(output)
 
 
+def variant(source, output, kind):
+    f = Fixture(source)
+    if kind in ('reverse-tie', 'pokey'):
+        mounts = [f.word(f.actors[p][1]+52) for p in (0, 1)]
+        for p in (0, 1):
+            f.put(f.actors[p][1]+52, mounts[1-p])
+        at = f.data.index(b'ENT1', f.core_end)+16
+        for i, identity in enumerate(f.entities):
+            if identity in mounts:
+                f.put(at+i*28+16, 1-f.entities[identity][4])
+        if kind == 'pokey':
+            sprite_type(f, 2, 0x70)
+            f.data[f.ram+0x14ca] = 1  # original Pokey initialization
+            f.data[f.ram+0xda] = 48  # 80-pixel native body stands on YI2's y=384 floor
+    elif kind in ('nearest', 'independent'):
+        x = 42 if kind == 'nearest' else 160
+        set_actor(f, 1, x, 336, True)
+        slot = f.entities[f.word(f.actors[1][1]+52)][2]
+        f.data[f.ram+0xe4+slot] = x
+        if kind == 'independent':
+            loose_key(f, 196, 368, 3)
+    elif kind == 'fallback':
+        loose_key(f, 76, 368, 3)
+    else:
+        assert kind == 'tie'
+    f.save(output)
+
+
+def mouth_by_player(f):
+    return {p: f.data[f.ram+0x160e+f.entities[f.word(record+52)][2]]
+            for p, (_, record) in f.actors.items()}
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('source', type=Path)
     ap.add_argument('--out', type=Path, required=True)
     ap.add_argument('--exe', type=Path, default=ROOT/'build-adaptive/SuperMarioWorldSNESRecomp.exe')
     ap.add_argument('--rom', type=Path, default=ROOT/'smw.sfc')
+    ap.add_argument('--cases', nargs='+', choices=('held-release', 'tie', 'reverse-tie',
+                                                 'nearest', 'independent', 'fallback', 'pokey'))
     args = ap.parse_args()
     root = args.out.resolve()
     root.mkdir(parents=True, exist_ok=False)
@@ -97,7 +132,7 @@ def main():
                    '--exe', str(args.exe.resolve()), '--rom', str(args.rom.resolve()),
                    '--snapshot', str(snapshot.resolve()), '--script', str(script),
                    '--out', str(out), '--frames', str(frames), '--framedump', str(capture),
-                   '--wram-watch', '14a3:1619']
+                   '--wram-watch', '14a3:1619', '--mouth-trace']
         if native:
             command.append('--native')
         if bounce:
@@ -118,10 +153,19 @@ def main():
         fixtures[two] = root/f'encounter-{int(two)}.sav'
         encounter(out/'saves/native-coop-v1/save11.sav', fixtures[two], two)
 
+    cases = args.cases or ('held-release', 'tie', 'reverse-tie', 'nearest', 'independent', 'fallback', 'pokey')
+    for kind in cases:
+        if kind == 'held-release':
+            fixtures[kind] = fixtures[False]
+        else:
+            fixtures[kind] = root/f'{kind}.sav'
+            variant(fixtures[True], fixtures[kind], kind)
+
     for bounce in (False, True):
         for narrow in (True, False):
-            for two in (False, True):
-                key = f'{"existing-mouth" if two else "held-release"}-{"standard" if narrow else "wide"}'
+            for kind in cases:
+                two = kind != 'held-release'
+                key = f'{kind}-{"standard" if narrow else "wide"}'
                 name = f'{key}-{"bounce" if bounce else "native"}'
                 if two:
                     # The game runner takes an immediate post-press snapshot
@@ -132,7 +176,7 @@ def main():
                 else:
                     script = ('wait 60\nloadstate 10\npress y+p2.y 40\nsavestate 9\n'
                               'wait 12\npress y 40\nsavestate 8\nwait 5\n')
-                out = run(name, fixtures[two], script, 170, narrow, bounce)
+                out = run(name, fixtures[kind], script, 170, narrow, bounce)
                 first, last = state(out, 9), state(out, 8)
                 key_slot = 2 if two else 1
                 if two:
@@ -140,10 +184,40 @@ def main():
                                         (out/'wram-writes.log').read_text(), re.M)
                     assert len(starts) == 2 and {x for _, x in starts} == {'0000', '0001'}, (name, starts)
                     assert starts[0][0] == starts[1][0], f'{name}: secondary tongue input delayed'
-                    mouth_slots = [e[2] for e in first.entities.values() if e[3] == 0x35]
-                    mouths = [first.data[first.ram+0x160e+slot] for slot in mouth_slots]
-                    assert mouths.count(key_slot) == 1 and mouths.count(255) == 1, (name, mouths)
-                    assert first.data[first.ram+0x14c8+key_slot] == 7
+                    mouths = mouth_by_player(first)
+                    expected = ({0: 255, 1: 255} if kind == 'pokey' else
+                                {0: 2, 1: 3} if kind == 'independent' else
+                                {0: 3, 1: 2} if kind == 'fallback' else
+                                {0: 255, 1: 2} if kind == 'nearest' else {0: 2, 1: 255})
+                    assert mouths == expected, (name, mouths, expected)
+                    for slot in expected.values():
+                        if slot != 255:
+                            assert first.data[first.ram+0x14c8+slot] == 7
+                    claims = list(csv.DictReader((out/'mouths.csv').open()))
+                    commits = [r for r in claims if r['phase'] == '1']
+                    if kind == 'pokey':
+                        assert [r['actor'] for r in commits] == ['0', '1'], (name, commits)
+                        assert int(commits[1]['frame']) == int(commits[0]['frame'])+1
+                        assert commits[0]['object'] == commits[1]['object']
+                        completed = [r for r in claims if r['phase'] == '2']
+                        assert len({r['mouth'] for r in completed}) == 2
+                        assert all(int(r['mouth']) < 12 for r in completed)
+                        assert first.data[first.ram+0xc4] == 7  # five native segments -> three
+                        assert first.data[first.ram+0x14ca] == 8
+                    else:
+                        assert len(commits) == sum(s != 255 for s in expected.values()), (name, commits)
+                        assert len({r['object'] for r in commits}) == len(commits), (name, commits)
+                    if kind != 'independent':
+                        checked = commits[:1] if kind == 'pokey' else commits
+                        for commit in checked:
+                            candidates = [r for r in claims if r['phase'] == '0'
+                                          and r['frame'] == commit['frame'] and r['object'] == commit['object']]
+                            assert {r['actor'] for r in candidates} == {'0', '1'}, (name, candidates)
+                            distances = {int(r['actor']): int(r['distance']) for r in candidates}
+                            if kind == 'nearest':
+                                assert distances[1] < distances[0], (name, distances)
+                            else:
+                                assert distances[0] == distances[1], (name, distances)
                     same(last, state(out, 7))
                 else:
                     held = first.word(first.actors[1][1]+56)
@@ -165,7 +239,7 @@ def main():
                 results.append(dict(case=key, bounce=bounce, status='passed', evidence=name))
                 (root/'summary.json').write_text(json.dumps(dict(
                     checks=results, campaign_coverage='unverified',
-                    simultaneous_loose_object_arbitration='unverified'), indent=2)+'\n')
+                    simultaneous_loose_object_arbitration='bounded staged contacts'), indent=2)+'\n')
     print(f'{len(results)} mouth ownership checks passed; native/bounce WRAM and co-op snapshots match')
 
 
