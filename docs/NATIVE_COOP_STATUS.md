@@ -3,6 +3,9 @@
 Updated 2026-10-20. Contract: [NATIVE_COOP.md](NATIVE_COOP.md).
 Delivery: [PR #19](https://github.com/mstan/SuperMarioWorldRecomp/pull/19),
 still draft. Latest validated, pushed gameplay milestone: `3d4d2ea`.
+The [playable-alpha first pass](validation/native-coop-alpha-2026-10-20.md)
+adds representative boss/bonus completion and current inactive-mode/presentation
+checks to the existing common-path evidence.
 
 ## Immediate target: alpha first pass
 
@@ -26,7 +29,7 @@ checks. The full product contract remains the direction for later work.
 Before the alpha handoff:
 
 - [x] Finish and check the current small berry change with a few common cases.
-- [ ] Make a broad representative pass through remaining major systems and
+- [x] Make a broad representative pass through remaining major systems and
   document visible blockers, limitations and unverified areas.
 - [ ] Complete required builds/CI and preserve owner saves/settings.
 - [ ] Update PR #19 for alpha review and deliver the normal-window,
@@ -44,7 +47,7 @@ Close an area only when its remaining implementation and evidence are complete.
 |---|---|---|
 | Contacts and enemy targeting | Ordinary contact/pickup arbitration, shared stomps/rewards, extended hazards, primary ties | Custom contacts/platforms, mixed attacks, committed targeting, Boos |
 | Projectiles and abilities | Per-actor fireballs, direct boss fireball contacts, shell ability matrix | Full cape/star/spin/swim behavior, minor hazards, effect damage and shared pool pressure |
-| Mounts | Independent riders/mouths, tongue arbitration, block/placed grants, baby growth, transport/parking, mounted recovery/keyholes | Berry fixes/acceptance, wings destinations, fresh baby/adult competition, source locations and special scenes |
+| Mounts | Independent riders/mouths, tongue arbitration, block/placed grants, baby growth, transport/parking, mounted recovery/keyholes, ordinary body berries | Interrupted bites/rare berry combinations, wings destinations, fresh baby/adult competition, source locations and special scenes |
 | Recovery and camera | Individual/team death, bubbles, adjacent placement, mounted clearance, widescreen visibility | Slopes/platforms, water/air, vertical rooms, Layer 2, autoscroll and live viewport changes |
 | Transitions and progression | Focused pipes, checkpoints, retry, goal/keyhole arbitration and rewards | Every entrance/transition variant, conflicting events, game-over/continue and actual exit destinations |
 | Special scenes and presentation | Original reserve artwork/badges, focused native/wide drawing and Mode 7 contact checks | Full boss defeats/targeting, bonus participation, overworld follower, castle/ending, fences/darkness |
@@ -86,7 +89,11 @@ preflight. See the [alpha evidence and known limitations](validation/native-coop
 An interrupted bite during bubble recovery can remain unconsumed/uncredited;
 that unusual interaction is deferred with reproducible evidence.
 
-The first pass will sample common mount, enemy/ability and scene behavior.
+The first pass samples common mount, enemy/ability and scene behavior. One
+Morton encounter reaches actual defeat/castle completion and overworld return;
+one bonus game includes both players, one shared extra life and resumed normal
+play. Current solo/disabled-two-player checks retain stock mode flags and normal
+storage while preserving sentinel co-op SRAM.
 The systematic campaign audit is deferred from the alpha. Inventory extraction has
 identified **238 room/variant coverage records and 240 screen-exit edges**;
 it grants **zero gameplay passes**. See the

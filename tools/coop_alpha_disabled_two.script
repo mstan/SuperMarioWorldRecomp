@@ -1,0 +1,13 @@
+wait 300
+press start 1
+wait 120
+press start 1
+wait 120
+press down 1
+wait 30
+press start 1
+wait 1500
+press b 1
+wait 300
+savestate 9
+wait 10

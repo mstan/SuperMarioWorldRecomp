@@ -32,6 +32,9 @@ required build/CI checks and an owner build with preserved saves/settings.
 Record newly identified corner cases in the [deferral list](NATIVE_COOP_DEFERRED.md)
 and move on. Investigate them during this alpha only if an observed failure
 blocks ordinary play or threatens saves, or the owner explicitly requests it.
+The [playable-alpha evidence](validation/native-coop-alpha-2026-10-20.md)
+records the selected common checks, reused evidence, actual boss/bonus outcomes,
+setup limitations and owner handoff.
 
 The 19 game commits have been rebased onto game main `8dedb28`, retaining the
 newer Falcon/cache-helper, isolated generation, disassembly-authority, capture
