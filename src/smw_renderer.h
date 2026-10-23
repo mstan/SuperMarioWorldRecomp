@@ -21,6 +21,14 @@ int SmwViewOffset(SmwViewport view, int camera, int level_width);
 void SmwDestination(SmwViewport view, int w, int h, int *x, int *y, int *dw, int *dh);
 void SmwRendererBeginFrame(void);
 void SmwRendererCaptureLine(const Ppu *ppu, int line);
+void SmwRendererBeginHardwareRaster(const Ppu *ppu);
+void SmwRendererEndHardwareRaster(void);
+void SmwRendererHardwareVramChanged(void);
+typedef struct SmwRasterStats {
+  uint64_t vram_copied_bytes, vram_capacity_bytes, metadata_bytes, vram_compared_bytes;
+  unsigned vram_images;
+} SmwRasterStats;
+SmwRasterStats SmwRendererGetRasterStats(void);
 void SmwRendererDraw(uint8_t *pixels, size_t pitch, const uint8_t *stock);
 int SmwRendererNativeOffset(void);
 bool SmwRendererIsLevelScene(void);

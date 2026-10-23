@@ -2,6 +2,7 @@
  * Super Metroid custom renderer; level addressing and object ownership are SMW.
  * Per-line immutable snapshots retain IRQ/HDMA changes without replaying logic. */
 #include "smw_renderer.h"
+#include "raster_snapshot.h"
 #include "common_rtl.h"
 #include <stdio.h>
 #include <string.h>
@@ -9,9 +10,20 @@
 
 typedef struct RasterLine {
   uint8_t regs[PPU_SAVESTATE_REGS_SIZE];
-  uint16_t palette[256], oam[256], vram[0x8000];
+  uint16_t palette[256], oam[256];
   uint8_t high[32];
+  const uint16_t *vram;
 } RasterLine;
+#ifndef SMW_RASTER_FULL_COPY
+#define SMW_RASTER_FULL_COPY 0
+#endif
+static SnesRasterSnapshotStore vram_snapshots;
+static bool capture_failed;
+static struct {
+  const Ppu *ppu;
+  uint32_t writes;
+  bool tracking, uncertain;
+} hardware_raster;
 typedef struct OamOwner { int x; uint16_t position, attr; bool valid; } OamOwner;
 static RasterLine lines[224];
 static PpuOverlayCapture obj_capture[224];
@@ -144,6 +156,7 @@ static int compare_draw(const void *a,const void *b) {
 }
 void SmwRendererResetScene(void) {
   level_scene=false;
+  hardware_raster.tracking=false;
   memset(pending,0,sizeof(pending));
   memset(latched,0,sizeof(latched));
   memset(sprite_owners,0,sizeof(sprite_owners));
@@ -212,13 +225,29 @@ void SmwRendererLatchFrame(void) {
 }
 void SmwRendererBeginFrame(void) {
   captured = 0;
+  hardware_raster.tracking=false;
   if (!g_smw_video.enabled) return;
+  capture_failed = !SnesRasterSnapshotBegin(&vram_snapshots, 0x10000, 224);
   native_x = g_smw_viewport.extra;
   if (level_scene && !(frame_ram[0x5b] & 1))
     native_x = SmwViewOffset(g_smw_viewport, read16(frame_ram, 0x1a), (frame_ram[0x5e]+1)*256);
 }
+void SmwRendererBeginHardwareRaster(const Ppu *p) {
+  hardware_raster.tracking=false;
+#if SMW_RASTER_TRACK_WRITES && !SNESRECOMP_TRACE
+  if(p) {
+    hardware_raster.ppu=p;hardware_raster.writes=p->vramWriteCount;
+    hardware_raster.uncertain=true;
+    hardware_raster.tracking=!p->widescreenLineEnhancer;
+  }
+#else
+  (void)p;
+#endif
+}
+void SmwRendererEndHardwareRaster(void) { hardware_raster.tracking=false; }
+void SmwRendererHardwareVramChanged(void) { hardware_raster.uncertain=true; }
 void SmwRendererCaptureLine(const Ppu *p, int line) {
-  if (!g_smw_video.enabled || line < 1 || line > 224) return;
+  if (!p || capture_failed || !g_smw_video.enabled || line < 1 || line > 224) return;
   RasterLine *l = &lines[line-1];
   obj_capture[line-1] = p->overlayCaptures[kPpuOverlaySource_Obj];
   bg3_capture[line-1] = p->overlayCaptures[kPpuOverlaySource_Bg3];
@@ -226,8 +255,26 @@ void SmwRendererCaptureLine(const Ppu *p, int line) {
   memcpy(l->palette, p->cgram, sizeof(l->palette));
   memcpy(l->oam, p->oam, sizeof(l->oam));
   memcpy(l->high, p->highOam, sizeof(l->high));
-  memcpy(l->vram, p->vram, sizeof(l->vram));
+  /* Only the title-owned raster proves no writes. IRQ/native hooks mark the
+   * interval uncertain; direct callers, callbacks and trace builds compare. */
+#if SMW_RASTER_TRACK_WRITES
+  if(p!=hardware_raster.ppu || p->widescreenLineEnhancer)hardware_raster.tracking=false;
+  if(!SMW_RASTER_FULL_COPY && hardware_raster.tracking && !hardware_raster.uncertain &&
+      captured && hardware_raster.writes==p->vramWriteCount)
+    l->vram=vram_snapshots.images[vram_snapshots.count-1];
+  else
+#endif
+    l->vram = SnesRasterSnapshotCapture(&vram_snapshots, p->vram, !SMW_RASTER_FULL_COPY);
+#if SMW_RASTER_TRACK_WRITES
+  hardware_raster.writes=p->vramWriteCount;hardware_raster.uncertain=false;
+#endif
+  if (!l->vram) { capture_failed = true; return; }
   ++captured;
+}
+SmwRasterStats SmwRendererGetRasterStats(void) {
+  return (SmwRasterStats){vram_snapshots.copied_bytes,
+      vram_snapshots.allocated * vram_snapshots.image_bytes, sizeof(lines),
+      vram_snapshots.compared_bytes, vram_snapshots.count};
 }
 
 bool SmwRendererMapTile(const uint8_t *ram, unsigned layer, int x, int y, uint16_t *tile) {
@@ -474,7 +521,7 @@ void SmwRendererDraw(uint8_t *pixels,size_t pitch,const uint8_t *stock) {
     uint32_t *dst=(uint32_t *)(pixels+y*pitch);
     const RasterLine *l=&lines[y];
     memcpy(&raster,l->regs,sizeof(l->regs));
-    if(width==256 || !level || captured!=224 || (raster.bgmode&7)!=1) {
+    if(width==256 || !level || capture_failed || captured!=224 || (raster.bgmode&7)!=1) {
       memset(dst,0,width*4);
       memcpy(dst+native_x,stock+y*256*4,256*4);
       continue;
@@ -559,12 +606,15 @@ void SmwRendererDiagnostics(const uint8_t *stock, const uint8_t *image, size_t p
   if(!trace) {
     snprintf(path,sizeof(path),"%s/frames.csv",directory);
     trace=fopen(path,"w");
-    if(trace) fprintf(trace,"frame,mode,camera,width,active,far,native_differences,unexplained_differences,parallax_differences,simulation_camera,raster_camera,native_offset\n");
+    if(trace) fprintf(trace,"frame,mode,camera,width,active,far,native_differences,unexplained_differences,parallax_differences,simulation_camera,raster_camera,native_offset,vram_images,vram_copied_bytes,vram_capacity_bytes,vram_compared_bytes\n");
   }
   if(trace) {
-    fprintf(trace,"%u,%u,%d,%d,%u,%u,%u,%u,%u,%u,%u,%d\n",frame,frame_ram[0x100],camera,
+    SmwRasterStats storage=SmwRendererGetRasterStats();
+    fprintf(trace,"%u,%u,%d,%d,%u,%u,%u,%u,%u,%u,%u,%d,%u,%llu,%llu,%llu\n",frame,frame_ram[0x100],camera,
             g_smw_viewport.width,active,far,differing,unexplained,parallax,read16(g_ram,0x1a),
-            read16(lines[80].regs,offsetof(Ppu,hScroll)),native_x);
+            read16(lines[80].regs,offsetof(Ppu,hScroll)),native_x,storage.vram_images,
+            (unsigned long long)storage.vram_copied_bytes,(unsigned long long)storage.vram_capacity_bytes,
+            (unsigned long long)storage.vram_compared_bytes);
     fflush(trace);
   }
   static FILE *sprite_trace;

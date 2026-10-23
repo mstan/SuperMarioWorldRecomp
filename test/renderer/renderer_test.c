@@ -197,6 +197,7 @@ static void ghost_house_capacity(void) {
   assert(!g_ram[0x1938] && !g_ram[0x1939]); /* native loader still owns allocation */
 }
 static Ppu test_ppu;
+Ppu *g_ppu=&test_ppu;
 static uint8_t surface[2134*224*4], native[256*224*4];
 static void objects(void) {
   memset(g_ram,0,sizeof(g_ram));memset(&test_ppu,0,sizeof(test_ppu));
@@ -547,4 +548,72 @@ static void pipe_variants(void) {
   rom[(5<<15)+0x4e0]=0x34;rom[(5<<15)+0x4e1]=0x12;
   assert(SmwRendererMapTile(g_ram,0,0,0,&tile) && tile==0x1234);
 }
-int main(void) { geometry();spawn();spawn_lifecycle();ghost_house_capacity();objects();sprite_parts();completed_draws();transitions();map16();pipe_variants();hud();parallax();camera_timing();puts("geometry, spawn lifecycle/save state and ghost-house capacity, signed OAM/sprite parts, independent sprite draws, transitions, Map16/pipe variants, anchored HUD, parallax and presentation camera timing: passed");return 0; }
+#ifndef SMW_RASTER_FULL_COPY
+#define SMW_RASTER_FULL_COPY 0
+#endif
+static void unexpected_capture_callback(Ppu *p,uint y,bool sub,void *context) {
+  (void)p;(void)y;(void)sub;(void)context;assert(false);
+}
+static void raster_storage(void) {
+  memset(g_ram,0,sizeof(g_ram));memset(&test_ppu,0,sizeof(test_ppu));
+  memset(native,0,sizeof(native));
+  SmwRendererResetScene();
+  g_ram[0x100]=20;g_ram[0x5e]=31;word(0x1a,512);
+  g_smw_video=(SmwVideoSettings){true,true,0};
+  g_smw_viewport=(SmwViewport){342,43,16.0/9};
+  test_ppu.inidisp=15;test_ppu.bgmode=1;test_ppu.screenEnabled[0]=1;
+  test_ppu.bgTileAdr=2;test_ppu.cgram[1]=31;test_ppu.cgram[2]=31<<5;
+  for(unsigned row=0;row<8;++row)test_ppu.vram[0x2000+row]=0xff;
+  SmwRendererLatchFrame();SmwRendererBeginFrame();
+  for(int line=1;line<=224;++line) {
+    if(line==65 || line==129)
+      for(unsigned row=0;row<8;++row)test_ppu.vram[0x2000+row]=line==65?0xff00:0xff;
+    if(line==193)test_ppu.vram[0x7fff]=1;
+    SmwRendererCaptureLine(&test_ppu,line);
+  }
+  SmwRasterStats storage=SmwRendererGetRasterStats();
+  assert(storage.vram_images==(SMW_RASTER_FULL_COPY?224u:4u));
+  assert(storage.vram_copied_bytes==(uint64_t)storage.vram_images*65536);
+  memset(test_ppu.vram,0,sizeof(test_ppu.vram));
+  for(unsigned draw=0;draw<3;++draw) {
+    SmwRendererDraw(surface,342*4,native);
+    const uint32_t *pixel=(const uint32_t *)surface;
+    for(unsigned y=0;y<224;++y)
+      assert(pixel[y*342+SmwRendererNativeOffset()+128]==
+             (y>=64 && y<128?0x00ff00u:0xff0000u));
+  }
+  /* A restarted frame must see arbitrary raw edits, even at the same PPU
+   * address. No port-write counter or persistent dirty history is required. */
+  for(unsigned row=0;row<8;++row)test_ppu.vram[0x2000+row]=0xff;
+  SmwRendererBeginFrame();
+  SmwRendererBeginHardwareRaster(&test_ppu);
+  for(int line=1;line<=224;++line) {
+    if(line==3 || line==5) {
+      for(unsigned row=0;row<8;++row)test_ppu.vram[0x2000+row]=line==3?0xff00:0xff;
+      if(line==3)++test_ppu.vramWriteCount;
+      else SmwRendererHardwareVramChanged(); /* Direct write from a guest/native IRQ. */
+    }
+    if(line==100)test_ppu.widescreenLineEnhancer=unexpected_capture_callback;
+    if(line==101) {
+      test_ppu.widescreenLineEnhancer=NULL;
+      test_ppu.vram[0x7fff]^=1; /* Removing a callback must not restore trust. */
+    }
+    SmwRendererCaptureLine(&test_ppu,line);
+  }
+  SmwRendererEndHardwareRaster();
+  storage=SmwRendererGetRasterStats();
+  assert(storage.vram_images==(SMW_RASTER_FULL_COPY?224u:4u));
+  if(!SMW_RASTER_FULL_COPY)assert(storage.vram_compared_bytes==
+#if SMW_RASTER_TRACK_WRITES && !SNESRECOMP_TRACE
+      127u*65536);
+#else
+      223u*65536);
+#endif
+  SmwRendererDraw(surface,342*4,native);
+  const uint32_t *pixel=(const uint32_t *)surface;
+  for(unsigned y=0;y<224;++y)
+    assert(pixel[y*342+SmwRendererNativeOffset()+128]==
+           (y==2 || y==3?0x00ff00u:0xff0000u));
+  SmwRendererResetScene();
+}
+int main(void) { geometry();spawn();spawn_lifecycle();ghost_house_capacity();objects();sprite_parts();completed_draws();transitions();map16();pipe_variants();hud();parallax();camera_timing();raster_storage();puts("geometry, spawn lifecycle/save state and ghost-house capacity, signed OAM/sprite parts, independent sprite draws, transitions, Map16/pipe variants, anchored HUD, parallax, presentation camera timing and immutable VRAM raster storage: passed");return 0; }

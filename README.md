@@ -319,6 +319,40 @@ README for the full framework-side attribution.
 
 https://discord.gg/S4MvUGQFwd
 
+## Raster snapshot storage
+
+The adaptive renderer retains exact immutable VRAM versions across unchanged
+scanlines. Palette, OAM and registers remain per-line; IRQ/native uncertainty
+and callbacks retain byte comparison. This changes host storage, preserving
+the guest's PPU work and stock presentation fallback.
+
+For reference builds, use `-DSMW_RASTER_FULL_COPY=ON`; for exact comparisons
+without the scoped write shortcut, use `-DSMW_RASTER_TRACK_WRITES=OFF`.
+`tools/test_adaptive_renderer.py` accepts `--full-copy` and `--byte-compare`
+for the corresponding renderer checks.
+
+The 2026-10-22 original/candidate three-aspect route checks matched all 21
+captured images and common frame/sprite telemetry. On an i5-4670, three
+balanced audio-enabled headless pairs saved median CPU time of 21.14% at
+16:9 and 15.93% at 32:9 on that menu/YI2/death/map-return route. These measure
+route headroom; gameplay FPS depends on scene and hardware. Static storage
+is approximately 14MiB smaller, with version-dependent heap highwater.
+The owner approved the combined SMW, MMX and Super Metroid playtests.
+
+The subsequent current-main integration starts at `6c773d6` and retains its
+co-op renderer. It uses the engine's existing `Ppu.vramWriteCount` rather than
+adding another revision counter. Engine pin `4c5c7dc` backports only the shared
+snapshot helper, also landed in snesrecomp PR #209. Fresh stock generation was
+byte-identical across two passes. Tracked, byte-compare and full-copy standalone
+renderer checks pass, including the real extra-object compositor. Current-main
+full-copy/optimized route checks match 21 BMPs, draw lists, sprite telemetry
+and 4000 semantic frame rows per aspect at 4:3, 16:9 and 32:9. Production Mods
+Fit/adaptive spawning also matches seven captures and 4000 trace rows.
+Current-build file loads match the tested functional partitions; ordinary
+loads re-anchor clocks, so this is not a full-chip rollback-byte claim. These
+are correctness reruns; the i5-4670 timings above belong to the earlier
+human-approved baseline, not a new current-main benchmark.
+
 ## License
 
 PolyForm Noncommercial 1.0.0. See `LICENSE`. Code in this repo is original
