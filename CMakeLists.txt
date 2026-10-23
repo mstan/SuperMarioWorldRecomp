@@ -18,6 +18,11 @@ if(SMW_BUILD_COOP)
 endif()
 
 set(CMAKE_C_STANDARD 11)
+option(SMW_RASTER_FULL_COPY "Use full-copy VRAM raster storage as the reference" OFF)
+option(SMW_RASTER_TRACK_WRITES "Track VRAM writes for title-owned capture intervals" ON)
+add_compile_definitions(SMW_RASTER_TRACK_WRITES=$<BOOL:${SMW_RASTER_TRACK_WRITES}>)
+set_property(SOURCE src/smw_renderer.c APPEND PROPERTY COMPILE_DEFINITIONS
+    SMW_RASTER_FULL_COPY=$<BOOL:${SMW_RASTER_FULL_COPY}>)
 
 # Reported by host_report_init() in crash breadcrumbs/minidumps and used as the
 # netplay game version. The MSVC .sln plumbs this through SnesRecompBuildVersion

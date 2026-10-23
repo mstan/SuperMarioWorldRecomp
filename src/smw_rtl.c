@@ -40,6 +40,7 @@ void SmwDrawPpuFrame(void) {
 
   int trigger = g_snes->vIrqEnabled ? g_snes->vTimer + 1 : -1;
 
+  SmwRendererBeginHardwareRaster(g_ppu);
   for (int i = 0; i <= 224; i++) {
     SmwRendererCaptureLine(g_ppu, i);
     ppu_runLine(g_ppu, i);
@@ -48,6 +49,7 @@ void SmwDrawPpuFrame(void) {
     SimpleHdma_DoLine(&hdma_chans[2]);
     //    dma_doHdma(snes->dma);
     if (i == trigger) {
+      SmwRendererHardwareVramChanged();
       // Simulate hardware IRQ latch: I_IRQ's first instruction reads HW_TIMEUP
       // ($4211) and branches on the N flag to distinguish timer-IRQ from
       // other sources. recomp_hw.c's ReadReg(0x4211) returns g_snes->inIrq<<7
@@ -63,6 +65,7 @@ void SmwDrawPpuFrame(void) {
       trigger = g_snes->vIrqEnabled ? g_snes->vTimer + 1 : -1;
     }
   }
+  SmwRendererEndHardwareRaster();
 }
 
 #include "mods/coop/coop_simulation.h"

@@ -101,6 +101,8 @@ def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--build',type=Path,default=ROOT/'build-adaptive')
     ap.add_argument('--live',action='store_true')
+    ap.add_argument('--full-copy',action='store_true',help='Build the full-copy raster reference checks')
+    ap.add_argument('--byte-compare',action='store_true',help='Check the portable path without write tracking')
     ap.add_argument('--resize',action='store_true')
     ap.add_argument('--aspect',default='Fit')
     ap.add_argument('--spawn',choices=['adaptive','original'],default='adaptive')
@@ -113,10 +115,20 @@ def main():
     args=ap.parse_args();build=args.build.resolve();build.mkdir(parents=True,exist_ok=True)
     env=environment();gcc=shutil.which('gcc',path=env['PATH'])
     if not gcc:ap.error('gcc required for the standalone checks')
-    test=build/('renderer_test.exe' if os.name=='nt' else 'renderer_test')
+    # The co-op renderer calls the shared extra-object compositor. Link that
+    # real implementation and discard unused PPU entry points/dependencies.
+    ppu_object=build/'ppu_compositor.o'
+    subprocess.run([gcc,'-std=c11','-O2','-ffunction-sections','-fdata-sections',
+        '-fno-asynchronous-unwind-tables','-fno-unwind-tables',
+        '-DSNESRECOMP_TRACE=0','-Isnesrecomp/runner/src','-c',
+        'snesrecomp/runner/src/snes/ppu.c','-o',str(ppu_object)],cwd=ROOT,env=env,check=True)
+    test=build/(('renderer_test_full_copy' if args.full_copy else 'renderer_test')+('.exe' if os.name=='nt' else ''))
     subprocess.run([gcc,'-std=c11','-O2','-Wall','-Wextra','-Werror','-DSNESRECOMP_TRACE=0',
+        '-DSMW_RASTER_FULL_COPY='+str(int(args.full_copy)),
+        '-DSMW_RASTER_TRACK_WRITES='+str(int(not args.byte_compare)),
         '-Isrc','-Isnesrecomp/runner/src','test/renderer/renderer_test.c',
-        'src/smw_renderer_hooks.c','src/smw_video.c','src/smw_renderer.c','-lm','-o',str(test)],cwd=ROOT,env=env,check=True)
+        'src/smw_renderer_hooks.c','src/smw_video.c','src/smw_renderer.c',str(ppu_object),
+        '-Wl,--gc-sections','-lm','-o',str(test)],cwd=ROOT,env=env,check=True)
     subprocess.run([str(test)],env=env,check=True)
     import importlib.util
     spec=importlib.util.spec_from_file_location('hooks',ROOT/'tools/apply_renderer_hooks.py')
@@ -160,8 +172,8 @@ def main():
                SMW_RENDER_DIAGNOSTICS=str(root),SMW_RENDER_CAPTURE_EVERY='100')
     if not args.resize:env['SMW_RENDER_CAPTURE_FRAME']=str(capture)
     exe=build/('SuperMarioWorldSNESRecomp.exe' if os.name=='nt' else 'SuperMarioWorldSNESRecomp')
-    command=[str(exe),'--config',str(root/'config.ini'),'--script',str(root/'route.script'),
-             '--benchmark-audio' if args.audio else '--benchmark',str(frames),str(args.rom.resolve(strict=True))]
+    command=[str(exe),str(args.rom.resolve(strict=True)),'--config',str(root/'config.ini'),
+             '--script',str(root/'route.script'),'--benchmark-audio' if args.audio else '--benchmark',str(frames)]
     samples=[]
     with (root/'stdout.log').open('w') as out,(root/'stderr.log').open('w') as err:
         process=subprocess.Popen(command,cwd=root,env=env,stdout=out,stderr=err)
