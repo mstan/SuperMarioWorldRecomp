@@ -37,6 +37,7 @@ param(
   [ValidateSet('stock', 'coop')][string]$Variant = 'stock',
   [string]$BuildDir = 'build-recompui',
   [string]$RuntimeBinDir = 'C:\msys64\mingw64\bin',
+  [string]$FrameworkDir = '',
   [ValidateSet('SDL3', 'SDL2')][string]$SdlBackend = 'SDL3'
 )
 
@@ -47,6 +48,7 @@ $exeName = if ($Variant -eq 'coop') { 'SuperMarioWorldCoopSNESRecomp.exe' } else
 $exe = Join-Path $build $exeName
 $assets = Join-Path $build 'assets'
 $mods = Join-Path $build 'mods'
+if (-not $FrameworkDir) { $FrameworkDir = Join-Path $root 'snesrecomp' }
 
 if (-not (Test-Path -LiteralPath $exe)) {
   throw "Release executable missing: $exe"
@@ -91,6 +93,12 @@ if (Test-Path -LiteralPath $zip) {
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 
 Copy-Item -LiteralPath $exe -Destination $stage
+# One complete title bundle can also carry the built legacy co-op edition.
+$legacyCoop = Join-Path $build 'SuperMarioWorldCoopSNESRecomp.exe'
+if ($Variant -eq 'stock' -and (Test-Path -LiteralPath $legacyCoop -PathType Leaf)) {
+  Copy-Item -LiteralPath $legacyCoop -Destination $stage
+  Copy-Item -LiteralPath (Join-Path $root 'recomp\coop\smw_coop.ips') -Destination $stage
+}
 if ($Variant -eq 'stock') {
   $falconHelper = Join-Path $build 'smw-falcon-cache.exe'
   $falconLicenses = Join-Path $build 'falcon-cache-licenses'
@@ -151,7 +159,7 @@ if (Test-Path -LiteralPath $kb) {
 # Instead: stage the SDL backend, then walk the actual PE import graph and pull
 # in the full transitive closure of non-OS dependencies. Anything unresolvable
 # fails the release rather than shipping.
-. (Join-Path $root 'snesrecomp\tools\release\RuntimeDllClosure.ps1')
+. (Join-Path $FrameworkDir 'tools\release\RuntimeDllClosure.ps1')
 
 $sdlDll = "$SdlBackend.dll"
 $sdlSource = Join-Path $build $sdlDll
