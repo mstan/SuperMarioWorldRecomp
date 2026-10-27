@@ -1648,12 +1648,15 @@ int main(int argc, char** argv) {
   }
 
 #if SNESRECOMP_ENABLE_MODS
-  /* ROM path is final here. Activation runs reset callbacks first, so disabled
+  /* Validate catalog targets against the verified source ROM. The optional
+   * co-op executable loads a separately verified patched derivative, while
+   * packages still identify the owner's original stock image.
+   * Activation runs reset callbacks first, so disabled
    * features restore stock behavior regardless of legacy config.ini flags, then
    * active packages apply their options. Must land before width derivation,
    * window creation, and MSU-1 initialization in RtlRegisterGame. */
   if (mods_ready) {
-    if (!snes_mod_runtime_commit_c(runtime_rom_path)) {
+    if (!snes_mod_runtime_commit_c(rom_path_buf)) {
       fprintf(stderr, "SNES mod plan rejected: %s\n",
               snes_mod_runtime_last_error_c());
       return 1;
