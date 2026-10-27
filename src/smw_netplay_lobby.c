@@ -264,10 +264,12 @@ static int ExternalIp(void *ctx, char *out, size_t out_len) {
 
 static int Create(void *ctx, const char *name, char *host_endpoint,
                   const char *password,
-                  const RecompLauncherCSettings *settings, int lan_only) {
+                  const RecompLauncherCSettings *settings, int lan_only,
+                  int max_slots) {
   SnesLobbyMatchCaps caps = MatchCaps(settings);
   const char *endpoint;
   (void)ctx;
+  (void)max_slots; /* This ROM supports exactly two players. */
   if (!host_endpoint || !host_endpoint[0]) return -1;
   g_remote_ready_requested = 0;
   endpoint = host_endpoint;
@@ -280,10 +282,11 @@ static int Create(void *ctx, const char *name, char *host_endpoint,
   return snes_lobby_create(name && name[0] ? name : "SMW Co-op Lobby",
                            SMW_NETPLAY_GAME, SNES_GAME_VERSION,
                            password ? password : "",
-                           endpoint, &caps);
+                           endpoint, &caps, 2);
 }
 
-static int Join(void *ctx, const char *lobby_id, const char *password) {
+static int Join(void *ctx, const char *lobby_id, const char *password,
+                char *guest_bind) {
   RNetLanLobby state;
   const char *name;
   (void)ctx;
@@ -303,9 +306,9 @@ static int Join(void *ctx, const char *lobby_id, const char *password) {
   g_hosting_lan = 0;
   g_joined_lan = 0;
   g_remote_ready_requested = 0;
-  /* snesrecomp owns the online guest port policy and always chooses a
-   * concrete free bind; passing NULL avoids advertising peer_ip:0. */
-  return snes_lobby_join(lobby_id, password ? password : "", NULL);
+  /* Preserve the launcher's selected free UDP bind. The engine also handles
+   * NULL for unattended auto-launch and other callers without a UI bind. */
+  return snes_lobby_join(lobby_id, password ? password : "", guest_bind);
 }
 
 static int Leave(void *ctx) {
@@ -615,7 +618,7 @@ int SmwNetplayLauncherAutoLaunch(const char *role, const char *player_name,
 
   if (is_host) {
     char endpoint[64] = "0.0.0.0:7777";
-    if (Create(NULL, lobby_name, endpoint, "", &settings, 0) != 0) {
+    if (Create(NULL, lobby_name, endpoint, "", &settings, 0, 2) != 0) {
       AutoLog(role, "create_failed");
       return -5;
     }
@@ -637,7 +640,7 @@ int SmwNetplayLauncherAutoLaunch(const char *role, const char *player_name,
         if (ListGet(NULL, i, &row) &&
             strcmp(row.name, lobby_name) == 0 &&
             strcmp(row.game_name, SMW_NETPLAY_GAME) == 0) {
-          if (Join(NULL, row.lobby_id, "") != 0) {
+          if (Join(NULL, row.lobby_id, "", NULL) != 0) {
             AutoLog(role, "join_failed");
             return -7;
           }
