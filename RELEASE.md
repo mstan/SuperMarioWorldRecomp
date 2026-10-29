@@ -17,9 +17,9 @@ without `SDL3.dll` and the recomp-ui `assets/` tree, and redundant next
 to the zip.
 
 Widescreen is **no longer a separate zip**. Enable **SMW Adaptive Widescreen**
-in the launcher's Mods page. Its defaults are **Fit to screen** and
-**Screen-based** enemy spawning, with fixed aspect ratios and Original 4:3
-spawning available. CMake's `smw_renderer_hooks` stamp installs the adaptive
+in the launcher's Mods page. The current catalog defaults are **16:9** and
+**Screen-based** enemy spawning. **Fit to screen**, other fixed aspect ratios
+and Original 4:3 spawning are available. CMake's `smw_renderer_hooks` stamp installs the adaptive
 renderer and the separate Falcon hooks identically on Windows and Linux.
 Mod settings persist in `mods/preloaded/state.toml`; legacy Widescreen INI fields are inactive.
 
