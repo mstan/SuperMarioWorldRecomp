@@ -1,7 +1,7 @@
 SMW v0.15.3 delivers the already owner-qualified shared renderer memory package through the normal engine dependency.
 
-- Pin merged snesrecomp31d72e1a, containing compact captured PPU registers and on-demand scene-export scratch.
-- The measured SMW package reserves1,572,864 fewer bytes of BSS (1.5MiB). Matched stock/widescreen CPU samples were neutral/inconclusive; no release frame-rate gain is claimed.
+- Pin merged snesrecomp 31d72e1a, containing compact captured PPU registers and on-demand scene-export scratch.
+- The measured SMW package reserves 1,572,864 fewer bytes of BSS (1.5 MiB). Matched stock/widescreen CPU samples were neutral/inconclusive; no release frame-rate gain is claimed.
 - Keep the existing adaptive-widescreen mod (Fit to screen and Screen-based spawning), Lua examples/listener opt-in and Falcon owner-ROM helper. No new gameplay or renderer default is introduced.
 - Native saves and user settings are preserved. Host save states belong to their exact build; old-state compatibility is not promised.
 
