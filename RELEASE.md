@@ -43,7 +43,7 @@ without overwriting user edits. Co-op currently rejects Lua builds.
 
 ```powershell
 # 1. configure. NOTE the quoting: PowerShell rewrites an unquoted
-#    -DSNESRECOMP_BUILD_VERSION=0.13.0 into "0", which would ship crash
+#    -DSNESRECOMP_BUILD_VERSION=0.15.4 into "0", which would ship crash
 #    reports that cannot be tied to this release. make_release.ps1 now
 #    refuses to package an exe that is not stamped with -Version, but
 #    quote it here and the guard never has to fire.
@@ -52,7 +52,7 @@ cmake -S . -B build-recompui -G Ninja -DCMAKE_BUILD_TYPE=Release `
   -DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe `
   -DSNESRECOMP_ENABLE_TRACE=OFF -DSNESRECOMP_SDL_BACKEND=SDL3 `
   -DSNESRECOMP_ENABLE_LUA=ON `
-  "-DSNESRECOMP_BUILD_VERSION:STRING=0.13.2"
+  "-DSNESRECOMP_BUILD_VERSION:STRING=0.15.4"
 
 # 2. build. Keep -j modest: the generated banks are multi-MB TUs at -O3,
 #    and an over-subscribed build kills the compiler with NO diagnostic
@@ -60,7 +60,7 @@ cmake -S . -B build-recompui -G Ninja -DCMAKE_BUILD_TYPE=Release `
 cmake --build build-recompui --target SuperMarioWorldSNESRecomp -j 4
 
 # 3. package
-powershell -File tools\make_release.ps1 -Version 0.13.2 `
+powershell -File tools\make_release.ps1 -Version 0.15.4 `
   -BuildDir build-recompui -RuntimeBinDir C:\msys64\mingw64\bin
 ```
 
@@ -106,7 +106,7 @@ fonts at all.
 ## Linux
 
 ```bash
-bash tools/build-linux.sh --version 0.13.0 --lua --jobs 4
+bash tools/build-linux.sh --version 0.15.4 --lua --jobs 4
 ```
 
 The AppImage lands in `release-linux/`. The script:
