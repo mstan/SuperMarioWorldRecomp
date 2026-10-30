@@ -131,6 +131,12 @@ fi
 # generated symbols, coupling the variants and overflowing Windows argv limits.
 SOURCE_ROOT_ARGS=(--source-root recomp/renderer_aot_roots.c)
 while IFS= read -r source; do
+  # This adapter is linked only by the legacy IPS target. Its numeric bank
+  # prefix and expanded-ROM continuation are not stock-game function roots.
+  # Keep the stock dispatch manifest independent of the optional legacy image.
+  if [ "$VARIANT" = stock ] && [ "$source" = src/coop_patch.c ]; then
+    continue
+  fi
   SOURCE_ROOT_ARGS+=(--source-root "$source")
 done < <(find src -type f -name '*.c' \
   ! -path 'src/gen/*' ! -path 'src/gen-coop/*' | sort)
