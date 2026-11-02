@@ -6,16 +6,14 @@ project(SuperMarioWorldSNESRecomp C)
 # generated source tree produced by `tools/regen.sh --coop`.
 option(SMW_BUILD_COOP "Build the simultaneous two-player co-op executable" OFF)
 option(SMW_NETPLAY_ICE
-    "Enable ICE/NAT traversal for the co-op online lobby build" ON)
+    "Enable ICE/NAT traversal for online lobbies" ON)
 
 # Online lobbies must use ICE for peers outside the local network. Keep this
-# game-facing option on by default so a normal co-op release cannot silently
+# game-facing option on by default so a normal release cannot silently
 # degrade to direct UDP and hang behind NAT. Developers can still configure
 # -DSMW_NETPLAY_ICE=OFF for a deliberately LAN-only build.
-if(SMW_BUILD_COOP)
-    set(SNESRECOMP_NET_ICE ${SMW_NETPLAY_ICE} CACHE BOOL
-        "Enable ICE/libjuice transport in recomp-net" FORCE)
-endif()
+set(SNESRECOMP_NET_ICE ${SMW_NETPLAY_ICE} CACHE BOOL
+    "Enable ICE/libjuice transport in recomp-net" FORCE)
 
 set(CMAKE_C_STANDARD 11)
 option(SMW_RASTER_FULL_COPY "Use full-copy VRAM raster storage as the reference" OFF)
@@ -136,6 +134,7 @@ set(SMW_RUNTIME_SOURCES
     src/foreign_controller.c
     src/mod_external_rom_compat.c
     src/main.c
+    src/smw_netplay_lobby.c
     src/opengl.c
     src/smw_00.c
     src/gen_stubs.c
@@ -216,6 +215,7 @@ function(smw_add_recomp_target target_name generated_sources)
 
     target_compile_definitions(${target_name} PRIVATE
         SMW_DISABLE_LM=1
+        SNESRECOMP_BUILD_VERSION="${SNESRECOMP_BUILD_VERSION}"
         SYSTEM_VOLUME_MIXER_AVAILABLE=0
         SNESRECOMP_TRACE=${_SMW_TRACE}
         SNESRECOMP_REVERSE_DEBUG=0
@@ -279,13 +279,13 @@ endif()
 # here, and the Linux packaging step fails outright if it is missing.
 set(SMW_PRELOADED_MODS "${CMAKE_CURRENT_SOURCE_DIR}/mods/preloaded")
 snesrecomp_target_mod_catalog(SuperMarioWorldSNESRecomp "${SMW_PRELOADED_MODS}")
+snesrecomp_enable_recomp_net(SuperMarioWorldSNESRecomp)
 
 if(SMW_BUILD_COOP)
     smw_add_recomp_target(SuperMarioWorldCoopSNESRecomp
         "${SMW_COOP_GEN_SOURCES}")
     target_sources(SuperMarioWorldCoopSNESRecomp PRIVATE
-        src/coop_patch.c
-        src/smw_netplay_lobby.c)
+        src/coop_patch.c)
     target_include_directories(SuperMarioWorldCoopSNESRecomp BEFORE PRIVATE
         ${CMAKE_SOURCE_DIR}/recomp/coop)
     target_compile_definitions(SuperMarioWorldCoopSNESRecomp PRIVATE

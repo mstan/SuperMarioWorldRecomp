@@ -106,6 +106,17 @@ See [the renderer guide](docs/adaptive-renderer.md) for building, isolated
 playtesting, architecture, checks, and current limitations. Old `Widescreen`
 and `WidescreenHud` INI fields no longer control this mod.
 
+## Online netplay
+
+Open **Netplay → Online Netplay** in the standard launcher and sign in with
+Discord. Online rooms require sign-in. Choose **Host Lobby**, enter a room
+name, and select **Create**. The other player joins the room from the lobby
+browser. Both players must use the same build. **LAN / Direct IP** remains
+available without an account.
+
+For simultaneous play, enable **SMW Native Co-op (Experimental)** and choose
+**2 Player** in the original game menu. See the prototype notes below.
+
 ## Experimental native simultaneous co-op
 
 **Playable prototype ? experimental and disabled by default.** Mario (P1) and

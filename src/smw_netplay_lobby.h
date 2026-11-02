@@ -1,12 +1,12 @@
 #ifndef SMW_NETPLAY_LOBBY_H
 #define SMW_NETPLAY_LOBBY_H
 
-#ifdef SMW_COOP_BUILD
+#if SNESRECOMP_NET
 
 #include "recomp_launcher.h"
 
 /* recomp-ui owns the lobby presentation. These callbacks adapt its generic
- * two-player UI to snesrecomp's lobby client for the SMW co-op build. */
+ * two-player UI to snesrecomp's shared account and lobby backend. */
 const RecompLauncherCNetplayCallbacks *SmwNetplayLauncherCallbacks(void);
 /* Deterministic integration-test path for exercising the deployed online
  * lobby and ICE signaling without automating ImGui. The lobby connection is
