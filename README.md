@@ -79,6 +79,35 @@ select your **Super Smash Bros. (USA) v1.0** ROM, and press Play. The included
 helper prepares Falcon's assets in your user cache on first use. No Python
 installation or environment setup is required.
 
+## Send a reproducible bug report
+
+1. In the launcher's **Mods** page, enable **SMW Playtest Diagnostics →
+   Diagnostic recording**. Keep the gameplay mods and settings needed for
+   your reproduction, including native co-op where applicable. Disable
+   run-ahead while recording.
+2. Start a fresh game session and reproduce the problem. The recorder captures
+   both controller inputs, full machine checkpoints including native co-op
+   state, the build/ROM identity, effective mods, configuration and frame checksums.
+   Recording is optional and does not alter native saves or gameplay rules.
+3. Quit normally if possible. Zip **all files beginning `smw-replay-` from
+   `logs/` beside the executable or AppImage**. Keep each `.replay` together
+   with its `.sav`, `.config.ini`, `.mods.toml` and `.mods.txt` sidecars.
+   If the game crashes, include its crash report too.
+4. Attach that ZIP and the steps that triggered the problem. For a timing or
+   visual issue, a short video and the approximate time in the session help.
+
+Captures retain up to an hour of recent input, with bounded checkpoint storage
+and a background writer. The final buffered tail can be absent after an abrupt
+process termination; keep the remaining files. A recording error stops capture
+without stopping gameplay. Recordings contain machine state and configuration;
+review the files before sharing them.
+
+For developers, `tools/replay_diagnostic.py` checks a capture or replays it in a
+new isolated directory using the exact matching release, platform and ROM.
+It restores recorded mod choices and compares completed-frame checksums.
+Offline replay currently supports local play, including native co-op;
+online rollback sessions are outside this replay contract.
+
 ## Optional Lua scripting
 
 The Windows/Linux packages include an opt-in localhost Lua server and

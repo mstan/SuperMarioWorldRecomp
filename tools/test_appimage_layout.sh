@@ -27,6 +27,8 @@ fi
 appdir=$(CDPATH= cd -- "$1" && pwd)
 exe=$(basename "$(find "$appdir/usr/bin" -maxdepth 1 -type f -name '*SNESRecomp' | head -1)")
 [ -n "$exe" ] || { echo "no *SNESRecomp ELF under $appdir/usr/bin" >&2; exit 1; }
+grep -a -q 'Non-interactive ROM selection requires' "$appdir/usr/bin/$exe" || {
+    echo "FAIL: executable lacks the non-interactive ROM-dialog guard" >&2; exit 1; }
 
 tmp=$(mktemp -d)
 trap 'chmod -R u+w "$appdir" "$tmp" 2>/dev/null || true; rm -rf "$tmp"' EXIT HUP INT TERM
@@ -37,12 +39,21 @@ trap 'chmod -R u+w "$appdir" "$tmp" 2>/dev/null || true; rm -rf "$tmp"' EXIT HUP
 run_apprun() { # simulated_appimage_path
     sim=$1
     mkdir -p "$(dirname "$sim")"
+    status=0
     ( cd "$(dirname "$sim")" && \
       APPIMAGE=$sim \
       SDL_VIDEODRIVER=dummy SDL_VIDEO_DRIVER=dummy \
       SDL_AUDIODRIVER=dummy SDL_AUDIO_DRIVER=dummy \
-      SNESRECOMP_NO_LAUNCHER=1 \
-      timeout 20 "$appdir/AppRun" >/dev/null 2>&1 ) || true
+      DISPLAY= WAYLAND_DISPLAY= WAYLAND_SOCKET= QT_QPA_PLATFORM=offscreen \
+      DBUS_SESSION_BUS_ADDRESS="unix:path=$tmp/no-desktop-bus" \
+      SNESRECOMP_NO_LAUNCHER=1 SNESRECOMP_NO_DIALOGS=1 \
+      SNES_NET_SUPPRESS_ERROR_DIALOG=1 \
+      timeout 20 "$appdir/AppRun" ) >"$tmp/apprun.log" 2>&1 || status=$?
+    if [ "$status" -ne 2 ] || ! grep -q 'Non-interactive ROM selection' "$tmp/apprun.log"; then
+        cat "$tmp/apprun.log" >&2
+        echo "FAIL: ROM-less non-interactive launch did not exit promptly without dialogs (status $status)" >&2
+        exit 1
+    fi
 }
 
 # Does the payload carry a release-owned mod catalog? Pick one manifest to track.

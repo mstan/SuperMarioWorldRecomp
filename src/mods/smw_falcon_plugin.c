@@ -7,6 +7,7 @@
 #include "snes/interp_bridge.h"
 #include "mods/smw_falcon_plugin.h"
 #include <string.h>
+#include "host_ui.h"
 
 #define SMW_FALCON_PLUGIN "super-mario-world.smash64.captain-falcon"
 static int s_enabled;
@@ -29,7 +30,7 @@ static void smw_falcon_activate(void)
     const char *owner_rom = snes_mod_external_rom_path(
         SMW_FALCON_PLUGIN, "captain-falcon", "smash64-us-v10");
     if (!smw_falcon_presentation_activate(owner_rom)) {
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Captain Falcon could not load",
+        if(SmwUiDialogsAllowed())SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Captain Falcon could not load",
             "Falcon's assets could not be prepared. Select your Super Smash Bros. "
             "US v1.0 ROM in Mods and make sure the complete release is extracted "
             "and your user cache folder is writable. The game will use Mario.", NULL);

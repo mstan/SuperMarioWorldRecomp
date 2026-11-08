@@ -1,6 +1,7 @@
 #include "desktop/sdl_compat.h"
 #include "coop_storage.h"
 #include "common_rtl.h"
+#include "host_ui.h"
 
 typedef struct StorageImage {
     struct StorageImage *next;
@@ -97,6 +98,7 @@ void SmwCoopStorageShutdown(bool capture_current) {
         bool queued=!capture_current || SmwCoopQueueStorage();
         if(queued)capture_current=false;
         if(queued && SmwCoopFinishStorage())return;
+        if(!SmwUiDialogsAllowed())Die("Could not save co-op SRAM during an unattended run");
         const SDL_MessageBoxButtonData buttons[]={
             {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT,1,"Retry"},
             {0,0,"Quit without saving"}

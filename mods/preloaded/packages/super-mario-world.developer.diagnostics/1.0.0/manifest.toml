@@ -1,0 +1,24 @@
+format_version = 1
+id = "super-mario-world.developer.diagnostics"
+version = "1.0.0"
+name = "SMW Playtest Diagnostics"
+author = "mstan"
+description = "Record controller inputs, machine checkpoints, settings and frame checksums for reproducible bug reports, including native simultaneous co-op."
+license = "MIT"
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "super-mario-world-us"
+rom_sha256 = "0838e531fe22c077528febe14cb3ff7c492f1f5fa8de354192bdff7137c27f5b"
+
+[[feature]]
+id = "recording"
+name = "Diagnostic recording"
+description = "Record a bounded session under logs/smw-replay-*. Reproduce the problem, quit normally if possible, and zip all matching replay files and sidecars. Includes current-build machine state and settings. Disable run-ahead when recording."
+group = "Developer"
+default_enabled = false
+
+[[plugin]]
+feature = "recording"
+id = "super-mario-world.diagnostics"

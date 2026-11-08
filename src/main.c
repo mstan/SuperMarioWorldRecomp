@@ -24,6 +24,12 @@
 
 #include "types.h"
 #include "smw_rtl.h"
+#include "smw_replay.h"
+#include "host_paths.h"
+#include "host_ui.h"
+#include "launcher_cache.h"
+#include "rom_image_verify.h"
+#include "crc32.h"
 #include "common_cpu_infra.h"
 #include "framedump.h"
 #include "config.h"
@@ -97,6 +103,7 @@ static void EnsureConfigIni(void);
 static void RenderNumber(uint8 *dst, size_t pitch, int n, uint8 big);
 static void OpenOneGamepad(SDL_JoystickID i);
 
+static bool g_no_interactive_dialogs;
 static FILE *g_stall_log_file;
 static double g_stall_log_threshold_ms = -1.0;
 
@@ -438,7 +445,8 @@ void NORETURN Die(const char *error) {
    * includes it and preserves a timestamped crash copy (see
    * host_report_has_fatal in post_mortem.c). */
   host_report_fatal(error);
-  SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, kWindowTitle, error, NULL);
+  if (!g_no_interactive_dialogs && SmwUiDialogsAllowed())
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, kWindowTitle, error, NULL);
   fprintf(stderr, "Error: %s\n", error);
   exit(1);
 }
@@ -916,6 +924,7 @@ static void UpdateWidescreen(void) {
   g_renderer_funcs.GetOutputSize(&w, &h);
   SmwViewport view = SmwCalculateViewport(&g_smw_video, w, h,
       SnesDisplayAspect_Clamp(g_config.display_aspect));
+  SmwReplayViewport(&view);
   if (view.width == g_smw_viewport.width && view.aspect == g_smw_viewport.aspect) return;
   g_smw_viewport = view;
   g_snes_width = view.width;
@@ -1117,6 +1126,15 @@ int main(int argc, char** argv) {
    * parser is order-independent and absolutizes paths before the cwd anchor
    * changes what a relative path means. */
   const char *program_path = (argc >= 1) ? argv[0] : NULL;
+  char diagnostic_replay[1200] = "";
+  for (int i=1; i<argc; ) {
+    if (strcmp(argv[i], "--replay-diagnostic")) { ++i; continue; }
+    if (i+1>=argc || diagnostic_replay[0] ||
+        !snesrecomp_abspath(argv[i+1], diagnostic_replay, sizeof(diagnostic_replay))) {
+      fprintf(stderr, "--replay-diagnostic requires one capture path\n"); return 2;
+    }
+    memmove(argv+i, argv+i+2, (size_t)(argc-i-1)*sizeof(*argv)); argc-=2;
+  }
   static const char kSmwExtraUsage[] =
       "\nSuper Mario World only:\n"
       "  --benchmark <frames>              run N frames headless and exit.\n"
@@ -1158,7 +1176,9 @@ int main(int argc, char** argv) {
   const char *script_file = args.script_file;
   const char *framedump_dir = args.framedump_dir;
   const int arg_no_launcher = args.no_launcher;
-  (void)arg_no_launcher;
+  g_no_interactive_dialogs = arg_no_launcher || start_paused || script_file ||
+      framedump_dir || g_benchmark_frames > 0 || !SmwUiDialogsAllowed();
+  if (g_no_interactive_dialogs) SetEnvVar("SNESRECOMP_NO_DIALOGS", "1");
   /* Downstream still reads the positional ROM from argv[0]; only the parsing
    * moved. */
   static char *rom_argv[2];
@@ -1304,8 +1324,8 @@ int main(int argc, char** argv) {
                    (framedump_dir != NULL) || g_benchmark_frames > 0;
     int have_positional = (argc >= 1 && argv[0] && argv[0][0] != '-' && argv[0][0] != '\0');
     const char *no_launcher = getenv("SNESRECOMP_NO_LAUNCHER");
-    int want_launcher = force_launcher ||
-        (!headless && !have_positional && !(no_launcher && *no_launcher));
+    int want_launcher = !g_no_interactive_dialogs && (force_launcher ||
+        (!headless && !have_positional && !(no_launcher && *no_launcher)));
 #if SNESRECOMP_NET
     if (g_netplay_pending) want_launcher = 0;
 #endif
@@ -1543,7 +1563,30 @@ int main(int argc, char** argv) {
       (char *)((argc >= 1 && argv[0]) ? argv[0] : "")
     };
     int la_argc = (la_argv[1][0] != '\0') ? 2 : 1;
-    if (!snesrecomp_launcher_resolve_rom(la_argc, la_argv, rom_path_buf,
+    if (g_no_interactive_dialogs) {
+      char candidate[sizeof(rom_path_buf)] = "";
+      bool explicit_rom = la_argc > 1;
+      if (explicit_rom) {
+        if (snprintf(candidate,sizeof(candidate),"%s",la_argv[1]) >= (int)sizeof(candidate))
+          return 2;
+      } else snesrecomp_rom_cache_read(candidate,sizeof(candidate));
+      if (!candidate[0] || !snesrecomp_rom_is_readable(candidate)) {
+        fprintf(stderr,"Non-interactive ROM selection requires a readable explicit or cached ROM.\n");
+        return 2;
+      }
+      size_t size = 0;
+      uint8 *bytes = ReadWholeFile(candidate, &size);
+      size_t header = size % 1024 == 512 ? 512 : 0;
+      bool valid = bytes && size > header &&
+          crc32_compute(bytes + header, size - header) == kSmwUsaCrc32;
+      free(bytes);
+      if (!valid) {
+        fprintf(stderr,"Non-interactive ROM selection: ROM verification mismatch.\n");
+        if (!explicit_rom) return 2;
+      }
+      if (!snesrecomp_abspath(candidate,rom_path_buf,sizeof(rom_path_buf))) return 2;
+      /* Scripted runs do not rewrite the installation's cached ROM choice. */
+    } else if (!snesrecomp_launcher_resolve_rom(la_argc, la_argv, rom_path_buf,
                                          sizeof(rom_path_buf), kSmwUsaCrc32)) {
       /* User cancelled the picker or repeatedly chose a non-matching ROM. */
       return 1;
@@ -1767,7 +1810,10 @@ session_reboot:
   /* RtlRegisterGame arms MSU-1 from the environment; now it can derive a pack
    * base from the ROM path when SNESRECOMP_MSU1=auto. */
   { extern void msu1_set_rom_path(const char *); msu1_set_rom_path(runtime_rom_path); }
+  SmwReplaySetConfigPath(config_file);
   Snes *snes = SnesInit(kRom, kRom_SIZE);
+  SmwReplayRomLoaded(kRom, kRom_SIZE);
+  if (diagnostic_replay[0] && !SmwReplayPlayback(diagnostic_replay)) return 2;
   host_report_breadcrumb("SnesInit: %s", snes ? "ok" : "FAILED");
   if (snes == NULL) {
 error_reading:;
@@ -2195,6 +2241,7 @@ error_reading:;
       }
       inputs = snes_netplay_published_inputs() | snes_netplay_active_mask();
       uint64_t guest_phase = BenchmarkPhaseBegin();
+      SmwReplayClose();
       if (SmwCoopHostFrame(inputs)) RtlRunFrame(inputs);
       BenchmarkPhaseEnd(kSnesRecompBenchmarkPhase_GuestFrame, guest_phase);
       snes_netplay_finish_frame();
@@ -2227,7 +2274,10 @@ error_reading:;
 #endif
       uint64_t guest_phase = BenchmarkPhaseBegin();
       TraceAudioFrame(frameCtr, "before_guest");
+      if (!SmwReplayBegin(&inputs)) { running=false; break; }
+      g_snes_width=g_smw_viewport.width;
       if (SmwCoopHostFrame(inputs)) RtlRunFrame(inputs);
+      SmwReplayEnd();
       TraceAudioFrame(frameCtr, "after_guest");
       BenchmarkPhaseEnd(kSnesRecompBenchmarkPhase_GuestFrame, guest_phase);
 #if SNESRECOMP_ENABLE_LUA
@@ -2313,6 +2363,7 @@ error_reading:;
       g_rtl_game_info->draw_ppu_frame();
       BenchmarkPhaseEnd(kSnesRecompBenchmarkPhase_PpuDraw, ppu_phase);
     }
+    SmwReplayRendered();
     stall_t_draw = SDL_GetPerformanceCounter();
     g_audio_producer_active = false;
 
@@ -2592,6 +2643,7 @@ error_reading:;
 #ifdef __SWITCH__
     SwitchImpl_Exit();
 #endif
+    SmwReplayShutdown();
     SDL_Quit();
     return 0;
   }
@@ -2609,8 +2661,9 @@ error_reading:;
 #if SNESRECOMP_ENABLE_LUA
   lua_bridge_shutdown();
 #endif
+  SmwReplayShutdown();
   SDL_Quit();
-  return benchmark_exit_code;
+  return SmwReplayFailed() ? 1 : benchmark_exit_code;
 }
 
 static void RenderDigit(uint8 *dst, size_t pitch, int digit, uint32 color, bool big) {
@@ -2723,7 +2776,7 @@ static void NetplayReportError(const char *error_code, const char *message) {
   host_report_breadcrumb("netplay: error=%s transport=%s",
                          error_code ? error_code : "error",
                          snes_netplay_transport_name());
-  if ((!suppress_dialog || suppress_dialog[0] == '\0' ||
+  if (!g_no_interactive_dialogs && (!suppress_dialog || suppress_dialog[0] == '\0' ||
        suppress_dialog[0] == '0') && message) {
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,
                              "SMW Co-op Netplay Connection Failed",

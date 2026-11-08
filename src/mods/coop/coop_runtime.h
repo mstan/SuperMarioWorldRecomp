@@ -12,6 +12,11 @@ bool SmwCoopInstallHooks(void);
 /* Before the initial SRAM read; false means no namespace has been selected. */
 bool SmwCoopPrepareStorage(void);
 bool SmwCoopPersistenceReady(void);
+/* Selected roster for diagnostic reproduction; zero when the mod is off. */
+uint32_t SmwCoopPlayerCount(void);
+/* Host menu gates supplement machine checkpoints during offline diagnostics. */
+uint32_t SmwCoopDiagnosticHostState(void);
+void SmwCoopRestoreDiagnosticHostState(uint32_t state);
 /* Includes a selected namespace while its next player-count menu is open. */
 bool SmwCoopStorageSelected(void);
 bool SmwCoopFrozen(void);

@@ -13,6 +13,14 @@
 #include "mods/falcon/smw_falcon_presentation_runtime.h"
 #include "mods/coop/coop_presentation.h"
 
+static bool g_did_reset, g_first_frame_done;
+uint32_t SmwFrameDriverDiagnosticState(void) {
+  return g_did_reset | (g_first_frame_done<<1);
+}
+void SmwRestoreFrameDriverDiagnosticState(uint32_t state) {
+  g_did_reset=(state&1)!=0;g_first_frame_done=(state&2)!=0;
+}
+
 static SnesrecompExecutionMode smw_execution_mode(void) {
   /* LLE is the correctness floor. The hand-written frame driver remains an
    * explicit optimization selected with SNESRECOMP_EXECUTION_MODE=hle. */
@@ -80,8 +88,6 @@ void RunOneFrameOfGame(void) {
   // would be skipped, leaving $0100 (GameMode) at 0x55 — out-of-bounds for the
   // 42-entry dispatch table at PC 0x009329. Use a host-side bool instead so the
   // gate is independent of WRAM contents.
-  static bool g_did_reset = false;
-  static bool g_first_frame_done = false;
   if (!g_did_reset) {
     cpu_state_init(&g_cpu, g_ram);
     cpu_trace_px_breadcrumb(&g_cpu, 0x1000, "after_cpu_state_init");

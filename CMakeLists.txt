@@ -134,6 +134,8 @@ set(SMW_RUNTIME_SOURCES
     src/foreign_controller.c
     src/mod_external_rom_compat.c
     src/main.c
+    src/smw_replay.c
+    src/mods/smw_diagnostics_plugin.c
     src/smw_netplay_lobby.c
     src/opengl.c
     src/smw_00.c
@@ -197,7 +199,7 @@ function(smw_add_recomp_target target_name generated_sources)
             APPEND PROPERTY COMPILE_DEFINITIONS
             SNESRECOMP_BENCHMARK_PHASES=$<BOOL:${SNESRECOMP_ENABLE_BENCHMARK_PHASES}>)
     endif()
-    set_property(SOURCE src/main.c APPEND PROPERTY COMPILE_DEFINITIONS
+    set_property(SOURCE src/main.c src/smw_replay.c APPEND PROPERTY COMPILE_DEFINITIONS
         SNESRECOMP_BUILD_VERSION="${SNESRECOMP_BUILD_VERSION}"
         SNESRECOMP_HAS_BENCHMARK_HELPER=$<BOOL:${SNESRECOMP_HAS_BENCHMARK_HELPER}>
         SNESRECOMP_BENCHMARK_PHASES=$<BOOL:${SNESRECOMP_ENABLE_BENCHMARK_PHASES}>)
@@ -303,3 +305,12 @@ if(SMW_BUILD_COOP)
                 ${CMAKE_SOURCE_DIR}/recomp/coop/smw_coop.ips
                 $<TARGET_FILE_DIR:SuperMarioWorldCoopSNESRecomp>/smw_coop.ips)
 endif()
+
+# Exact identities let diagnostic playback reject a different executable build.
+execute_process(COMMAND git rev-parse HEAD WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE SMW_REPLAY_REVISION OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+execute_process(COMMAND git rev-parse HEAD WORKING_DIRECTORY ${SNESRECOMP_ROOT}
+    OUTPUT_VARIABLE SMW_REPLAY_ENGINE OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+set_property(SOURCE src/smw_replay.c APPEND PROPERTY COMPILE_DEFINITIONS
+    SMW_REPLAY_REVISION="${SMW_REPLAY_REVISION}" SMW_REPLAY_ENGINE="${SMW_REPLAY_ENGINE}"
+    SMW_REPLAY_TARGET="${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}-${CMAKE_C_COMPILER_ID}-${CMAKE_C_COMPILER_VERSION}-${CMAKE_BUILD_TYPE}")

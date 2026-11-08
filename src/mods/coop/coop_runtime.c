@@ -45,6 +45,13 @@ bool SmwCoopEnabled(void) {return enabled;}
 bool SmwCoopActive(void) {return enabled && selected_count>1;}
 CoopMachine *SmwCoopMachine(void) {return SmwCoopActive()?&machine:NULL;}
 bool SmwCoopPersistenceReady(void) {return !enabled || (selected_count && !choosing);}
+uint32_t SmwCoopPlayerCount(void) {return enabled?selected_count:0;}
+uint32_t SmwCoopDiagnosticHostState(void) {
+    return choosing | (files_chosen<<1) | (disconnected<<2);
+}
+void SmwCoopRestoreDiagnosticHostState(uint32_t state) {
+    choosing=(state&1)!=0;files_chosen=(state&2)!=0;disconnected=(state&4)!=0;
+}
 bool SmwCoopStorageSelected(void) {return selected_count!=0;}
 bool SmwCoopFrozen(void) {return enabled && disconnected;}
 
