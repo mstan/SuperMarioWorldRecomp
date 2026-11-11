@@ -85,10 +85,14 @@ if (-not $stageFull.StartsWith($outFull, [StringComparison]::OrdinalIgnoreCase) 
 }
 
 if (Test-Path -LiteralPath $stage) {
-  Remove-Item -LiteralPath $stage -Recurse -Force
+  $contents = @(Get-Item -LiteralPath $stage) + @(Get-ChildItem -LiteralPath $stage -Recurse)
+  if ($contents | Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $_.Name -eq '.git' }) {
+    throw 'Refusing staging cleanup with a reparse point or nested repository.'
+  }
+  Remove-Item -LiteralPath $stage -Recurse -ErrorAction Stop
 }
 if (Test-Path -LiteralPath $zip) {
-  Remove-Item -LiteralPath $zip -Force
+  Remove-Item -LiteralPath $zip -ErrorAction Stop
 }
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 
@@ -113,6 +117,15 @@ if ($Variant -eq 'coop') {
   Copy-Item -LiteralPath (Join-Path $root 'recomp\coop\smw_coop.ips') -Destination $stage
 }
 Copy-Item -LiteralPath (Join-Path $root 'README.md') -Destination $stage
+if ($Variant -eq 'stock') {
+  $controllerHelper = Join-Path $build 'smw-controller-report.exe'
+  if (-not (Test-Path -LiteralPath $controllerHelper)) { throw 'Build smw-controller-report before packaging.' }
+  Copy-Item -LiteralPath $controllerHelper -Destination $stage
+  foreach ($file in 'Collect-Controller-Diagnostics.cmd','Collect-Controller-Diagnostics.ps1') {
+    Copy-Item -LiteralPath (Join-Path $root ('tools/'+$file)) -Destination $stage
+  }
+  Copy-Item -LiteralPath (Join-Path $root 'CONTROLLER_DIAGNOSTICS.md') -Destination $stage
+}
 Copy-Item -LiteralPath $assets -Destination $stage -Recurse
 $luaEnabled = Select-String -LiteralPath (Join-Path $build 'CMakeCache.txt') `
   -Pattern '^SNESRECOMP_ENABLE_LUA:BOOL=ON$' -Quiet
@@ -135,12 +148,8 @@ $stageMods = Join-Path $stage 'mods'
 New-Item -ItemType Directory -Path $stageMods -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $mods 'preloaded') -Destination $stageMods -Recurse
 
-# keybinds.ini is auto-generated next to the exe on first run (regenerated if
-# deleted); ship whatever is currently sitting next to the built exe, if any.
-$kb = Join-Path $build 'keybinds.ini'
-if (Test-Path -LiteralPath $kb) {
-  Copy-Item -LiteralPath $kb -Destination $stage
-}
+# Generate fresh bindings on first run. Do not ship a developer's device
+# assignments or overwrite an existing player's binding file during updates.
 
 # config.ini ships Widescreen = 0 regardless of the repo's working-tree value
 # (a dev may have flipped it locally while testing); the launcher toggles +
