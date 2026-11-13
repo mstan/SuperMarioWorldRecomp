@@ -16,6 +16,8 @@ uint8 cpu_read8(CpuState *cpu,uint8 bank,uint16 addr) {
 }
 void cpu_write8(CpuState *cpu,uint8 bank,uint16 addr,uint8 value) { (void)cpu; assert(bank==0x7e); g_ram[addr]=value; }
 void interp_bridge_set_pre_opcode_hook(uint32_t pc,InterpPreOpcodeHook hook) { (void)pc;(void)hook; }
+static uint32_t redirected_pc;
+void interp_bridge_pre_opcode_redirect(uint32_t pc) { redirected_pc=pc; }
 extern void SmwRendererGuestHook(CpuState *,uint32_t);
 extern void SmwRendererDrawInfo(CpuState *);
 static void word(unsigned a,unsigned value) { g_ram[a]=value;g_ram[a+1]=value>>8; }
@@ -97,6 +99,28 @@ static void spawn(void) {
     assert(g_ram[0x15c4]==0 && cpu._flag_Z==1);
     g_ram[0x14e0]=9;SmwRendererGuestHook(&cpu,draw_pcs[i]);
     assert(g_ram[0x15c4]==1 && cpu._flag_Z==0);
+  }
+}
+static void shooter_continuation(void) {
+  CpuState cpu={0};cpu.PB=2;cpu.S=0x1f5;cpu.A=0xca;cpu.X=16;cpu.Y=50;
+  memset(g_ram,0,sizeof(g_ram));g_ram[0x100]=20;
+  g_smw_video=(SmwVideoSettings){true,true,0};g_smw_viewport=(SmwViewport){308,26,1.6};
+  /* A shooter is a continuation of this sweep, not a nested full-list scan.
+   * Its final JMP must eventually return through the existing loader frame. */
+  redirected_pc=0;SmwRendererGuestHook(&cpu,0x02A8D8);
+  assert(redirected_pc==0x02ab78 && cpu.S==0x1f5);
+  assert(cpu.A==0xca && cpu.X==16 && cpu.Y==50 && !g_ram[0x100+1]);
+  cpu.PB=0x82;redirected_pc=0;SmwRendererGuestHook(&cpu,0x82A8D8);
+  assert(redirected_pc==0x82ab78); /* retain the executing ROM mirror */
+  for(int mode=0;mode<5;++mode) {
+    g_smw_video=(SmwVideoSettings){true,true,0};g_smw_viewport=(SmwViewport){308,26,1.6};
+    g_ram[0x100]=20;g_ram[0x5b]=0;
+    if(mode==0)g_smw_video.adaptive_spawns=false;
+    if(mode==1)g_smw_video.enabled=false;
+    if(mode==2)g_smw_viewport.width=256,g_smw_viewport.extra=0;
+    if(mode==3)g_ram[0x5b]=1; /* vertical uses the original frontier */
+    if(mode==4)g_ram[0x100]=0x13;
+    redirected_pc=0;SmwRendererGuestHook(&cpu,0x02A8D8);assert(!redirected_pc);
   }
 }
 typedef struct StateBuffer { SaveLoadInfo base; bool writing; size_t position; uint8_t data[256]; } StateBuffer;
@@ -616,4 +640,4 @@ static void raster_storage(void) {
            (y==2 || y==3?0x00ff00u:0xff0000u));
   SmwRendererResetScene();
 }
-int main(void) { geometry();spawn();spawn_lifecycle();ghost_house_capacity();objects();sprite_parts();completed_draws();transitions();map16();pipe_variants();hud();parallax();camera_timing();raster_storage();puts("geometry, spawn lifecycle/save state and ghost-house capacity, signed OAM/sprite parts, independent sprite draws, transitions, Map16/pipe variants, anchored HUD, parallax, presentation camera timing and immutable VRAM raster storage: passed");return 0; }
+int main(void) { geometry();spawn();shooter_continuation();spawn_lifecycle();ghost_house_capacity();objects();sprite_parts();completed_draws();transitions();map16();pipe_variants();hud();parallax();camera_timing();raster_storage();puts("geometry, shooter continuation, spawn lifecycle/save state and ghost-house capacity, signed OAM/sprite parts, independent sprite draws, transitions, Map16/pipe variants, anchored HUD, parallax, presentation camera timing and immutable VRAM raster storage: passed");return 0; }

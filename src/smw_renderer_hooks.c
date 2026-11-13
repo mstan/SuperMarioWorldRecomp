@@ -73,6 +73,17 @@ static unsigned r16(CpuState *c,unsigned a) { return r8(c,a)|(r8(c,a+1)<<8); }
 static bool active(CpuState *c) {
   return g_smw_video.enabled && g_smw_viewport.width>256 && r8(c,0x100)==0x14;
 }
+static bool shooter_tail(CpuState *c) {
+  return g_smw_video.adaptive_spawns && g_smw_viewport.extra &&
+      active(c) && !(r8(c,0x5b)&1);
+}
+/* The generated loader uses the same policy as its interpreted counterpart.
+ * Optional existing spawn diagnostics distinguish actual execution tiers. */
+int SmwRendererShooterTail(CpuState *c) {
+  if(!shooter_tail(c)) return 0;
+  spawn_event(c,"shooter-tail-aot",c->X&255,c->A&255,r16(c,c->D));
+  return 1;
+}
 static int left_margin(CpuState *c) {
   return r8(c,0x5b)&1 ? g_smw_viewport.extra :
       SmwViewOffset(g_smw_viewport,r16(c,0x1a),(r8(c,0x5e)+1)*256);
@@ -143,6 +154,21 @@ void SmwRendererGuestHook(CpuState *c,uint32_t pc) {
   pc &= 0x7fffff;
   if(pc==0x0180B2 || pc==0x029B12) {
     SmwRendererEndActor();
+    return;
+  }
+  if(pc==0x02A8D8) {
+    /* The shooter factory ends with JMP LoadSpriteLoopStrt, not RTS. The
+     * native frontier normally bounds that continuation. Our full-list sweep
+     * can instead reach the terminator inside the factory; a nested JSR then
+     * returns to LoadNextSprite beyond that terminator and wraps the list.
+     * Enter the factory as the tail continuation it already implements, so
+     * the list's eventual RTS returns directly to the loader's caller.
+     * This hook runs before the interpreted JSR pushes anything; generated
+     * callers apply the same policy with the ordinary tail-return ABI. */
+    if(shooter_tail(c)) {
+      spawn_event(c,"shooter-tail-interp",c->X&255,c->A&255,r16(c,c->D));
+      interp_bridge_pre_opcode_redirect(((uint32_t)c->PB<<16)|0xab78u);
+    }
     return;
   }
   if(!active(c)) return;
@@ -388,7 +414,7 @@ void SmwRendererGuestHook(CpuState *c,uint32_t pc) {
   }
 }
 void SmwRendererInstallHooks(void) {
-  const uint32_t pcs[]={0x02A826,0x02A82E,0x01B844,0x01AC7C,0x02D076,0x03B8A8,0x02A1BE,0x02A204,
+  const uint32_t pcs[]={0x02A826,0x02A82E,0x02A8D8,0x01B844,0x01AC7C,0x02D076,0x03B8A8,0x02A1BE,0x02A204,
                         0x019E6D,0x019E93,0x019F5A,0x0180E5,0x02A916,0x02AFB3,
                         0x01A393,0x02D3A6,0x03B78E,
                         0x0180AF,0x0180B2,0x029B0C,0x029B12,0x02A27E,0x02A2BE,
