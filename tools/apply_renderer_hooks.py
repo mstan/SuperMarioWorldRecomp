@@ -29,6 +29,26 @@ def apply(text):
         m = re.search(r'cpu_trace_block\(cpu, 0x([0-9A-F]+)\)', line)
         if m: block = m[1]
         hook = None
+        if block == '02A8D8' and 'cpu_trace_block' in line:
+            # LoadShooter tail-jumps into this list loop. An adaptive full-list
+            # sweep must not leave a nested JSR frame that resumes past its
+            # terminator. Match the interpreter hook without changing native
+            # allocation or reducing generated execution coverage.
+            if name == 'SprXXX_LoadShooter_M1X1':
+                tail = 'goto L_AB78_M1X1;'
+            elif name in ('ParseLevelSpriteList_M1X1', 'ParseLevelSpriteList_Entry2_M1X1'):
+                tail = ('extern RecompReturn SprXXX_LoadShooter_M1X1(CpuState *); '
+                        'cpu->host_return_valid = _hrv; '
+                        'cpu_tailcall_inherit_return_context(_entry_s, _hrv); '
+                        'RecompReturn _tc = SprXXX_LoadShooter_M1X1(cpu); '
+                        'RecompStackPop(); return _tc;')
+            else:
+                raise SystemExit(f'Unsupported shooter continuation owner: {name}')
+            out.append(line)
+            out.append('    /*SMW-HOST*/ { extern int SmwRendererShooterTail(CpuState *); '
+                       f'if (SmwRendererShooterTail(cpu)) {{ {tail} }} }}\n')
+            found.add('shooter_tail')
+            continue
         if block == '01A7EB' and 'if (cpu->_flag_Z == 1)' in line and '$A7F7' in line:
             out.append('    /*SMW-HOST*/ { extern void SmwRendererGuestHook(CpuState *, uint32_t); SmwRendererGuestHook(cpu, 0x01A7F3u); }\n')
             found.add('player_contact')
@@ -79,7 +99,7 @@ def main():
         changed, hits = apply(text)
         found |= hits
         if changed != text: updates.append((path, changed))
-    missing = set(PCS) | {'draw', 'fireball', 'frontier', 'wing_cull', 'sprite_allocation', 'baseball_cull', 'player_cull', 'player_contact'}
+    missing = set(PCS) | {'draw', 'fireball', 'frontier', 'wing_cull', 'sprite_allocation', 'baseball_cull', 'player_cull', 'player_contact', 'shooter_tail'}
     missing -= found
     if missing: raise SystemExit(f'Missing required renderer hook sites: {missing}')
     for path, changed in updates: path.write_text(changed, encoding='utf-8', newline='\n')
