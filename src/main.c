@@ -3185,7 +3185,7 @@ static const char kDefaultConfigIniContent[] =
   "\n"
   "[Graphics]\n"
   "# Window size (Auto or WidthxHeight)\n"
-  "WindowSize = Auto\n"
+  "WindowSize = 1280x720\n"
   "\n"
   "# Fullscreen mode (0=windowed, 1=desktop fullscreen, 2=fullscreen w/mode change)\n"
   "Fullscreen = 0\n"

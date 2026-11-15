@@ -61,6 +61,7 @@ set(RECOMP_UI_ROOT "${CMAKE_SOURCE_DIR}/recomp-ui" CACHE PATH
     "Path to the recomp-ui checkout used by this game")
 include(${RECOMP_UI_ROOT}/recomp_ui.cmake)
 
+
 find_package(OpenGL REQUIRED)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
@@ -314,3 +315,21 @@ execute_process(COMMAND git rev-parse HEAD WORKING_DIRECTORY ${SNESRECOMP_ROOT}
 set_property(SOURCE src/smw_replay.c APPEND PROPERTY COMPILE_DEFINITIONS
     SMW_REPLAY_REVISION="${SMW_REPLAY_REVISION}" SMW_REPLAY_ENGINE="${SMW_REPLAY_ENGINE}"
     SMW_REPLAY_TARGET="${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}-${CMAKE_C_COMPILER_ID}-${CMAKE_C_COMPILER_VERSION}-${CMAKE_BUILD_TYPE}")
+
+add_executable(smw-controller-report
+    "${RECOMP_UI_ROOT}/tools/input_report.c"
+    "${RECOMP_UI_ROOT}/src/common/launcher_input_report.c")
+target_include_directories(smw-controller-report PRIVATE
+    "${RECOMP_UI_ROOT}/src" "${RECOMP_UI_ROOT}/src/common")
+target_compile_definitions(smw-controller-report PRIVATE SDL_MAIN_HANDLED=1)
+if(SNESRECOMP_SDL_BACKEND STREQUAL "SDL3" AND TARGET SDL3::SDL3)
+    target_compile_definitions(smw-controller-report PRIVATE LNG_SDL3=1)
+    target_link_libraries(smw-controller-report PRIVATE SDL3::SDL3)
+elseif(TARGET SDL2::SDL2)
+    target_link_libraries(smw-controller-report PRIVATE SDL2::SDL2)
+else()
+    message(FATAL_ERROR "Controller reporting requires the configured SDL target")
+endif()
+if(MINGW)
+    target_link_options(smw-controller-report PRIVATE -static)
+endif()

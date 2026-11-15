@@ -143,6 +143,17 @@ def main():
     assert 'wing_cull' in hits and patched.count('SmwRendererGuestHook(cpu, 0x019E6Du)')==1
     _,hits=hooks.apply('    cpu_trace_block(cpu, 0x019E3C);\n    if (cpu->_flag_Z == 0) { goto L_OTHER; }\n')
     assert 'wing_cull' not in hits
+    for name in ('ParseLevelSpriteList_M1X1', 'ParseLevelSpriteList_Entry2_M1X1', 'SprXXX_LoadShooter_M1X1'):
+        source=f'RecompReturn {name}(CpuState *cpu) {{\n    cpu_trace_block(cpu, 0x02A8D8);\n'
+        patched,hits=hooks.apply(source)
+        assert 'shooter_tail' in hits and patched.count('SmwRendererShooterTail(cpu)')==1
+        if name.startswith('Parse'):
+            assert 'cpu_tailcall_inherit_return_context(_entry_s, _hrv)' in patched
+            assert 'RecompStackPop(); return _tc;' in patched
+        else:
+            assert 'goto L_AB78_M1X1;' in patched
+            assert 'cpu_tailcall_inherit_return_context' not in patched
+        assert hooks.apply(patched)[0]==patched
     for path in (ROOT/'src/gen').glob('*.c'):
         a,_=hooks.apply(path.read_text());b,_=hooks.apply(a)
         assert a==b,path
