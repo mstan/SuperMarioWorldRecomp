@@ -17,7 +17,7 @@ id = "recording"
 name = "Diagnostic recording"
 description = "Record a bounded session under logs/smw-replay-*. Reproduce the problem, quit normally if possible, and zip all matching replay files and sidecars. Includes current-build machine state and settings. Disable run-ahead when recording."
 group = "Developer"
-default_enabled = false
+default_enabled = true
 
 [[plugin]]
 feature = "recording"

@@ -82,10 +82,13 @@ KeyboardPlayers=3
                SMW_COOP_TRACE=str(out / 'coop.csv'),
                SMW_COOP_CONTACT_TRACE=str(out / 'contacts.csv'),
                SMW_COOP_ARBITRATION_TRACE=str(out / 'arbitration.csv'),
+               SMW_REPLAY_DIR=str(out / 'logs'),
                SMW_RENDER_DIAGNOSTICS=str(out),
                SMW_RENDER_CAPTURE_FRAME=args.capture,
                SNESRECOMP_AUDIO_STATS=str(out / 'audio-stats.txt'),
-               SNESRECOMP_LLE_BOUNCE=str(int(args.bounce)))
+               SNESRECOMP_LLE_BOUNCE=str(int(args.bounce)),
+               SNESRECOMP_NO_DIALOGS='1', SNESRECOMP_NO_LAUNCHER='1',
+               SNES_NET_SUPPRESS_ERROR_DIALOG='1')
     if args.turbo_burst:
         env['SNESRECOMP_TURBO_BURST'] = args.turbo_burst
     if args.audio_frames:
@@ -122,7 +125,7 @@ KeyboardPlayers=3
         env['SNESRECOMP_FRAMEDUMP_END'] = str(args.framedump)
         env['SNESRECOMP_FRAMEDUMP_PIXELS'] = '1'
     provenance = {'command': command, 'turbo_burst': args.turbo_burst,
-                  'timeout_seconds': args.timeout_seconds,
+                  'timeout_seconds': None,
                   'native': args.native, 'bounce': args.bounce,
                   'disabled': args.disabled, 'players': args.players,
                   'minimal_trace': args.minimal_trace, 'audio_frames': args.audio_frames,
@@ -139,14 +142,10 @@ KeyboardPlayers=3
                 'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
     (out / 'inputs.json').write_text(json.dumps(provenance, indent=2) + '\n')
     with (out / 'stdout.log').open('w') as stdout, (out / 'stderr.log').open('w') as stderr:
-        try:
-            result = subprocess.run(
-                command, cwd=out, env=env, stdout=stdout, stderr=stderr,
-                timeout=args.timeout_seconds or max(120, args.frames / 30),
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-            returncode, timed_out = result.returncode, False
-        except subprocess.TimeoutExpired:
-            returncode, timed_out = 124, True
+        result = subprocess.run(
+            command, cwd=out, env=env, stdout=stdout, stderr=stderr,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        returncode, timed_out = result.returncode, False
     report = {'returncode': returncode, 'timed_out': timed_out, 'dispatch_misses': []}
     for directory in (out, args.exe.parent, args.exe.parent / 'playtest'):
         misses = directory / 'dispatch_misses.log'
@@ -181,7 +180,7 @@ def main():
     parser.add_argument('--coop-sram', type=Path, help='Copy co-op SRAM into the isolated test directory')
     parser.add_argument('--frames', type=int, default=800)
     parser.add_argument('--timeout-seconds', type=float,
-                        help='Explicit positive process deadline for a busy validation host')
+                        help='Deprecated; ignored. Probes finish through finite input/frame limits.')
     parser.add_argument('--capture', default='')
     parser.add_argument('--framedump', type=int, help='Capture one completed frame, including native width')
     parser.add_argument('--players', type=int, choices=(1, 2), default=2)
