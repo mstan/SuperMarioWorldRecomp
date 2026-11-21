@@ -57,7 +57,7 @@ def observe(path):
             x=field(f, player, 0x94)+256*field(f, player, 0x95),
             y=field(f, player, 0x96)+256*field(f, player, 0x97),
             standing=field(f, player, 0x1471), life=f.word(f.actors[player][1]+8),
-            reserve=field(f, player, 0xdc2))
+            reserve=field(f, player, 0xdc2), visible_pieces=f.word(f.actors[player][0]-4))
     return f, dict(actors=actors,
                    platform_y=int.from_bytes(f.data[f.ram+0x14ba:f.ram+0x14bc], 'little'),
                    rotation=[f.data[f.ram+at] for at in (0x1504, 0x1510, 0x151c, 0x1528)])
@@ -90,7 +90,7 @@ def main():
     initial = args.out/'initial.sav'
     f.save(initial)
     run(args, args.exe, initial,
-        'wait 60\nloadstate 10\nwait 1\nsavestate 11\nquit\n', args.out/'initialize')
+        'wait 60\nloadstate 10\nwait 1\nsavestate 11\n', args.out/'initialize')
     source = args.out/'initialize/saves/native-coop-v1/save11.sav'
     reports = {}
     for variant, exe in [('candidate', args.exe), ('reference', args.reference_exe)]:
@@ -107,7 +107,7 @@ def main():
             run(args, exe, staged,
                 'wait 60\nloadstate 10\nwait 28\nsavestate 11\n'
                 'savestate 12\nwait 20\nsavestate 13\n'
-                'loadstate 12\nwait 19\nsavestate 14\nquit\n', out)
+                'loadstate 12\nwait 19\nsavestate 14\n', out)
             final, result = observe(out/'saves/native-coop-v1/save11.sav')
             riders = [0] if case == 'one' else [] if case == 'empty' else [0, 1]
             failures = []
@@ -117,6 +117,8 @@ def main():
                     failures.append(f'player {player} lost native footing')
                 if actor['reserve'] != player+1:
                     failures.append(f'player {player} lost its reserve item')
+                if not actor['visible_pieces']:
+                    failures.append(f'player {player} disappeared after its contact redraw')
             if len(riders) == 2 and result['actors'][1]['x']-result['actors'][0]['x'] != 24:
                 failures.append('rider positions were copied or carried inconsistently')
             before, _ = observe(out/'saves/native-coop-v1/save13.sav')

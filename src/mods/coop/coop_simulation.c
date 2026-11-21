@@ -993,6 +993,10 @@ static void run_player_routines(CpuState *cpu,CoopMachine *m) {
         CoopEntity *mount=actor_mount(m,a);coop_mount_bind(mount,g_ram);
         if(a!=primary) {
             memcpy(g_ram+0xd1,g_ram+0x94,4); /* AdvancePlayerPosition */
+            /* C47E clears this per-frame clipping mask for the primary.
+             * A platform hides the earlier draw after redrawing its rider;
+             * carrying that mask into the next actor step hides them forever. */
+            g_ram[0x78]=0;
             tick_secondary_timers();
             if(mount && !g_ram[0x9d] && g_ram[0x14a3])--g_ram[0x14a3];
         }
