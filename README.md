@@ -81,8 +81,9 @@ installation or environment setup is required.
 
 ## Send a reproducible bug report
 
-1. In the launcher's **Mods** page, enable **SMW Playtest Diagnostics →
-   Diagnostic recording**. Keep the gameplay mods and settings needed for
+1. In the launcher's **Mods** page, check **SMW Playtest Diagnostics →
+   Diagnostic recording**. It starts enabled for fresh settings and remembers
+   your choice. Keep the gameplay mods and settings needed for
    your reproduction, including native co-op where applicable. Disable
    run-ahead while recording.
 2. Start a fresh game session and reproduce the problem. The recorder captures

@@ -952,6 +952,22 @@ static void draw_secondary_players(CpuState *cpu,CoopMachine *m) {
     memcpy(g_ram,scratch,sizeof(scratch));memcpy(g_ram+0x200,oam,sizeof(oam));
     g_ram[0xdb3]=turn;coop_guest_bind(&primary->guest,g_ram);
 }
+static void redraw_secondary_actor(CpuState *cpu,CoopMachine *m) {
+    /* A solid's native contact may redraw its bound rider. This is not the
+     * frame's roster-wide draw: capturing that image as primary would copy
+     * the secondary rider's position/equipment into the primary actor. */
+    CoopActor *a=bound_actor;CpuState caller=*cpu;
+    uint8_t scratch[16],oam[0x2a0],turn=g_ram[0xdb3];
+    memcpy(scratch,g_ram,sizeof(scratch));memcpy(oam,g_ram+0x200,sizeof(oam));
+    for(unsigned slot=0;slot<128;++slot)g_ram[0x201+slot*4]=0xf0;
+    g_ram[0xdb3]=(uint8_t)(coop_player(&m->session,a->player)->character==1);
+    ++player_call_depth;cpu_push_jsl_return_frame(cpu);
+    if(!interp_bridge_run(cpu,0x00e2bd) || cpu->S!=caller.S)
+        Die("Native co-op rider redraw failed its guest return contract");
+    --player_call_depth;SmwCoopCaptureVisual(&a->pending);capture(m,a);
+    restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
+    memcpy(g_ram+0x200,oam,sizeof(oam));g_ram[0xdb3]=turn;
+}
 static void run_player_routines(CpuState *cpu,CoopMachine *m) {
     CpuState caller=*cpu;
     uint8_t scratch[16];memcpy(scratch,g_ram,sizeof(scratch));
@@ -977,6 +993,10 @@ static void run_player_routines(CpuState *cpu,CoopMachine *m) {
         CoopEntity *mount=actor_mount(m,a);coop_mount_bind(mount,g_ram);
         if(a!=primary) {
             memcpy(g_ram+0xd1,g_ram+0x94,4); /* AdvancePlayerPosition */
+            /* C47E clears this per-frame clipping mask for the primary.
+             * A platform hides the earlier draw after redrawing its rider;
+             * carrying that mask into the next actor step hides them forever. */
+            g_ram[0x78]=0;
             tick_secondary_timers();
             if(mount && !g_ram[0x9d] && g_ram[0x14a3])--g_ram[0x14a3];
         }
@@ -1310,6 +1330,33 @@ static bool run_platform_contacts(CpuState *cpu,CoopMachine *m) {
     cpu->P=(uint8_t)((cpu->P&~1u)|(occupied?1u:0u));
     return occupied;
 }
+static void run_rotating_platform_contacts(CpuState *cpu,CoopMachine *m) {
+    CoopActor *original=bound_actor;capture(m,original);
+    CpuState caller=*cpu;uint8_t scratch[16];memcpy(scratch,g_ram,sizeof(scratch));
+    unsigned slot=cpu->X&255;
+    uint8_t speed=g_ram[0x1504+slot],contact=g_ram[0x160e + slot],standing=g_ram[0x1602+slot];
+    uint8_t next_speed=speed,next_contact=0,next_standing=0;
+    ++platform_contact_depth;
+    for(size_t i=0;i<m->actor_count;++i) {
+        CoopActor *a=&m->actors[i];
+        if(coop_player_const(&m->session,a->player)->life!=COOP_PLAYING)continue;
+        restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
+        coop_guest_bind(&a->guest,g_ram);coop_mount_bind(actor_mount(m,a),g_ram);bound_actor=a;
+        /* Every rider observes the same world step. The ROM's contact tail
+         * places/carries that actor and may accelerate the shared platform;
+         * it must not charge the same acceleration once per rider. */
+        g_ram[0x1504+slot]=speed;g_ram[0x160e + slot]=contact;g_ram[0x1602+slot]=standing;
+        guest_jsr(cpu,0x01c9ec);
+        next_contact|=g_ram[0x160e + slot];next_standing|=g_ram[0x1602+slot];
+        if(g_ram[0x1504+slot]!=speed)next_speed=g_ram[0x1504+slot];
+        capture(m,a);
+        CoopEntity *mount=actor_mount(m,a);if(mount)coop_mount_capture(mount,g_ram);
+    }
+    g_ram[0x1504+slot]=next_speed;g_ram[0x160e + slot]=next_contact;g_ram[0x1602+slot]=next_standing;
+    --platform_contact_depth;restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
+    coop_guest_bind(&original->guest,g_ram);coop_mount_bind(actor_mount(m,original),g_ram);
+    bound_actor=original;
+}
 typedef struct ExtendedContact {
     CoopActor *actor;
     uint64_t distance;
@@ -1607,6 +1654,12 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
         carry_through_room(cpu,m);return 0x02ac5b;
     }
     if(!level_frame)return 0;
+    if(pc==0x01c9ec && !platform_contact_depth && bound_actor) {
+        unsigned slot=cpu->X&255;
+        if(slot<12 && g_ram[0x9e + slot]==0x5f) {
+            run_rotating_platform_contacts(cpu,m);return 0x01ca9b; /* native RTS */
+        }
+    }
     if(pc==0x01b457 && !platform_contact_depth && bound_actor) {
         unsigned slot=cpu->X&255;
         /* This ordinary moving-platform family shares one audited contact
@@ -1863,7 +1916,13 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
     }
     if((pc&0x7fffff)==0x018127 && !sprite_call_depth && run_normal_sprite(cpu,m))
         return 0x018126; /* original bank-1 RTS; world sprite runs once */
-    if((pc&0x7fffff)==0x00e2bd) {draw_mounts(cpu,m);draw_secondary_players(cpu,m);}
+    if((pc&0x7fffff)==0x00e2bd) {
+        if(bound_actor) {
+            if(bound_actor!=primary_actor(m)) {
+                redraw_secondary_actor(cpu,m);return 0x00e384; /* native RTL, before PHB */
+            }
+        } else {draw_mounts(cpu,m);draw_secondary_players(cpu,m);}
+    }
     if((pc&0x7fffff)==0x00c569) {
         run_player_routines(cpu,m);
         return 0x00c592; /* original RTS, with the original return frame */
