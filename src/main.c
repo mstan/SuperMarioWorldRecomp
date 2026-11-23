@@ -57,6 +57,7 @@
 
 #include "launcher.h"
 #include "host_args.h"
+#include "desktop/headless_capture.h"
 #if defined(SNES_LAUNCHER) || defined(RECOMP_LAUNCHER)
 #if defined(RECOMP_LAUNCHER)
 /* Shared recomp-ui launcher (F:\Projects\recomp-ui) â€” the console-agnostic
@@ -868,12 +869,17 @@ static bool SdlRenderer_Init(SDL_Window *window) {
   return true;
 }
 
+static uint8 **g_capture_pixels_ref;
+static int *g_capture_pitch_ref;
+static uint32_t g_capture_tick = 1;
+
 static void SdlRenderer_Destroy(void) {
   SDL_DestroyTexture(g_texture);
   SDL_DestroyRenderer(g_renderer);
 }
 
 static void SdlRenderer_GetOutputSize(int *width, int *height) {
+  if (HeadlessCapture_Enabled()) { HeadlessCapture_OutputSize(width, height); return; }
   if (!snesrecomp_sdl_get_render_output_size(
           g_renderer, width, height)) {
     *width = 0;
@@ -882,6 +888,8 @@ static void SdlRenderer_GetOutputSize(int *width, int *height) {
 }
 
 static void SdlRenderer_BeginDraw(int width, int height, uint8 **pixels, int *pitch) {
+  g_capture_pixels_ref = pixels;
+  g_capture_pitch_ref = pitch;
   if (width != g_texture_width) {
     SDL_Texture *next = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_ARGB8888,
         SDL_TEXTUREACCESS_STREAMING, width, height);
@@ -908,6 +916,23 @@ static void SdlRenderer_BeginDraw(int width, int height, uint8 **pixels, int *pi
 }
 
 static void SdlRenderer_EndDraw(void) {
+  if (HeadlessCapture_Enabled()) {
+    /* What the window would show: the locked texture placed in its
+     * destination rectangle at the capture drawable size. */
+    HeadlessCapture_Present(*g_capture_pixels_ref, *g_capture_pitch_ref, g_sdl_renderer_rect.w,
+        g_sdl_renderer_rect.h, g_sdl_destination.x, g_sdl_destination.y,
+        g_sdl_destination.w, g_sdl_destination.h, g_capture_tick);
+    if (HeadlessCapture_AudioEnabled()) {
+      static int16 capture_audio[2048 * 2];
+      int n = HeadlessCapture_AudioFramesFor(g_capture_tick);
+      if (n > 2048) n = 2048;
+      RtlRenderAudio(capture_audio, n, 2);
+      HeadlessCapture_Audio(capture_audio, n, g_capture_tick);
+    }
+    ++g_capture_tick;
+    SDL_UnlockTexture(g_texture);
+    return;
+  }
   //  uint64 before = SDL_GetPerformanceCounter();
   SDL_UnlockTexture(g_texture);
   //  uint64 after = SDL_GetPerformanceCounter();
@@ -1142,6 +1167,8 @@ int main(int argc, char** argv) {
       "  --benchmark-audio-paced <frames>  the same, audio paced to realtime.\n";
   SnesrecompHostArgs args;
   if (!snesrecomp_host_args_parse(&argc, &argv, &args)) return 2;
+  /* Headless capture selects SDL's dummy drivers: before SDL_Init. */
+  const bool capture_mode = HeadlessCapture_Configure(&args);
   if (args.help) {
     snesrecomp_host_args_usage(program_path, kSmwExtraUsage);
     return 0;
@@ -1233,6 +1260,14 @@ int main(int argc, char** argv) {
     g_config.skip_launcher = true;
     g_config.fullscreen = 0;
     g_config.output_method = kOutputMethod_SDL;
+  }
+  if (capture_mode) {
+    /* Unpaced, no audio device, software SDL renderer on the dummy driver. */
+    g_config.autosave = false;
+    g_config.disable_frame_delay = true;
+    g_config.skip_launcher = true;
+    g_config.fullscreen = 0;
+    g_config.output_method = kOutputMethod_SDLSoftware;
   }
 #ifdef SMW_COOP_BUILD
   /* The simultaneous co-op ROM and the audio-only MSU ROM both replace
@@ -1904,7 +1939,13 @@ error_reading:;
   g_spc_player->initialize(g_spc_player);
   host_report_breadcrumb("SPC player initialized");
 
-  if (g_config.enable_audio) {
+  if (capture_mode) {
+    /* No audio device: one block is mixed per presented frame. */
+    g_audio_channels = 2;
+    RtlSetAudioOutputRate(HeadlessCapture_AudioRate());
+    host_report_breadcrumb("capture mode: audio mixed per frame at %d Hz",
+                           HeadlessCapture_AudioRate());
+  } else if (g_config.enable_audio) {
     /* Enumerate output devices into the breadcrumb ring: which device
      * SDL picks (and what else was available) is exactly the per-machine
      * variable a non-reproducible audio/boot crash report needs. */
@@ -2267,6 +2308,7 @@ error_reading:;
                (uint32)g_gamepad[1].axis_buttons << 12;
       TraceAudioFrame(frameCtr, "before_input");
       inputs |= TickScript();
+      inputs |= HeadlessCapture_InputWord(frameCtr + 1);
       inputs |= debug_server_get_controller_inputs();
       inputs |= GetActiveControllers() | debug_server_get_controller_active_mask();
 #if SNESRECOMP_ENABLE_LUA
@@ -2365,6 +2407,7 @@ error_reading:;
     }
     SmwReplayRendered();
     stall_t_draw = SDL_GetPerformanceCounter();
+    if (HeadlessCapture_ExitFrame() && frameCtr >= HeadlessCapture_ExitFrame()) running = false;
     g_audio_producer_active = false;
 
     if (g_benchmark_frames > 0 &&
@@ -2482,6 +2525,7 @@ error_reading:;
                   stall_t_draw, SDL_GetPerformanceCounter());
   }
 
+  HeadlessCapture_Finish();
   if (g_config.autosave && SmwCoopPersistenceReady()
 #if SNESRECOMP_NET
       && !g_netplay_started &&
@@ -3006,6 +3050,8 @@ static void HandleInput(int keyCode, int keyMod, bool pressed) {
 }
 
 static uint32 GetActiveControllers() {
+  /* Scripted capture drives both seats; report both pads present. */
+  if (HeadlessCapture_Enabled()) return 3u << 30;
   uint32 ctrl = g_config.has_keyboard_controls;
   ctrl |= g_gamepad[0].joystick_id != -1 ? 1 : 0;
   ctrl |= g_gamepad[1].joystick_id != -1 ? 2 : 0;
