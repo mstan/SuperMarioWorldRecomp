@@ -917,8 +917,8 @@ static void SdlRenderer_BeginDraw(int width, int height, uint8 **pixels, int *pi
 
 static void SdlRenderer_EndDraw(void) {
   if (HeadlessCapture_Enabled()) {
-    /* What the window would show: the locked texture placed in its
-     * destination rectangle at the capture drawable size. */
+    /* Software game pixels fitted to the capture viewport. SDL/GL
+     * presentation filters and overlays are not part of this capture. */
     HeadlessCapture_Present(*g_capture_pixels_ref, *g_capture_pitch_ref, g_sdl_renderer_rect.w,
         g_sdl_renderer_rect.h, g_sdl_destination.x, g_sdl_destination.y,
         g_sdl_destination.w, g_sdl_destination.h, g_capture_tick);
@@ -1169,6 +1169,8 @@ int main(int argc, char** argv) {
   if (!snesrecomp_host_args_parse(&argc, &argv, &args)) return 2;
   /* Headless capture selects SDL's dummy drivers: before SDL_Init. */
   const bool capture_mode = HeadlessCapture_Configure(&args);
+  if (HeadlessCapture_Failed()) { HeadlessCapture_Finish(); return 3; }
+  if (capture_mode) HeadlessCapture_SelectVideoDriver(false);
   if (args.help) {
     snesrecomp_host_args_usage(program_path, kSmwExtraUsage);
     return 0;
@@ -1787,8 +1789,8 @@ int main(int argc, char** argv) {
   SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
 
   // set up SDL
-  if (!snesrecomp_sdl_init(
-          SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER)) {
+  if (!snesrecomp_sdl_init(capture_mode ? SDL_INIT_VIDEO :
+                           SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER)) {
     host_report_breadcrumb("SDL_Init FAILED: %s", SDL_GetError());
     printf("Failed to init SDL: %s\n", SDL_GetError());
     return 1;
@@ -2065,6 +2067,15 @@ error_reading:;
 #endif
   )
     HandleCommand(kKeys_Load + 0, true);
+
+  if (args.load_state) {
+    if (!RtlLoadSnapshot(args.load_state)) {
+      fprintf(stderr, "capture: cannot load state '%s'\n", args.load_state);
+      HeadlessCapture_Finish();
+      return 3;
+    }
+    host_report_breadcrumb("load state loaded: %s", args.load_state);
+  }
 
   if (script_file)
     LoadScript(script_file);
@@ -2407,7 +2418,8 @@ error_reading:;
     }
     SmwReplayRendered();
     stall_t_draw = SDL_GetPerformanceCounter();
-    if (HeadlessCapture_ExitFrame() && frameCtr >= HeadlessCapture_ExitFrame()) running = false;
+    if (HeadlessCapture_Failed() ||
+        (HeadlessCapture_ExitFrame() && frameCtr >= HeadlessCapture_ExitFrame())) running = false;
     g_audio_producer_active = false;
 
     if (g_benchmark_frames > 0 &&
@@ -2707,7 +2719,7 @@ error_reading:;
 #endif
   SmwReplayShutdown();
   SDL_Quit();
-  return SmwReplayFailed() ? 1 : benchmark_exit_code;
+  return SmwReplayFailed() ? 1 : HeadlessCapture_Failed() ? 3 : benchmark_exit_code;
 }
 
 static void RenderDigit(uint8 *dst, size_t pitch, int digit, uint32 color, bool big) {
