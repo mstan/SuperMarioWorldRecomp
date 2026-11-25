@@ -26,11 +26,34 @@ typedef struct {
   uint8 blob[SMW_FOREIGN_SAVE_BLOB_CAP];
 } SmwForeignSaveChunk;
 
+size_t SmwStateSharedExtraSize(void);
 static int s_smw_foreign_chunk_loaded;
+static uint32 s_loaded_frame_driver;
+#define SMW_HOST_STATE_MAGIC 0x31545348u /* HST1 */
+enum { SMW_RENDERER_STATE_BYTES = 8 + 4 + 128 + 1 };
+
+static bool SmwStatePreflight(const void *data, size_t size) {
+  const uint8 *bytes = data;
+  uint32 version = 0, header[2], magic = 0, saved_version = 0;
+  size_t guest = RtlSnapshotGuestSize(&version);
+  size_t execution = RtlExecutionStateSize();
+  size_t offset = guest + sizeof(uint32) + SMW_RENDERER_STATE_BYTES;
+  if (!bytes || !guest || size < offset || size - offset < sizeof(header) + execution)
+    return false;
+  memcpy(&magic, bytes + guest, sizeof(magic));
+  memcpy(&saved_version, bytes + sizeof(uint32), sizeof(saved_version));
+  memcpy(header, bytes + offset, sizeof(header));
+  if (saved_version != version ||
+      magic != (SmwCoopActive() ? SMW_COOP_SAVE_MAGIC : SMW_COMBINED_SAVE_MAGIC) ||
+      header[0] != SMW_HOST_STATE_MAGIC || header[1] > 3 ||
+      !RtlExecutionStateValid(bytes + offset + sizeof(header), execution)) return false;
+  if (!SmwCoopActive() && size != guest + SmwStateSharedExtraSize()) return false;
+  return SmwCoopSnapshotPreflight(data, size);
+}
 
 size_t SmwStateSharedExtraSize(void) {
   /* SMX1 + renderer SMWS v1 (no padding) + fixed foreign-controller slot. */
-  return sizeof(uint32) + 8 + 4 + 128 + 1 +
+  return sizeof(uint32) + SMW_RENDERER_STATE_BYTES + 2 * sizeof(uint32) + RtlExecutionStateSize() +
       (SmwCoopActive() ? 0 : sizeof(SmwForeignSaveChunk));
 }
 
@@ -64,49 +87,31 @@ static void SmwForeignLoadExtra(SaveLoadInfo *sli, uint32 version) {
   fprintf(stderr, "[smw] foreign-controller save payload rejected\n");
 }
 
-/* Older main and experimental renderer saves have different first chunks.
- * Replay the inspected magic without requiring a seekable file: network
- * snapshots use the same callback with a memory stream. */
-typedef struct {
-  SaveLoadInfo base;
-  SaveLoadInfo *source;
-  uint32 magic;
-  size_t position;
-} SmwPrefixReader;
-
-static void SmwReadPrefix(SaveLoadInfo *sli, void *data, size_t size) {
-  SmwPrefixReader *reader = (SmwPrefixReader *)sli;
-  size_t prefix = sizeof(reader->magic) - reader->position;
-  if (prefix > size) prefix = size;
-  memcpy(data, (uint8 *)&reader->magic + reader->position, prefix);
-  reader->position += prefix;
-  if (size > prefix)
-    reader->source->func(reader->source, (uint8 *)data + prefix, size - prefix);
-}
-
 static void SmwStateSaveExtra(SaveLoadInfo *sli) {
   uint32 magic = SmwCoopActive() ? SMW_COOP_SAVE_MAGIC : SMW_COMBINED_SAVE_MAGIC;
   sli->func(sli, &magic, sizeof(magic));
   SmwRendererSaveExtra(sli);
+  uint32 host[] = {SMW_HOST_STATE_MAGIC, SmwFrameDriverDiagnosticState()};
+  sli->func(sli, host, sizeof(host));
+  RtlSaveExecutionState(sli);
   if (SmwCoopActive()) SmwCoopSaveExtra(sli);
   else SmwForeignSaveExtra(sli);
 }
 
 static void SmwStateLoadExtra(SaveLoadInfo *sli, uint32 version) {
-  SmwPrefixReader reader = { { SmwReadPrefix }, sli, 0, 0 };
+  uint32 magic = 0, host[2] = {0};
   s_smw_foreign_chunk_loaded = 0;
-  sli->func(sli, &reader.magic, sizeof(reader.magic));
-  if (reader.magic == SMW_COOP_SAVE_MAGIC && SmwCoopActive()) {
-    SmwRendererLoadExtra(sli, version);
-    SmwCoopLoadExtra(sli);
-  } else if (reader.magic == SMW_COMBINED_SAVE_MAGIC) {
-    SmwRendererLoadExtra(sli, version);
-    SmwForeignLoadExtra(sli, version);
-  } else if (reader.magic == 0x53574d53u) { /* legacy SMWS */
-    SmwRendererLoadExtra(&reader.base, version);
-  } else if (reader.magic == SMW_FOREIGN_SAVE_MAGIC) {
-    SmwForeignLoadExtra(&reader.base, version);
+  sli->func(sli, &magic, sizeof(magic));
+  SmwRendererLoadExtra(sli, version);
+  sli->func(sli, host, sizeof(host));
+  if (magic != (SmwCoopActive() ? SMW_COOP_SAVE_MAGIC : SMW_COMBINED_SAVE_MAGIC) ||
+      host[0] != SMW_HOST_STATE_MAGIC || host[1] > 3 || !RtlLoadExecutionState(sli)) {
+    RtlStateStreamFail(sli);
+    return;
   }
+  s_loaded_frame_driver = host[1];
+  if (SmwCoopActive()) SmwCoopLoadExtra(sli);
+  else SmwForeignLoadExtra(sli, version);
 }
 
 static void SmwOnStateLoaded(uint32 version) {
@@ -115,6 +120,9 @@ static void SmwOnStateLoaded(uint32 version) {
   SmwFalconOnStateLoaded();
   SmwRendererStateLoaded(version);
   SmwCoopStateLoaded();
+  g_cpu.ram = g_ram;
+  RtlApplyExecutionState();
+  SmwRestoreFrameDriverDiagnosticState(s_loaded_frame_driver);
   s_smw_foreign_chunk_loaded = 0;
 }
 
@@ -128,6 +136,6 @@ const RtlGameInfo kSmwGameInfo = {
   .state_load_extra = &SmwStateLoadExtra,
   .on_state_loaded = &SmwOnStateLoaded,
   .snapshot_guard_identity = &SmwCoopSnapshotIdentity,
-  .snapshot_preflight = &SmwCoopSnapshotPreflight,
+  .snapshot_preflight = &SmwStatePreflight,
   .snapshot_allowed = &SmwCoopPersistenceReady,
 };
