@@ -20,7 +20,7 @@ class Fixture:
         assert struct.unpack_from('<Q', d, 8)[0] == len(d)-52
         self.check_crc(0, len(d))
         magic, self.guest_version = struct.unpack_from('<II', d, 48)
-        assert magic == 0x52544c53 and self.guest_version in (9, 10)
+        assert magic == 0x52544c53 and self.guest_version in (9, 10, 11, 12)
         assert d[-8:-4] == b'CNRE'
         self.end = len(d)-12
         self.machine = self.end-self.word(self.end)
@@ -33,11 +33,17 @@ class Fixture:
         c = self.core
         assert d[c:c+4] == b'COOP' and self.word(c+4) == 1
         self.check_crc(c, self.core_end)
-        extra = m-145
-        assert d[extra:extra+8] == b'SMC1SMWS'
+        # Current HLE snapshots append canonical host execution state after
+        # the renderer, before the co-op record. Locate the bounded game
+        # extension rather than treating the old renderer-only size as fixed.
+        extra = d.rfind(b'SMC1SMWS', 48, m)
+        assert extra >= 48
+        host = extra+145
+        if host != m:
+            assert d[host:host+4] == b'HST1' and self.word(host+4) <= 3
         # RTLS v9: ramAdr(4), legacy joypad(7), JoypadState(58).
-        # v10 appends the one-byte RDNMI latch after the joypads.
-        self.ram = extra-69-(self.guest_version >= 10)-0x20000
+        # v10 appends RDNMI; v12 appends the short-line field parity byte.
+        self.ram = extra-69-(self.guest_version >= 10)-(self.guest_version >= 12)-0x20000
         assert game_mode is None or d[self.ram+0x100] == game_mode
         fields = [(int(a, 16), int(n)) for a, n in re.findall(
             r'COOP_FIELD\(\w+,\s*(0x[0-9a-f]+),\s*(\d+)\)',

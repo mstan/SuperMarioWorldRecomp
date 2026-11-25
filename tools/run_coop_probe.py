@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import wave
 
@@ -77,6 +78,9 @@ KeyboardPlayers=3
             del env[key]
     if os.name == 'nt':
         env['PATH'] = 'C:/msys64/mingw64/bin' + os.pathsep + env.get('PATH', '')
+    with socket.socket() as probe:
+        probe.bind(('127.0.0.1', 0))
+        debug_port = probe.getsockname()[1]
     env.update(SDL_VIDEODRIVER='dummy', SDL_VIDEO_DRIVER='dummy',
                SDL_AUDIODRIVER='dummy', SDL_AUDIO_DRIVER='dummy',
                SMW_COOP_TRACE=str(out / 'coop.csv'),
@@ -86,6 +90,8 @@ KeyboardPlayers=3
                SMW_RENDER_DIAGNOSTICS=str(out),
                SMW_RENDER_CAPTURE_FRAME=args.capture,
                SNESRECOMP_AUDIO_STATS=str(out / 'audio-stats.txt'),
+               SNESRECOMP_EXECUTION_MODE='force', SNESRECOMP_FORCE_FLOOR='0',
+               SNESRECOMP_DEBUG_PORT=str(debug_port),
                SNESRECOMP_LLE_BOUNCE=str(int(args.bounce)),
                SNESRECOMP_NO_DIALOGS='1', SNESRECOMP_NO_LAUNCHER='1',
                SNES_NET_SUPPRESS_ERROR_DIALOG='1')
@@ -126,7 +132,7 @@ KeyboardPlayers=3
         env['SNESRECOMP_FRAMEDUMP_PIXELS'] = '1'
     provenance = {'command': command, 'turbo_burst': args.turbo_burst,
                   'timeout_seconds': None,
-                  'native': args.native, 'bounce': args.bounce,
+                  'native': args.native, 'bounce': args.bounce, 'debug_port': debug_port,
                   'disabled': args.disabled, 'players': args.players,
                   'minimal_trace': args.minimal_trace, 'audio_frames': args.audio_frames,
                   'audio_capture': args.audio_capture, 'audit_queries': args.audit_queries,

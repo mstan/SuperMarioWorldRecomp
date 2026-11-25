@@ -12,6 +12,7 @@
 #include "config.h"
 #include "host_paths.h"
 #include "execution_mode.h"
+static const char *replay_mode(void);
 #include "mod_runtime.h"
 #include "snes/snes.h"
 #include "snes/cart.h"
@@ -189,8 +190,8 @@ static bool start_segment(void) {
   snprintf(path,sizeof(path),"%s-%06u.replay",stem,segment);
   char header[512];
   recorded_players=SmwCoopPlayerCount();
-  snprintf(header,sizeof(header),"SMWREPLAY 1\nBUILD %s %s %s %s\nROM %08x\nMODE lle\nPLAYERS %u\n",
-      SNESRECOMP_BUILD_VERSION,SMW_REPLAY_REVISION,SMW_REPLAY_ENGINE,SMW_REPLAY_TARGET,rom_identity,recorded_players);
+  snprintf(header,sizeof(header),"SMWREPLAY 1\nBUILD %s %s %s %s\nROM %08x\nMODE %s\nPLAYERS %u\n",
+      SNESRECOMP_BUILD_VERSION,SMW_REPLAY_REVISION,SMW_REPLAY_ENGINE,SMW_REPLAY_TARGET,rom_identity,replay_mode(),recorded_players);
   char active[16384],mod_path[1200];
   int length=snes_mod_runtime_effective_set_c(active,sizeof(active));
   if(length<0 || length>=(int)sizeof(active) ||
@@ -236,17 +237,16 @@ static unsigned policy(void) {
       g_config.new_renderer<<2 | g_config.no_sprite_limits<<3 |
       rtl_apu_extended_frame_timing()<<4 | SmwCoopEnabled()<<5 | g_config.enable_audio<<6;
 }
-static bool replay_floor_active(void) {
-  return snesrecomp_execution_mode(SNESRECOMP_EXECUTION_MODE_LLE) ==
-      SNESRECOMP_EXECUTION_MODE_LLE;
+static const char *replay_mode(void) {
+  return snesrecomp_execution_policy()==SNESRECOMP_EXECUTION_MODE_LLE ? "lle" : "hle";
 }
 static bool load_playback(void) {
-  char line[512], version[80], revision[80], engine[80], target[80], tail;
+  char line[512], version[80], revision[80], engine[80], target[80], mode[16], tail;
   unsigned rom,players;
   if(!fgets(line,sizeof(line),stream) || strcmp(line,"SMWREPLAY 1\n") ||
       !fgets(line,sizeof(line),stream) || sscanf(line,"BUILD %79s %79s %79s %79s %c",version,revision,engine,target,&tail)!=4 ||
       !fgets(line,sizeof(line),stream) || sscanf(line,"ROM %x %c",&rom,&tail)!=1 ||
-      !fgets(line,sizeof(line),stream) || strcmp(line,"MODE lle\n") ||
+      !fgets(line,sizeof(line),stream) || sscanf(line,"MODE %15s %c",mode,&tail)!=1 ||
       !fgets(line,sizeof(line),stream) || sscanf(line,"PLAYERS %u %c",&players,&tail)!=1) {
     error("invalid or truncated replay header");return false;
   }
@@ -254,10 +254,11 @@ static bool load_playback(void) {
       strcmp(engine,SMW_REPLAY_ENGINE) || strcmp(target,SMW_REPLAY_TARGET)) {
     error("different runtime build or target; use the recording's exact release and platform");return false;
   }
+  if(strcmp(mode,replay_mode())) {error("different frame provider");return false;}
   if(!g_snes || !g_snes->cart || rom!=rom_identity) {error("different source ROM");return false;}
   if(players!=SmwCoopPlayerCount()) {error("select the recorded co-op player count before replay");return false;}
-  if(!replay_floor_active() || snes_runahead_active()) {
-    error("replay requires faithful guest execution and run-ahead disabled");return false;
+  if(snes_runahead_active()) {
+    error("replay requires run-ahead disabled");return false;
   }
   char sidecar[1400]; snprintf(sidecar,sizeof(sidecar),"%s.sav",path);
   states=fopen(sidecar,"rb");
@@ -312,10 +313,9 @@ bool SmwReplayBegin(uint32_t *inputs) {
   if(!SmwCoopPersistenceReady()) {close_segment();return true;}
   const char *why=SnesReplayWriterError(writer);
   if(why) {error(why);return true;}
-  if(snes_runahead_active() || RtlSpeculativeFrame() ||
-      !replay_floor_active()) {
+  if(snes_runahead_active() || RtlSpeculativeFrame()) {
     static bool warned;
-    if(!warned)fprintf(stderr,"[smw-replay] capture suspended: requires faithful guest execution and run-ahead disabled\n");
+    if(!warned)fprintf(stderr,"[smw-replay] capture suspended: requires run-ahead disabled\n");
     warned=true; close_segment();return true;
   }
   unsigned frame=(unsigned)snes_frame_counter;

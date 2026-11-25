@@ -40,6 +40,10 @@ set(SNESRECOMP_ENABLE_MODS ON CACHE BOOL
 
 set(SNESRECOMP_ROOT "${CMAKE_SOURCE_DIR}/snesrecomp" CACHE PATH
     "Path to the snesrecomp checkout used by this game")
+set(SNESRECOMP_FRAME_IMPL "HLE" CACHE STRING "Native frame provider")
+set(SNESRECOMP_EXECUTION_DEFAULT "force" CACHE STRING "Native execution policy")
+set(SNESRECOMP_APU_TIME_IMPL "NATIVE" CACHE STRING "Native audio timing provider")
+set(SNESRECOMP_DSP_MIX_IMPL "NATIVE" CACHE STRING "Native audio mixing provider")
 include(${SNESRECOMP_ROOT}/runner/runner.cmake)
 if(SNESRECOMP_ENABLE_LUA AND NOT TARGET snesrecomp_lua)
     message(FATAL_ERROR "SNESRECOMP_ENABLE_LUA requires snesrecomp with Lua bridge support")

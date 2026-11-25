@@ -698,7 +698,34 @@ def declared_entry_addresses(output_dir: Path) -> dict:
     return declared
 
 
-def non_code_regions(kind_by_pc24, arch_by_pc24) -> list:
+def data_width_boundaries(addr_line, lines_by_id, macro_owner, kind_by_pc24,
+                          arch_by_pc24) -> set:
+    """Keep a word/long pointer run distinct from following byte constants.
+
+    Both are data, but merging them gives inline dispatch recovery a false
+    table extent. Use the assembler's actual source attribution, not ROM
+    values that merely resemble pointers.
+    """
+    boundaries, previous = set(), {}
+    widths = {'dw': 2, 'word': 2, 'dl': 3, 'long': 3,
+              'db': 1, 'byte': 1, 'dd': 4, 'dword': 4}
+    for pc24, key in sorted(addr_line.items()):
+        bank = pc24 >> 16
+        if (kind_by_pc24.get(pc24) != 'data' or
+                arch_by_pc24.get(pc24) != '65816' or key in macro_owner):
+            previous.pop(bank, None)
+            continue
+        file_id, number = key
+        text = strip_label(strip_comment(lines_by_id[file_id][number-1]))
+        width = widths.get(head_word(text).lower())
+        old = previous.get(bank)
+        if old in (2, 3) and width is not None and width != old:
+            boundaries.add(pc24)
+        previous[bank] = width
+    return boundaries
+
+
+def non_code_regions(kind_by_pc24, arch_by_pc24, boundaries=()) -> list:
     """Merge every span that is not 65816 code into (bank, start, end).
 
     Each emitted address owns the bytes up to the next emitted address in the
@@ -724,7 +751,8 @@ def non_code_regions(kind_by_pc24, arch_by_pc24) -> list:
 
     merged: list[tuple[int, int, int]] = []
     for bank, start, end in sorted(spans):
-        if merged and merged[-1][0] == bank and start <= merged[-1][2]:
+        if (merged and merged[-1][0] == bank and start <= merged[-1][2]
+                and ((bank << 16) | start) not in boundaries):
             old_bank, old_start, old_end = merged[-1]
             merged[-1] = (old_bank, old_start, max(old_end, end))
         else:
@@ -1025,7 +1053,9 @@ def main() -> int:
             "disagree with the ROM byte at that address — the addr-to-line "
             "map and the image do not describe the same program")
 
-    regions = non_code_regions(kind_by_pc24, arch_by_pc24)
+    boundaries = data_width_boundaries(addr_line, lines_by_id, macro_owner,
+                                       kind_by_pc24, arch_by_pc24)
+    regions = non_code_regions(kind_by_pc24, arch_by_pc24, boundaries)
     regions += unmapped_bank_regions(kind_by_pc24, len(rom))
     regions.sort()
     classified = classify_labels(labels, parent_names, len(rom))

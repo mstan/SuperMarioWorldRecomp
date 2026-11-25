@@ -34,6 +34,8 @@ COOP_HOOK(0x0294F5) /* Original cape contacts for each actor, shared world once 
 COOP_HOOK(0x029404) /* Accepted cape hit before shared enemy response */
 COOP_HOOK(0x02C79D) /* Chuck custom contacts query all actors before responses */
 COOP_HOOK(0x01B457) /* Common moving platforms carry every active rider */
+COOP_HOOK(0x01B852) /* Turn-block bridges use a separate native solid contact */
+COOP_HOOK(0x02D49C) /* Layer 3 crusher contact, once per actor */
 COOP_HOOK(0x01C9EC) /* Brown rotating platform: all rider contacts, one shared torque */
 COOP_HOOK(0x00F60A) /* Individual lethal damage before shared music/freeze */
 COOP_HOOK(0x00F606) /* Enemy/crush kill entry includes F60A in its AOT block */

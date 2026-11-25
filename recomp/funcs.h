@@ -15,7 +15,7 @@
 
 #include "cpu_state.h"
 
-/* 2022 functions across all banks (5 decls each). */
+/* 2107 functions across all banks (5 decls each). */
 
 void I_RESET(CpuState *cpu);  /* $00:8000 alias */
 RecompReturn I_RESET_M0X0(CpuState *cpu);
@@ -557,6 +557,11 @@ RecompReturn GameMode08_FileSelect_M0X0(CpuState *cpu);
 RecompReturn GameMode08_FileSelect_M0X1(CpuState *cpu);
 RecompReturn GameMode08_FileSelect_M1X0(CpuState *cpu);
 RecompReturn GameMode08_FileSelect_M1X1(CpuState *cpu);
+void CoopNative_009D22(CpuState *cpu);  /* $00:9D22 alias */
+RecompReturn CoopNative_009D22_M0X0(CpuState *cpu);
+RecompReturn CoopNative_009D22_M0X1(CpuState *cpu);
+RecompReturn CoopNative_009D22_M1X0(CpuState *cpu);
+RecompReturn CoopNative_009D22_M1X1(CpuState *cpu);
 void GameMode08_FileSelect_SetStripeImage(CpuState *cpu);  /* $00:9D29 alias */
 RecompReturn GameMode08_FileSelect_SetStripeImage_M0X0(CpuState *cpu);
 RecompReturn GameMode08_FileSelect_SetStripeImage_M0X1(CpuState *cpu);
@@ -587,6 +592,16 @@ RecompReturn GameMode0A_PlayerSelect_M0X0(CpuState *cpu);
 RecompReturn GameMode0A_PlayerSelect_M0X1(CpuState *cpu);
 RecompReturn GameMode0A_PlayerSelect_M1X0(CpuState *cpu);
 RecompReturn GameMode0A_PlayerSelect_M1X1(CpuState *cpu);
+void CoopNative_009E0D(CpuState *cpu);  /* $00:9E0D alias */
+RecompReturn CoopNative_009E0D_M0X0(CpuState *cpu);
+RecompReturn CoopNative_009E0D_M0X1(CpuState *cpu);
+RecompReturn CoopNative_009E0D_M1X0(CpuState *cpu);
+RecompReturn CoopNative_009E0D_M1X1(CpuState *cpu);
+void CoopNative_009E10(CpuState *cpu);  /* $00:9E10 alias */
+RecompReturn CoopNative_009E10_M0X0(CpuState *cpu);
+RecompReturn CoopNative_009E10_M0X1(CpuState *cpu);
+RecompReturn CoopNative_009E10_M1X0(CpuState *cpu);
+RecompReturn CoopNative_009E10_M1X1(CpuState *cpu);
 void GameMode0A_PlayerSelect_Entry2(CpuState *cpu);  /* $00:9E17 alias */
 RecompReturn GameMode0A_PlayerSelect_Entry2_M0X0(CpuState *cpu);
 RecompReturn GameMode0A_PlayerSelect_Entry2_M0X1(CpuState *cpu);
@@ -697,6 +712,21 @@ RecompReturn GameMode14_InLevel_M0X0(CpuState *cpu);
 RecompReturn GameMode14_InLevel_M0X1(CpuState *cpu);
 RecompReturn GameMode14_InLevel_M1X0(CpuState *cpu);
 RecompReturn GameMode14_InLevel_M1X1(CpuState *cpu);
+void CoopNative_00A21B(CpuState *cpu);  /* $00:A21B alias */
+RecompReturn CoopNative_00A21B_M0X0(CpuState *cpu);
+RecompReturn CoopNative_00A21B_M0X1(CpuState *cpu);
+RecompReturn CoopNative_00A21B_M1X0(CpuState *cpu);
+RecompReturn CoopNative_00A21B_M1X1(CpuState *cpu);
+void CoopNativeReturn_00A242(CpuState *cpu);  /* $00:A242 alias */
+RecompReturn CoopNativeReturn_00A242_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_00A242_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_00A242_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_00A242_M1X1(CpuState *cpu);
+void CoopNative_00A28A(CpuState *cpu);  /* $00:A28A alias */
+RecompReturn CoopNative_00A28A_M0X0(CpuState *cpu);
+RecompReturn CoopNative_00A28A_M0X1(CpuState *cpu);
+RecompReturn CoopNative_00A28A_M1X0(CpuState *cpu);
+RecompReturn CoopNative_00A28A_M1X1(CpuState *cpu);
 void UpdateCurrentPlayerPositionRAM(CpuState *cpu);  /* $00:A2F3 alias */
 RecompReturn UpdateCurrentPlayerPositionRAM_M0X0(CpuState *cpu);
 RecompReturn UpdateCurrentPlayerPositionRAM_M0X1(CpuState *cpu);
@@ -957,6 +987,11 @@ RecompReturn GameMode14_InLevel_00C47E_M0X0(CpuState *cpu);
 RecompReturn GameMode14_InLevel_00C47E_M0X1(CpuState *cpu);
 RecompReturn GameMode14_InLevel_00C47E_M1X0(CpuState *cpu);
 RecompReturn GameMode14_InLevel_00C47E_M1X1(CpuState *cpu);
+void CoopNative_00C569(CpuState *cpu);  /* $00:C569 alias */
+RecompReturn CoopNative_00C569_M0X0(CpuState *cpu);
+RecompReturn CoopNative_00C569_M0X1(CpuState *cpu);
+RecompReturn CoopNative_00C569_M1X0(CpuState *cpu);
+RecompReturn CoopNative_00C569_M1X1(CpuState *cpu);
 void GameMode14_InLevel_Return00C592(CpuState *cpu);  /* $00:C592 alias */
 RecompReturn GameMode14_InLevel_Return00C592_M0X0(CpuState *cpu);
 RecompReturn GameMode14_InLevel_Return00C592_M0X1(CpuState *cpu);
@@ -1127,6 +1162,11 @@ RecompReturn PlayerState00_CDAD_M0X0(CpuState *cpu);
 RecompReturn PlayerState00_CDAD_M0X1(CpuState *cpu);
 RecompReturn PlayerState00_CDAD_M1X0(CpuState *cpu);
 RecompReturn PlayerState00_CDAD_M1X1(CpuState *cpu);
+void CoopNativeReturn_00CDDC(CpuState *cpu);  /* $00:CDDC alias */
+RecompReturn CoopNativeReturn_00CDDC_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_00CDDC_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_00CDDC_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_00CDDC_M1X1(CpuState *cpu);
 void PlayerState00_HandleLRScrolling(CpuState *cpu);  /* $00:CDDD alias */
 RecompReturn PlayerState00_HandleLRScrolling_M0X0(CpuState *cpu);
 RecompReturn PlayerState00_HandleLRScrolling_M0X1(CpuState *cpu);
@@ -1172,6 +1212,16 @@ RecompReturn PlayerState09_Death_M0X0(CpuState *cpu);
 RecompReturn PlayerState09_Death_M0X1(CpuState *cpu);
 RecompReturn PlayerState09_Death_M1X0(CpuState *cpu);
 RecompReturn PlayerState09_Death_M1X1(CpuState *cpu);
+void CoopNativeReturn_00D108(CpuState *cpu);  /* $00:D108 alias */
+RecompReturn CoopNativeReturn_00D108_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_00D108_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_00D108_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_00D108_M1X1(CpuState *cpu);
+void CoopNativeReturn_00D11C(CpuState *cpu);  /* $00:D11C alias */
+RecompReturn CoopNativeReturn_00D11C_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_00D11C_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_00D11C_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_00D11C_M1X1(CpuState *cpu);
 void PlayerStateXX_PowerupAnims_PowerDownEntry(CpuState *cpu);  /* $00:D129 alias */
 RecompReturn PlayerStateXX_PowerupAnims_PowerDownEntry_M0X0(CpuState *cpu);
 RecompReturn PlayerStateXX_PowerupAnims_PowerDownEntry_M0X1(CpuState *cpu);
@@ -1337,6 +1387,26 @@ RecompReturn PlayerDraw_M0X0(CpuState *cpu);
 RecompReturn PlayerDraw_M0X1(CpuState *cpu);
 RecompReturn PlayerDraw_M1X0(CpuState *cpu);
 RecompReturn PlayerDraw_M1X1(CpuState *cpu);
+void CoopNative_00E308(CpuState *cpu);  /* $00:E308 alias */
+RecompReturn CoopNative_00E308_M0X0(CpuState *cpu);
+RecompReturn CoopNative_00E308_M0X1(CpuState *cpu);
+RecompReturn CoopNative_00E308_M1X0(CpuState *cpu);
+RecompReturn CoopNative_00E308_M1X1(CpuState *cpu);
+void CoopNative_00E30C(CpuState *cpu);  /* $00:E30C alias */
+RecompReturn CoopNative_00E30C_M0X0(CpuState *cpu);
+RecompReturn CoopNative_00E30C_M0X1(CpuState *cpu);
+RecompReturn CoopNative_00E30C_M1X0(CpuState *cpu);
+RecompReturn CoopNative_00E30C_M1X1(CpuState *cpu);
+void CoopNative_00E314(CpuState *cpu);  /* $00:E314 alias */
+RecompReturn CoopNative_00E314_M0X0(CpuState *cpu);
+RecompReturn CoopNative_00E314_M0X1(CpuState *cpu);
+RecompReturn CoopNative_00E314_M1X0(CpuState *cpu);
+RecompReturn CoopNative_00E314_M1X1(CpuState *cpu);
+void CoopNativeReturn_00E384(CpuState *cpu);  /* $00:E384 alias */
+RecompReturn CoopNativeReturn_00E384_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_00E384_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_00E384_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_00E384_M1X1(CpuState *cpu);
 void PlayerGFXRt_00E45D(CpuState *cpu);  /* $00:E45D alias */
 RecompReturn PlayerGFXRt_00E45D_M0X0(CpuState *cpu);
 RecompReturn PlayerGFXRt_00E45D_M0X1(CpuState *cpu);
@@ -1352,6 +1422,11 @@ RecompReturn HandlePlayerLevelColl_00E98C_M0X0(CpuState *cpu);
 RecompReturn HandlePlayerLevelColl_00E98C_M0X1(CpuState *cpu);
 RecompReturn HandlePlayerLevelColl_00E98C_M1X0(CpuState *cpu);
 RecompReturn HandlePlayerLevelColl_00E98C_M1X1(CpuState *cpu);
+void CoopNative_00E9A1(CpuState *cpu);  /* $00:E9A1 alias */
+RecompReturn CoopNative_00E9A1_M0X0(CpuState *cpu);
+RecompReturn CoopNative_00E9A1_M0X1(CpuState *cpu);
+RecompReturn CoopNative_00E9A1_M1X0(CpuState *cpu);
+RecompReturn CoopNative_00E9A1_M1X1(CpuState *cpu);
 void HandlePlayerLevelColl_00E9C8(CpuState *cpu);  /* $00:E9C8 alias */
 RecompReturn HandlePlayerLevelColl_00E9C8_M0X0(CpuState *cpu);
 RecompReturn HandlePlayerLevelColl_00E9C8_M0X1(CpuState *cpu);
@@ -1517,6 +1592,11 @@ RecompReturn RunPlayerBlockCode_00F2C9_M0X0(CpuState *cpu);
 RecompReturn RunPlayerBlockCode_00F2C9_M0X1(CpuState *cpu);
 RecompReturn RunPlayerBlockCode_00F2C9_M1X0(CpuState *cpu);
 RecompReturn RunPlayerBlockCode_00F2C9_M1X1(CpuState *cpu);
+void CoopNative_00F2CD(CpuState *cpu);  /* $00:F2CD alias */
+RecompReturn CoopNative_00F2CD_M0X0(CpuState *cpu);
+RecompReturn CoopNative_00F2CD_M0X1(CpuState *cpu);
+RecompReturn CoopNative_00F2CD_M1X0(CpuState *cpu);
+RecompReturn CoopNative_00F2CD_M1X1(CpuState *cpu);
 void RunPlayerBlockCode_00F309(CpuState *cpu);  /* $00:F309 alias */
 RecompReturn RunPlayerBlockCode_00F309_M0X0(CpuState *cpu);
 RecompReturn RunPlayerBlockCode_00F309_M0X1(CpuState *cpu);
@@ -1697,6 +1777,11 @@ RecompReturn Spr07B_GoalTape_LvlEndPowerUp_M0X0(CpuState *cpu);
 RecompReturn Spr07B_GoalTape_LvlEndPowerUp_M0X1(CpuState *cpu);
 RecompReturn Spr07B_GoalTape_LvlEndPowerUp_M1X0(CpuState *cpu);
 RecompReturn Spr07B_GoalTape_LvlEndPowerUp_M1X1(CpuState *cpu);
+void CoopNativeReturn_00FB8C(CpuState *cpu);  /* $00:FB8C alias */
+RecompReturn CoopNativeReturn_00FB8C_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_00FB8C_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_00FB8C_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_00FB8C_M1X1(CpuState *cpu);
 void SprStatus06_GoalCoins(CpuState *cpu);  /* $00:FBB4 alias */
 RecompReturn SprStatus06_GoalCoins_M0X0(CpuState *cpu);
 RecompReturn SprStatus06_GoalCoins_M0X1(CpuState *cpu);
@@ -1712,6 +1797,16 @@ RecompReturn SpawnMountedYoshiOnLevelLoad_M0X0(CpuState *cpu);
 RecompReturn SpawnMountedYoshiOnLevelLoad_M0X1(CpuState *cpu);
 RecompReturn SpawnMountedYoshiOnLevelLoad_M1X0(CpuState *cpu);
 RecompReturn SpawnMountedYoshiOnLevelLoad_M1X1(CpuState *cpu);
+void CoopNative_00FC98(CpuState *cpu);  /* $00:FC98 alias */
+RecompReturn CoopNative_00FC98_M0X0(CpuState *cpu);
+RecompReturn CoopNative_00FC98_M0X1(CpuState *cpu);
+RecompReturn CoopNative_00FC98_M1X0(CpuState *cpu);
+RecompReturn CoopNative_00FC98_M1X1(CpuState *cpu);
+void CoopNativeReturn_00FCEB(CpuState *cpu);  /* $00:FCEB alias */
+RecompReturn CoopNativeReturn_00FCEB_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_00FCEB_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_00FCEB_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_00FCEB_M1X1(CpuState *cpu);
 void ClearOutNormalSpriteSlots(CpuState *cpu);  /* $00:FCEC alias */
 RecompReturn ClearOutNormalSpriteSlots_M0X0(CpuState *cpu);
 RecompReturn ClearOutNormalSpriteSlots_M0X1(CpuState *cpu);
@@ -1752,6 +1847,11 @@ RecompReturn SpawnPlayerFireball_M0X0(CpuState *cpu);
 RecompReturn SpawnPlayerFireball_M0X1(CpuState *cpu);
 RecompReturn SpawnPlayerFireball_M1X0(CpuState *cpu);
 RecompReturn SpawnPlayerFireball_M1X1(CpuState *cpu);
+void CoopNativeReturn_00FEB4(CpuState *cpu);  /* $00:FEB4 alias */
+RecompReturn CoopNativeReturn_00FEB4_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_00FEB4_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_00FEB4_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_00FEB4_M1X1(CpuState *cpu);
 void Spr088_WingedCage_SyncPlayerPosToLayer1(CpuState *cpu);  /* $00:FF07 alias */
 RecompReturn Spr088_WingedCage_SyncPlayerPosToLayer1_M0X0(CpuState *cpu);
 RecompReturn Spr088_WingedCage_SyncPlayerPosToLayer1_M0X1(CpuState *cpu);
@@ -1822,6 +1922,11 @@ RecompReturn ProcessNormalSprites_GetNormalSpriteOAMIndexAndDecrementTimers_M0X0
 RecompReturn ProcessNormalSprites_GetNormalSpriteOAMIndexAndDecrementTimers_M0X1(CpuState *cpu);
 RecompReturn ProcessNormalSprites_GetNormalSpriteOAMIndexAndDecrementTimers_M1X0(CpuState *cpu);
 RecompReturn ProcessNormalSprites_GetNormalSpriteOAMIndexAndDecrementTimers_M1X1(CpuState *cpu);
+void CoopNativeReturn_018126(CpuState *cpu);  /* $01:8126 alias */
+RecompReturn CoopNativeReturn_018126_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_018126_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_018126_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_018126_M1X1(CpuState *cpu);
 void ProcessNormalSprites_HandleSprite(CpuState *cpu);  /* $01:8127 alias */
 RecompReturn ProcessNormalSprites_HandleSprite_M0X0(CpuState *cpu);
 RecompReturn ProcessNormalSprites_HandleSprite_M0X1(CpuState *cpu);
@@ -2162,6 +2267,21 @@ RecompReturn Spr04A_GoalSphere_M0X0(CpuState *cpu);
 RecompReturn Spr04A_GoalSphere_M0X1(CpuState *cpu);
 RecompReturn Spr04A_GoalSphere_M1X0(CpuState *cpu);
 RecompReturn Spr04A_GoalSphere_M1X1(CpuState *cpu);
+void CoopNative_018773(CpuState *cpu);  /* $01:8773 alias */
+RecompReturn CoopNative_018773_M0X0(CpuState *cpu);
+RecompReturn CoopNative_018773_M0X1(CpuState *cpu);
+RecompReturn CoopNative_018773_M1X0(CpuState *cpu);
+RecompReturn CoopNative_018773_M1X1(CpuState *cpu);
+void CoopNative_018778(CpuState *cpu);  /* $01:8778 alias */
+RecompReturn CoopNative_018778_M0X0(CpuState *cpu);
+RecompReturn CoopNative_018778_M0X1(CpuState *cpu);
+RecompReturn CoopNative_018778_M1X0(CpuState *cpu);
+RecompReturn CoopNative_018778_M1X1(CpuState *cpu);
+void CoopNativeReturn_018788(CpuState *cpu);  /* $01:8788 alias */
+RecompReturn CoopNativeReturn_018788_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_018788_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_018788_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_018788_M1X1(CpuState *cpu);
 void InitReznor(CpuState *cpu);  /* $01:8789 alias */
 RecompReturn InitReznor_M0X0(CpuState *cpu);
 RecompReturn InitReznor_M0X1(CpuState *cpu);
@@ -2832,6 +2952,11 @@ RecompReturn SprStatus0B_Carried_019F9B_M0X0(CpuState *cpu);
 RecompReturn SprStatus0B_Carried_019F9B_M0X1(CpuState *cpu);
 RecompReturn SprStatus0B_Carried_019F9B_M1X0(CpuState *cpu);
 RecompReturn SprStatus0B_Carried_019F9B_M1X1(CpuState *cpu);
+void CoopNative_01A015(CpuState *cpu);  /* $01:A015 alias */
+RecompReturn CoopNative_01A015_M0X0(CpuState *cpu);
+RecompReturn CoopNative_01A015_M0X1(CpuState *cpu);
+RecompReturn CoopNative_01A015_M1X0(CpuState *cpu);
+RecompReturn CoopNative_01A015_M1X1(CpuState *cpu);
 void SprStatus0B_Carried_01A0B1(CpuState *cpu);  /* $01:A0B1 alias */
 RecompReturn SprStatus0B_Carried_01A0B1_M0X0(CpuState *cpu);
 RecompReturn SprStatus0B_Carried_01A0B1_M0X1(CpuState *cpu);
@@ -3047,6 +3172,11 @@ RecompReturn CheckPlayerToNormalSpriteColl_01A8E6_M0X0(CpuState *cpu);
 RecompReturn CheckPlayerToNormalSpriteColl_01A8E6_M0X1(CpuState *cpu);
 RecompReturn CheckPlayerToNormalSpriteColl_01A8E6_M1X0(CpuState *cpu);
 RecompReturn CheckPlayerToNormalSpriteColl_01A8E6_M1X1(CpuState *cpu);
+void CoopNativeReturn_01A91B(CpuState *cpu);  /* $01:A91B alias */
+RecompReturn CoopNativeReturn_01A91B_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01A91B_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_01A91B_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01A91B_M1X1(CpuState *cpu);
 void CheckPlayerToNormalSpriteColl_01A91C(CpuState *cpu);  /* $01:A91C alias */
 RecompReturn CheckPlayerToNormalSpriteColl_01A91C_M0X0(CpuState *cpu);
 RecompReturn CheckPlayerToNormalSpriteColl_01A91C_M0X1(CpuState *cpu);
@@ -3057,6 +3187,21 @@ RecompReturn auto_01_A924_M0X0(CpuState *cpu);
 RecompReturn auto_01_A924_M0X1(CpuState *cpu);
 RecompReturn auto_01_A924_M1X0(CpuState *cpu);
 RecompReturn auto_01_A924_M1X1(CpuState *cpu);
+void CoopNative_01A935(CpuState *cpu);  /* $01:A935 alias */
+RecompReturn CoopNative_01A935_M0X0(CpuState *cpu);
+RecompReturn CoopNative_01A935_M0X1(CpuState *cpu);
+RecompReturn CoopNative_01A935_M1X0(CpuState *cpu);
+RecompReturn CoopNative_01A935_M1X1(CpuState *cpu);
+void CoopNative_01A947(CpuState *cpu);  /* $01:A947 alias */
+RecompReturn CoopNative_01A947_M0X0(CpuState *cpu);
+RecompReturn CoopNative_01A947_M0X1(CpuState *cpu);
+RecompReturn CoopNative_01A947_M1X0(CpuState *cpu);
+RecompReturn CoopNative_01A947_M1X1(CpuState *cpu);
+void CoopNative_01A95D(CpuState *cpu);  /* $01:A95D alias */
+RecompReturn CoopNative_01A95D_M0X0(CpuState *cpu);
+RecompReturn CoopNative_01A95D_M0X1(CpuState *cpu);
+RecompReturn CoopNative_01A95D_M1X0(CpuState *cpu);
+RecompReturn CoopNative_01A95D_M1X1(CpuState *cpu);
 void CheckPlayerToNormalSpriteColl_01AA0B(CpuState *cpu);  /* $01:AA0B alias */
 RecompReturn CheckPlayerToNormalSpriteColl_01AA0B_M0X0(CpuState *cpu);
 RecompReturn CheckPlayerToNormalSpriteColl_01AA0B_M0X1(CpuState *cpu);
@@ -3077,6 +3222,16 @@ RecompReturn CheckPlayerToNormalSpriteColl_01AA42_M0X0(CpuState *cpu);
 RecompReturn CheckPlayerToNormalSpriteColl_01AA42_M0X1(CpuState *cpu);
 RecompReturn CheckPlayerToNormalSpriteColl_01AA42_M1X0(CpuState *cpu);
 RecompReturn CheckPlayerToNormalSpriteColl_01AA42_M1X1(CpuState *cpu);
+void CoopNative_01AA66(CpuState *cpu);  /* $01:AA66 alias */
+RecompReturn CoopNative_01AA66_M0X0(CpuState *cpu);
+RecompReturn CoopNative_01AA66_M0X1(CpuState *cpu);
+RecompReturn CoopNative_01AA66_M1X0(CpuState *cpu);
+RecompReturn CoopNative_01AA66_M1X1(CpuState *cpu);
+void CoopNative_01AA74(CpuState *cpu);  /* $01:AA74 alias */
+RecompReturn CoopNative_01AA74_M0X0(CpuState *cpu);
+RecompReturn CoopNative_01AA74_M0X1(CpuState *cpu);
+RecompReturn CoopNative_01AA74_M1X0(CpuState *cpu);
+RecompReturn CoopNative_01AA74_M1X1(CpuState *cpu);
 void CheckPlayerToNormalSpriteColl_01AB31(CpuState *cpu);  /* $01:AB31 alias */
 RecompReturn CheckPlayerToNormalSpriteColl_01AB31_M0X0(CpuState *cpu);
 RecompReturn CheckPlayerToNormalSpriteColl_01AB31_M0X1(CpuState *cpu);
@@ -3347,6 +3502,16 @@ RecompReturn SolidSpriteBlock_M0X0(CpuState *cpu);
 RecompReturn SolidSpriteBlock_M0X1(CpuState *cpu);
 RecompReturn SolidSpriteBlock_M1X0(CpuState *cpu);
 RecompReturn SolidSpriteBlock_M1X1(CpuState *cpu);
+void CoopNativeReturn_01B4B0(CpuState *cpu);  /* $01:B4B0 alias */
+RecompReturn CoopNativeReturn_01B4B0_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01B4B0_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_01B4B0_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01B4B0_M1X1(CpuState *cpu);
+void CoopNativeReturn_01B4B2(CpuState *cpu);  /* $01:B4B2 alias */
+RecompReturn CoopNativeReturn_01B4B2_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01B4B2_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_01B4B2_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01B4B2_M1X1(CpuState *cpu);
 void SolidSpriteBlock_Entry2(CpuState *cpu);  /* $01:B4E2 alias */
 RecompReturn SolidSpriteBlock_Entry2_M0X0(CpuState *cpu);
 RecompReturn SolidSpriteBlock_Entry2_M0X1(CpuState *cpu);
@@ -3432,6 +3597,11 @@ RecompReturn SprXXX_TurnBlockBridge_01B852_M0X0(CpuState *cpu);
 RecompReturn SprXXX_TurnBlockBridge_01B852_M0X1(CpuState *cpu);
 RecompReturn SprXXX_TurnBlockBridge_01B852_M1X0(CpuState *cpu);
 RecompReturn SprXXX_TurnBlockBridge_01B852_M1X1(CpuState *cpu);
+void CoopNativeReturn_01B8B1(CpuState *cpu);  /* $01:B8B1 alias */
+RecompReturn CoopNativeReturn_01B8B1_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01B8B1_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_01B8B1_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01B8B1_M1X1(CpuState *cpu);
 void SprXXX_TurnBlockBridge_01B8FF(CpuState *cpu);  /* $01:B8FF alias */
 RecompReturn SprXXX_TurnBlockBridge_01B8FF_M0X0(CpuState *cpu);
 RecompReturn SprXXX_TurnBlockBridge_01B8FF_M0X1(CpuState *cpu);
@@ -3577,6 +3747,31 @@ RecompReturn Spr07B_GoalTape_M0X0(CpuState *cpu);
 RecompReturn Spr07B_GoalTape_M0X1(CpuState *cpu);
 RecompReturn Spr07B_GoalTape_M1X0(CpuState *cpu);
 RecompReturn Spr07B_GoalTape_M1X1(CpuState *cpu);
+void CoopNative_01C0C2(CpuState *cpu);  /* $01:C0C2 alias */
+RecompReturn CoopNative_01C0C2_M0X0(CpuState *cpu);
+RecompReturn CoopNative_01C0C2_M0X1(CpuState *cpu);
+RecompReturn CoopNative_01C0C2_M1X0(CpuState *cpu);
+RecompReturn CoopNative_01C0C2_M1X1(CpuState *cpu);
+void CoopNative_01C0E7(CpuState *cpu);  /* $01:C0E7 alias */
+RecompReturn CoopNative_01C0E7_M0X0(CpuState *cpu);
+RecompReturn CoopNative_01C0E7_M0X1(CpuState *cpu);
+RecompReturn CoopNative_01C0E7_M1X0(CpuState *cpu);
+RecompReturn CoopNative_01C0E7_M1X1(CpuState *cpu);
+void CoopNative_01C107(CpuState *cpu);  /* $01:C107 alias */
+RecompReturn CoopNative_01C107_M0X0(CpuState *cpu);
+RecompReturn CoopNative_01C107_M0X1(CpuState *cpu);
+RecompReturn CoopNative_01C107_M1X0(CpuState *cpu);
+RecompReturn CoopNative_01C107_M1X1(CpuState *cpu);
+void CoopNative_01C109(CpuState *cpu);  /* $01:C109 alias */
+RecompReturn CoopNative_01C109_M0X0(CpuState *cpu);
+RecompReturn CoopNative_01C109_M0X1(CpuState *cpu);
+RecompReturn CoopNative_01C109_M1X0(CpuState *cpu);
+RecompReturn CoopNative_01C109_M1X1(CpuState *cpu);
+void CoopNativeReturn_01C12C(CpuState *cpu);  /* $01:C12C alias */
+RecompReturn CoopNativeReturn_01C12C_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01C12C_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_01C12C_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01C12C_M1X1(CpuState *cpu);
 void Spr07B_GoalTape_Draw(CpuState *cpu);  /* $01:C12D alias */
 RecompReturn Spr07B_GoalTape_Draw_M0X0(CpuState *cpu);
 RecompReturn Spr07B_GoalTape_Draw_M0X1(CpuState *cpu);
@@ -3617,11 +3812,21 @@ RecompReturn SprXXX_PowerUps_01C4BF_M0X0(CpuState *cpu);
 RecompReturn SprXXX_PowerUps_01C4BF_M0X1(CpuState *cpu);
 RecompReturn SprXXX_PowerUps_01C4BF_M1X0(CpuState *cpu);
 RecompReturn SprXXX_PowerUps_01C4BF_M1X1(CpuState *cpu);
+void CoopNative_01C4C6(CpuState *cpu);  /* $01:C4C6 alias */
+RecompReturn CoopNative_01C4C6_M0X0(CpuState *cpu);
+RecompReturn CoopNative_01C4C6_M0X1(CpuState *cpu);
+RecompReturn CoopNative_01C4C6_M1X0(CpuState *cpu);
+RecompReturn CoopNative_01C4C6_M1X1(CpuState *cpu);
 void SprXXX_PowerUps_01C4F0(CpuState *cpu);  /* $01:C4F0 alias */
 RecompReturn SprXXX_PowerUps_01C4F0_M0X0(CpuState *cpu);
 RecompReturn SprXXX_PowerUps_01C4F0_M0X1(CpuState *cpu);
 RecompReturn SprXXX_PowerUps_01C4F0_M1X0(CpuState *cpu);
 RecompReturn SprXXX_PowerUps_01C4F0_M1X1(CpuState *cpu);
+void CoopNativeReturn_01C4FA(CpuState *cpu);  /* $01:C4FA alias */
+RecompReturn CoopNativeReturn_01C4FA_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01C4FA_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_01C4FA_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01C4FA_M1X1(CpuState *cpu);
 void SprXXX_PowerUps_01C538(CpuState *cpu);  /* $01:C538 alias */
 RecompReturn SprXXX_PowerUps_01C538_M0X0(CpuState *cpu);
 RecompReturn SprXXX_PowerUps_01C538_M0X1(CpuState *cpu);
@@ -3662,6 +3867,11 @@ RecompReturn SprXXX_PowerUps_01C5AE_M0X0(CpuState *cpu);
 RecompReturn SprXXX_PowerUps_01C5AE_M0X1(CpuState *cpu);
 RecompReturn SprXXX_PowerUps_01C5AE_M1X0(CpuState *cpu);
 RecompReturn SprXXX_PowerUps_01C5AE_M1X1(CpuState *cpu);
+void CoopNativeReturn_01C5EB(CpuState *cpu);  /* $01:C5EB alias */
+RecompReturn CoopNativeReturn_01C5EB_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01C5EB_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_01C5EB_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01C5EB_M1X1(CpuState *cpu);
 void SprXXX_PowerUps_GiveMarioFire(CpuState *cpu);  /* $01:C5EC alias */
 RecompReturn SprXXX_PowerUps_GiveMarioFire_M0X0(CpuState *cpu);
 RecompReturn SprXXX_PowerUps_GiveMarioFire_M0X1(CpuState *cpu);
@@ -3727,6 +3937,11 @@ RecompReturn sub_1C9EC_M0X0(CpuState *cpu);
 RecompReturn sub_1C9EC_M0X1(CpuState *cpu);
 RecompReturn sub_1C9EC_M1X0(CpuState *cpu);
 RecompReturn sub_1C9EC_M1X1(CpuState *cpu);
+void CoopNativeReturn_01CA9B(CpuState *cpu);  /* $01:CA9B alias */
+RecompReturn CoopNativeReturn_01CA9B_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01CA9B_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_01CA9B_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01CA9B_M1X1(CpuState *cpu);
 void Spr05F_BrownChainedPlatform_01CA9C(CpuState *cpu);  /* $01:CA9C alias */
 RecompReturn Spr05F_BrownChainedPlatform_01CA9C_M0X0(CpuState *cpu);
 RecompReturn Spr05F_BrownChainedPlatform_01CA9C_M0X1(CpuState *cpu);
@@ -3917,6 +4132,26 @@ RecompReturn Spr029_KoopaKid_MortonRoyLudwig_01D3B1_M0X0(CpuState *cpu);
 RecompReturn Spr029_KoopaKid_MortonRoyLudwig_01D3B1_M0X1(CpuState *cpu);
 RecompReturn Spr029_KoopaKid_MortonRoyLudwig_01D3B1_M1X0(CpuState *cpu);
 RecompReturn Spr029_KoopaKid_MortonRoyLudwig_01D3B1_M1X1(CpuState *cpu);
+void CoopNative_01D3BA(CpuState *cpu);  /* $01:D3BA alias */
+RecompReturn CoopNative_01D3BA_M0X0(CpuState *cpu);
+RecompReturn CoopNative_01D3BA_M0X1(CpuState *cpu);
+RecompReturn CoopNative_01D3BA_M1X0(CpuState *cpu);
+RecompReturn CoopNative_01D3BA_M1X1(CpuState *cpu);
+void CoopNative_01D3E9(CpuState *cpu);  /* $01:D3E9 alias */
+RecompReturn CoopNative_01D3E9_M0X0(CpuState *cpu);
+RecompReturn CoopNative_01D3E9_M0X1(CpuState *cpu);
+RecompReturn CoopNative_01D3E9_M1X0(CpuState *cpu);
+RecompReturn CoopNative_01D3E9_M1X1(CpuState *cpu);
+void CoopNativeReturn_01D405(CpuState *cpu);  /* $01:D405 alias */
+RecompReturn CoopNativeReturn_01D405_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01D405_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_01D405_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01D405_M1X1(CpuState *cpu);
+void CoopNativeReturn_01D40A(CpuState *cpu);  /* $01:D40A alias */
+RecompReturn CoopNativeReturn_01D40A_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01D40A_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_01D40A_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01D40A_M1X1(CpuState *cpu);
 void Spr029_KoopaKid_MortonRoyLudwig_01D40B(CpuState *cpu);  /* $01:D40B alias */
 RecompReturn Spr029_KoopaKid_MortonRoyLudwig_01D40B_M0X0(CpuState *cpu);
 RecompReturn Spr029_KoopaKid_MortonRoyLudwig_01D40B_M0X1(CpuState *cpu);
@@ -4092,6 +4327,26 @@ RecompReturn Spr00E_Keyhole_M0X0(CpuState *cpu);
 RecompReturn Spr00E_Keyhole_M0X1(CpuState *cpu);
 RecompReturn Spr00E_Keyhole_M1X0(CpuState *cpu);
 RecompReturn Spr00E_Keyhole_M1X1(CpuState *cpu);
+void CoopNative_01E1DB(CpuState *cpu);  /* $01:E1DB alias */
+RecompReturn CoopNative_01E1DB_M0X0(CpuState *cpu);
+RecompReturn CoopNative_01E1DB_M0X1(CpuState *cpu);
+RecompReturn CoopNative_01E1DB_M1X0(CpuState *cpu);
+RecompReturn CoopNative_01E1DB_M1X1(CpuState *cpu);
+void CoopNative_01E210(CpuState *cpu);  /* $01:E210 alias */
+RecompReturn CoopNative_01E210_M0X0(CpuState *cpu);
+RecompReturn CoopNative_01E210_M0X1(CpuState *cpu);
+RecompReturn CoopNative_01E210_M1X0(CpuState *cpu);
+RecompReturn CoopNative_01E210_M1X1(CpuState *cpu);
+void CoopNative_01E23A(CpuState *cpu);  /* $01:E23A alias */
+RecompReturn CoopNative_01E23A_M0X0(CpuState *cpu);
+RecompReturn CoopNative_01E23A_M0X1(CpuState *cpu);
+RecompReturn CoopNative_01E23A_M1X0(CpuState *cpu);
+RecompReturn CoopNative_01E23A_M1X1(CpuState *cpu);
+void CoopNativeReturn_01E269(CpuState *cpu);  /* $01:E269 alias */
+RecompReturn CoopNativeReturn_01E269_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01E269_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_01E269_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01E269_M1X1(CpuState *cpu);
 void Spr082_BonusGame_Spawn1ups(CpuState *cpu);  /* $01:E26A alias */
 RecompReturn Spr082_BonusGame_Spawn1ups_M0X0(CpuState *cpu);
 RecompReturn Spr082_BonusGame_Spawn1ups_M0X1(CpuState *cpu);
@@ -4197,6 +4452,11 @@ RecompReturn PlayerGFXRt_01EA70_M0X0(CpuState *cpu);
 RecompReturn PlayerGFXRt_01EA70_M0X1(CpuState *cpu);
 RecompReturn PlayerGFXRt_01EA70_M1X0(CpuState *cpu);
 RecompReturn PlayerGFXRt_01EA70_M1X1(CpuState *cpu);
+void CoopNativeReturn_01EA8E(CpuState *cpu);  /* $01:EA8E alias */
+RecompReturn CoopNativeReturn_01EA8E_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01EA8E_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_01EA8E_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01EA8E_M1X1(CpuState *cpu);
 void PlayerGFXRt_01EA8F(CpuState *cpu);  /* $01:EA8F alias */
 RecompReturn PlayerGFXRt_01EA8F_M0X0(CpuState *cpu);
 RecompReturn PlayerGFXRt_01EA8F_M0X1(CpuState *cpu);
@@ -4302,6 +4562,16 @@ RecompReturn Spr035_Yoshi_TryEatSprite_M0X0(CpuState *cpu);
 RecompReturn Spr035_Yoshi_TryEatSprite_M0X1(CpuState *cpu);
 RecompReturn Spr035_Yoshi_TryEatSprite_M1X0(CpuState *cpu);
 RecompReturn Spr035_Yoshi_TryEatSprite_M1X1(CpuState *cpu);
+void CoopNative_01F59B(CpuState *cpu);  /* $01:F59B alias */
+RecompReturn CoopNative_01F59B_M0X0(CpuState *cpu);
+RecompReturn CoopNative_01F59B_M0X1(CpuState *cpu);
+RecompReturn CoopNative_01F59B_M1X0(CpuState *cpu);
+RecompReturn CoopNative_01F59B_M1X1(CpuState *cpu);
+void CoopNativeReturn_01F609(CpuState *cpu);  /* $01:F609 alias */
+RecompReturn CoopNativeReturn_01F609_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01F609_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_01F609_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01F609_M1X1(CpuState *cpu);
 void Spr035_Yoshi_01F622(CpuState *cpu);  /* $01:F622 alias */
 RecompReturn Spr035_Yoshi_01F622_M0X0(CpuState *cpu);
 RecompReturn Spr035_Yoshi_01F622_M0X1(CpuState *cpu);
@@ -4337,6 +4607,11 @@ RecompReturn Spr02C_YoshiEgg_M0X0(CpuState *cpu);
 RecompReturn Spr02C_YoshiEgg_M0X1(CpuState *cpu);
 RecompReturn Spr02C_YoshiEgg_M1X0(CpuState *cpu);
 RecompReturn Spr02C_YoshiEgg_M1X1(CpuState *cpu);
+void CoopNative_01F78A(CpuState *cpu);  /* $01:F78A alias */
+RecompReturn CoopNative_01F78A_M0X0(CpuState *cpu);
+RecompReturn CoopNative_01F78A_M0X1(CpuState *cpu);
+RecompReturn CoopNative_01F78A_M1X0(CpuState *cpu);
+RecompReturn CoopNative_01F78A_M1X1(CpuState *cpu);
 void Spr02C_YoshiEgg_01F7C8(CpuState *cpu);  /* $01:F7C8 alias */
 RecompReturn Spr02C_YoshiEgg_01F7C8_M0X0(CpuState *cpu);
 RecompReturn Spr02C_YoshiEgg_01F7C8_M0X1(CpuState *cpu);
@@ -4402,6 +4677,31 @@ RecompReturn Spr029_KoopaKid_IggyLarry_01FC62_M0X0(CpuState *cpu);
 RecompReturn Spr029_KoopaKid_IggyLarry_01FC62_M0X1(CpuState *cpu);
 RecompReturn Spr029_KoopaKid_IggyLarry_01FC62_M1X0(CpuState *cpu);
 RecompReturn Spr029_KoopaKid_IggyLarry_01FC62_M1X1(CpuState *cpu);
+void CoopNative_01FD0A(CpuState *cpu);  /* $01:FD0A alias */
+RecompReturn CoopNative_01FD0A_M0X0(CpuState *cpu);
+RecompReturn CoopNative_01FD0A_M0X1(CpuState *cpu);
+RecompReturn CoopNative_01FD0A_M1X0(CpuState *cpu);
+RecompReturn CoopNative_01FD0A_M1X1(CpuState *cpu);
+void CoopNative_01FD0C(CpuState *cpu);  /* $01:FD0C alias */
+RecompReturn CoopNative_01FD0C_M0X0(CpuState *cpu);
+RecompReturn CoopNative_01FD0C_M0X1(CpuState *cpu);
+RecompReturn CoopNative_01FD0C_M1X0(CpuState *cpu);
+RecompReturn CoopNative_01FD0C_M1X1(CpuState *cpu);
+void CoopNative_01FD36(CpuState *cpu);  /* $01:FD36 alias */
+RecompReturn CoopNative_01FD36_M0X0(CpuState *cpu);
+RecompReturn CoopNative_01FD36_M0X1(CpuState *cpu);
+RecompReturn CoopNative_01FD36_M1X0(CpuState *cpu);
+RecompReturn CoopNative_01FD36_M1X1(CpuState *cpu);
+void CoopNativeReturn_01FD4A(CpuState *cpu);  /* $01:FD4A alias */
+RecompReturn CoopNativeReturn_01FD4A_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01FD4A_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_01FD4A_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01FD4A_M1X1(CpuState *cpu);
+void CoopNativeReturn_01FD4F(CpuState *cpu);  /* $01:FD4F alias */
+RecompReturn CoopNativeReturn_01FD4F_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01FD4F_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_01FD4F_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_01FD4F_M1X1(CpuState *cpu);
 void Spr029_KoopaKid_IggyLarry_01FD50(CpuState *cpu);  /* $01:FD50 alias */
 RecompReturn Spr029_KoopaKid_IggyLarry_01FD50_M0X0(CpuState *cpu);
 RecompReturn Spr029_KoopaKid_IggyLarry_01FD50_M0X1(CpuState *cpu);
@@ -4542,6 +4842,16 @@ RecompReturn SpawnBounceSprite_02887D_M0X0(CpuState *cpu);
 RecompReturn SpawnBounceSprite_02887D_M0X1(CpuState *cpu);
 RecompReturn SpawnBounceSprite_02887D_M1X0(CpuState *cpu);
 RecompReturn SpawnBounceSprite_02887D_M1X1(CpuState *cpu);
+void CoopNative_0289E1(CpuState *cpu);  /* $02:89E1 alias */
+RecompReturn CoopNative_0289E1_M0X0(CpuState *cpu);
+RecompReturn CoopNative_0289E1_M0X1(CpuState *cpu);
+RecompReturn CoopNative_0289E1_M1X0(CpuState *cpu);
+RecompReturn CoopNative_0289E1_M1X1(CpuState *cpu);
+void CoopNativeReturn_0289FB(CpuState *cpu);  /* $02:89FB alias */
+RecompReturn CoopNativeReturn_0289FB_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_0289FB_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_0289FB_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_0289FB_M1X1(CpuState *cpu);
 void SpawnSmokePuff(CpuState *cpu);  /* $02:8A44 alias */
 RecompReturn SpawnSmokePuff_M0X0(CpuState *cpu);
 RecompReturn SpawnSmokePuff_M0X1(CpuState *cpu);
@@ -4722,6 +5032,11 @@ RecompReturn HandleCapeInteraction_M0X0(CpuState *cpu);
 RecompReturn HandleCapeInteraction_M0X1(CpuState *cpu);
 RecompReturn HandleCapeInteraction_M1X0(CpuState *cpu);
 RecompReturn HandleCapeInteraction_M1X1(CpuState *cpu);
+void CoopNativeReturn_02950A(CpuState *cpu);  /* $02:950A alias */
+RecompReturn CoopNativeReturn_02950A_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_02950A_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_02950A_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_02950A_M1X1(CpuState *cpu);
 void HandleCapeLevelCollision(CpuState *cpu);  /* $02:950B alias */
 RecompReturn HandleCapeLevelCollision_M0X0(CpuState *cpu);
 RecompReturn HandleCapeLevelCollision_M0X1(CpuState *cpu);
@@ -4902,6 +5217,16 @@ RecompReturn CheckPlayerFireballToNormalSpriteCollision_M0X0(CpuState *cpu);
 RecompReturn CheckPlayerFireballToNormalSpriteCollision_M0X1(CpuState *cpu);
 RecompReturn CheckPlayerFireballToNormalSpriteCollision_M1X0(CpuState *cpu);
 RecompReturn CheckPlayerFireballToNormalSpriteCollision_M1X1(CpuState *cpu);
+void CoopNative_02A0F5(CpuState *cpu);  /* $02:A0F5 alias */
+RecompReturn CoopNative_02A0F5_M0X0(CpuState *cpu);
+RecompReturn CoopNative_02A0F5_M0X1(CpuState *cpu);
+RecompReturn CoopNative_02A0F5_M1X0(CpuState *cpu);
+RecompReturn CoopNative_02A0F5_M1X1(CpuState *cpu);
+void CoopNativeReturn_02A143(CpuState *cpu);  /* $02:A143 alias */
+RecompReturn CoopNativeReturn_02A143_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_02A143_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_02A143_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_02A143_M1X1(CpuState *cpu);
 void ExtSpr02_ReznorFireball(CpuState *cpu);  /* $02:A16B alias */
 RecompReturn ExtSpr02_ReznorFireball_M0X0(CpuState *cpu);
 RecompReturn ExtSpr02_ReznorFireball_M0X1(CpuState *cpu);
@@ -4952,6 +5277,16 @@ RecompReturn CheckMarioToExtendedSpriteCollision_M0X0(CpuState *cpu);
 RecompReturn CheckMarioToExtendedSpriteCollision_M0X1(CpuState *cpu);
 RecompReturn CheckMarioToExtendedSpriteCollision_M1X0(CpuState *cpu);
 RecompReturn CheckMarioToExtendedSpriteCollision_M1X1(CpuState *cpu);
+void CoopNative_02A40B(CpuState *cpu);  /* $02:A40B alias */
+RecompReturn CoopNative_02A40B_M0X0(CpuState *cpu);
+RecompReturn CoopNative_02A40B_M0X1(CpuState *cpu);
+RecompReturn CoopNative_02A40B_M1X0(CpuState *cpu);
+RecompReturn CoopNative_02A40B_M1X1(CpuState *cpu);
+void CoopNativeReturn_02A468(CpuState *cpu);  /* $02:A468 alias */
+RecompReturn CoopNativeReturn_02A468_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_02A468_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_02A468_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_02A468_M1X1(CpuState *cpu);
 void CheckMarioToExtendedSpriteColl_02A469(CpuState *cpu);  /* $02:A469 alias */
 RecompReturn CheckMarioToExtendedSpriteColl_02A469_M0X0(CpuState *cpu);
 RecompReturn CheckMarioToExtendedSpriteColl_02A469_M0X1(CpuState *cpu);
@@ -4992,6 +5327,11 @@ RecompReturn LoadSublevel_02A751_M0X0(CpuState *cpu);
 RecompReturn LoadSublevel_02A751_M0X1(CpuState *cpu);
 RecompReturn LoadSublevel_02A751_M1X0(CpuState *cpu);
 RecompReturn LoadSublevel_02A751_M1X1(CpuState *cpu);
+void CoopNativeReturn_02A772(CpuState *cpu);  /* $02:A772 alias */
+RecompReturn CoopNativeReturn_02A772_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_02A772_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_02A772_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_02A772_M1X1(CpuState *cpu);
 void ParseLevelSpriteList(CpuState *cpu);  /* $02:A7FC alias */
 RecompReturn ParseLevelSpriteList_M0X0(CpuState *cpu);
 RecompReturn ParseLevelSpriteList_M0X1(CpuState *cpu);
@@ -5032,6 +5372,11 @@ RecompReturn InitializeAllSpritesOnLevelLoad_M0X0(CpuState *cpu);
 RecompReturn InitializeAllSpritesOnLevelLoad_M0X1(CpuState *cpu);
 RecompReturn InitializeAllSpritesOnLevelLoad_M1X0(CpuState *cpu);
 RecompReturn InitializeAllSpritesOnLevelLoad_M1X1(CpuState *cpu);
+void CoopNativeReturn_02AC5B(CpuState *cpu);  /* $02:AC5B alias */
+RecompReturn CoopNativeReturn_02AC5B_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_02AC5B_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_02AC5B_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_02AC5B_M1X1(CpuState *cpu);
 void LoadSpritesOnLevelLoad(CpuState *cpu);  /* $02:AC5C alias */
 RecompReturn LoadSpritesOnLevelLoad_M0X0(CpuState *cpu);
 RecompReturn LoadSpritesOnLevelLoad_M0X1(CpuState *cpu);
@@ -5052,6 +5397,11 @@ RecompReturn SetupScoreSprite_M0X0(CpuState *cpu);
 RecompReturn SetupScoreSprite_M0X1(CpuState *cpu);
 RecompReturn SetupScoreSprite_M1X0(CpuState *cpu);
 RecompReturn SetupScoreSprite_M1X1(CpuState *cpu);
+void CoopNative_02AD22(CpuState *cpu);  /* $02:AD22 alias */
+RecompReturn CoopNative_02AD22_M0X0(CpuState *cpu);
+RecompReturn CoopNative_02AD22_M0X1(CpuState *cpu);
+RecompReturn CoopNative_02AD22_M1X0(CpuState *cpu);
+RecompReturn CoopNative_02AD22_M1X1(CpuState *cpu);
 void CheckAvailableScoreSpriteSlot(CpuState *cpu);  /* $02:AD34 alias */
 RecompReturn CheckAvailableScoreSpriteSlot_M0X0(CpuState *cpu);
 RecompReturn CheckAvailableScoreSpriteSlot_M0X1(CpuState *cpu);
@@ -5062,11 +5412,26 @@ RecompReturn ProcessScoreSprites_M0X0(CpuState *cpu);
 RecompReturn ProcessScoreSprites_M0X1(CpuState *cpu);
 RecompReturn ProcessScoreSprites_M1X0(CpuState *cpu);
 RecompReturn ProcessScoreSprites_M1X1(CpuState *cpu);
+void CoopNativeReturn_02ADC8(CpuState *cpu);  /* $02:ADC8 alias */
+RecompReturn CoopNativeReturn_02ADC8_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_02ADC8_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_02ADC8_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_02ADC8_M1X1(CpuState *cpu);
 void ProcessScoreSprites_Sub(CpuState *cpu);  /* $02:ADC9 alias */
 RecompReturn ProcessScoreSprites_Sub_M0X0(CpuState *cpu);
 RecompReturn ProcessScoreSprites_Sub_M0X1(CpuState *cpu);
 RecompReturn ProcessScoreSprites_Sub_M1X0(CpuState *cpu);
 RecompReturn ProcessScoreSprites_Sub_M1X1(CpuState *cpu);
+void CoopNative_02AE03(CpuState *cpu);  /* $02:AE03 alias */
+RecompReturn CoopNative_02AE03_M0X0(CpuState *cpu);
+RecompReturn CoopNative_02AE03_M0X1(CpuState *cpu);
+RecompReturn CoopNative_02AE03_M1X0(CpuState *cpu);
+RecompReturn CoopNative_02AE03_M1X1(CpuState *cpu);
+void CoopNative_02AE38(CpuState *cpu);  /* $02:AE38 alias */
+RecompReturn CoopNative_02AE38_M0X0(CpuState *cpu);
+RecompReturn CoopNative_02AE38_M0X1(CpuState *cpu);
+RecompReturn CoopNative_02AE38_M1X0(CpuState *cpu);
+RecompReturn CoopNative_02AE38_M1X1(CpuState *cpu);
 void Spr0E0_Load3Platforms(CpuState *cpu);  /* $02:AF33 alias */
 RecompReturn Spr0E0_Load3Platforms_M0X0(CpuState *cpu);
 RecompReturn Spr0E0_Load3Platforms_M0X1(CpuState *cpu);
@@ -5267,6 +5632,16 @@ RecompReturn CheckBerryTileCollisionWithYoshiTongue_M0X0(CpuState *cpu);
 RecompReturn CheckBerryTileCollisionWithYoshiTongue_M0X1(CpuState *cpu);
 RecompReturn CheckBerryTileCollisionWithYoshiTongue_M1X0(CpuState *cpu);
 RecompReturn CheckBerryTileCollisionWithYoshiTongue_M1X1(CpuState *cpu);
+void CoopNative_02BAAF(CpuState *cpu);  /* $02:BAAF alias */
+RecompReturn CoopNative_02BAAF_M0X0(CpuState *cpu);
+RecompReturn CoopNative_02BAAF_M0X1(CpuState *cpu);
+RecompReturn CoopNative_02BAAF_M1X0(CpuState *cpu);
+RecompReturn CoopNative_02BAAF_M1X1(CpuState *cpu);
+void CoopNativeReturn_02BABF(CpuState *cpu);  /* $02:BABF alias */
+RecompReturn CoopNativeReturn_02BABF_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_02BABF_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_02BABF_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_02BABF_M1X1(CpuState *cpu);
 void Spr035_Yoshi_DrawYoshisWings(CpuState *cpu);  /* $02:BB23 alias */
 RecompReturn Spr035_Yoshi_DrawYoshisWings_M0X0(CpuState *cpu);
 RecompReturn Spr035_Yoshi_DrawYoshisWings_M0X1(CpuState *cpu);
@@ -5457,6 +5832,16 @@ RecompReturn KillNormalSprite_AcceptedConsequence_M0X0(CpuState *cpu);
 RecompReturn KillNormalSprite_AcceptedConsequence_M0X1(CpuState *cpu);
 RecompReturn KillNormalSprite_AcceptedConsequence_M1X0(CpuState *cpu);
 RecompReturn KillNormalSprite_AcceptedConsequence_M1X1(CpuState *cpu);
+void CoopNativeReturn_02C80F(CpuState *cpu);  /* $02:C80F alias */
+RecompReturn CoopNativeReturn_02C80F_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_02C80F_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_02C80F_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_02C80F_M1X1(CpuState *cpu);
+void CoopNative_02C810(CpuState *cpu);  /* $02:C810 alias */
+RecompReturn CoopNative_02C810_M0X0(CpuState *cpu);
+RecompReturn CoopNative_02C810_M0X1(CpuState *cpu);
+RecompReturn CoopNative_02C810_M1X0(CpuState *cpu);
+RecompReturn CoopNative_02C810_M1X1(CpuState *cpu);
 void Spr091_CharginChuck_Draw(CpuState *cpu);  /* $02:C81A alias */
 RecompReturn Spr091_CharginChuck_Draw_M0X0(CpuState *cpu);
 RecompReturn Spr091_CharginChuck_Draw_M0X1(CpuState *cpu);
@@ -5582,6 +5967,16 @@ RecompReturn Spr035_Yoshi_02D0E6_M0X0(CpuState *cpu);
 RecompReturn Spr035_Yoshi_02D0E6_M0X1(CpuState *cpu);
 RecompReturn Spr035_Yoshi_02D0E6_M1X0(CpuState *cpu);
 RecompReturn Spr035_Yoshi_02D0E6_M1X1(CpuState *cpu);
+void CoopNative_02D1CA(CpuState *cpu);  /* $02:D1CA alias */
+RecompReturn CoopNative_02D1CA_M0X0(CpuState *cpu);
+RecompReturn CoopNative_02D1CA_M0X1(CpuState *cpu);
+RecompReturn CoopNative_02D1CA_M1X0(CpuState *cpu);
+RecompReturn CoopNative_02D1CA_M1X1(CpuState *cpu);
+void CoopNativeReturn_02D1F0(CpuState *cpu);  /* $02:D1F0 alias */
+RecompReturn CoopNativeReturn_02D1F0_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_02D1F0_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_02D1F0_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_02D1F0_M1X1(CpuState *cpu);
 void Spr035_Yoshi_ChangeBerryIntoBushTile(CpuState *cpu);  /* $02:D1F3 alias */
 RecompReturn Spr035_Yoshi_ChangeBerryIntoBushTile_M0X0(CpuState *cpu);
 RecompReturn Spr035_Yoshi_ChangeBerryIntoBushTile_M0X1(CpuState *cpu);
@@ -6012,6 +6407,11 @@ RecompReturn CheckIfBabyYoshiCanEatNormalSprite_02EA8A_M0X0(CpuState *cpu);
 RecompReturn CheckIfBabyYoshiCanEatNormalSprite_02EA8A_M0X1(CpuState *cpu);
 RecompReturn CheckIfBabyYoshiCanEatNormalSprite_02EA8A_M1X0(CpuState *cpu);
 RecompReturn CheckIfBabyYoshiCanEatNormalSprite_02EA8A_M1X1(CpuState *cpu);
+void CoopNativeReturn_02EACD(CpuState *cpu);  /* $02:EACD alias */
+RecompReturn CoopNativeReturn_02EACD_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_02EACD_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_02EACD_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_02EACD_M1X1(CpuState *cpu);
 void Spr08E_WarpHole(CpuState *cpu);  /* $02:EADA alias */
 RecompReturn Spr08E_WarpHole_M0X0(CpuState *cpu);
 RecompReturn Spr08E_WarpHole_M0X1(CpuState *cpu);
@@ -8522,6 +8922,16 @@ RecompReturn GiveTimeBonusAndBonusStars_M0X0(CpuState *cpu);
 RecompReturn GiveTimeBonusAndBonusStars_M0X1(CpuState *cpu);
 RecompReturn GiveTimeBonusAndBonusStars_M1X0(CpuState *cpu);
 RecompReturn GiveTimeBonusAndBonusStars_M1X1(CpuState *cpu);
+void CoopNative_05CF05(CpuState *cpu);  /* $05:CF05 alias */
+RecompReturn CoopNative_05CF05_M0X0(CpuState *cpu);
+RecompReturn CoopNative_05CF05_M0X1(CpuState *cpu);
+RecompReturn CoopNative_05CF05_M1X0(CpuState *cpu);
+RecompReturn CoopNative_05CF05_M1X1(CpuState *cpu);
+void CoopNative_05CF36(CpuState *cpu);  /* $05:CF36 alias */
+RecompReturn CoopNative_05CF36_M0X0(CpuState *cpu);
+RecompReturn CoopNative_05CF36_M0X1(CpuState *cpu);
+RecompReturn CoopNative_05CF36_M1X0(CpuState *cpu);
+RecompReturn CoopNative_05CF36_M1X1(CpuState *cpu);
 void GiveTimeBonusAndBonusStars_Return(CpuState *cpu);  /* $05:CFE9 alias */
 RecompReturn GiveTimeBonusAndBonusStars_Return_M0X0(CpuState *cpu);
 RecompReturn GiveTimeBonusAndBonusStars_Return_M0X1(CpuState *cpu);
@@ -8532,6 +8942,21 @@ RecompReturn LoadLevel_M0X0(CpuState *cpu);
 RecompReturn LoadLevel_M0X1(CpuState *cpu);
 RecompReturn LoadLevel_M1X0(CpuState *cpu);
 RecompReturn LoadLevel_M1X1(CpuState *cpu);
+void CoopNative_05D83E(CpuState *cpu);  /* $05:D83E alias */
+RecompReturn CoopNative_05D83E_M0X0(CpuState *cpu);
+RecompReturn CoopNative_05D83E_M0X1(CpuState *cpu);
+RecompReturn CoopNative_05D83E_M1X0(CpuState *cpu);
+RecompReturn CoopNative_05D83E_M1X1(CpuState *cpu);
+void CoopNativeReturn_05D8A2(CpuState *cpu);  /* $05:D8A2 alias */
+RecompReturn CoopNativeReturn_05D8A2_M0X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_05D8A2_M0X1(CpuState *cpu);
+RecompReturn CoopNativeReturn_05D8A2_M1X0(CpuState *cpu);
+RecompReturn CoopNativeReturn_05D8A2_M1X1(CpuState *cpu);
+void CoopNative_05D8B7(CpuState *cpu);  /* $05:D8B7 alias */
+RecompReturn CoopNative_05D8B7_M0X0(CpuState *cpu);
+RecompReturn CoopNative_05D8B7_M0X1(CpuState *cpu);
+RecompReturn CoopNative_05D8B7_M1X0(CpuState *cpu);
+RecompReturn CoopNative_05D8B7_M1X1(CpuState *cpu);
 void LoadLevel_HandleChocolateIsland2Gimmick(CpuState *cpu);  /* $05:DAEF alias */
 RecompReturn LoadLevel_HandleChocolateIsland2Gimmick_M0X0(CpuState *cpu);
 RecompReturn LoadLevel_HandleChocolateIsland2Gimmick_M0X1(CpuState *cpu);

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Reproducible native co-op boundaries in every emitted stock variant.
 
-All hooks are runtime gated. A transfer uses the existing tail ABI, preserving
-the enclosing guest return boundary in both generated and interpreted code.
+All hooks are runtime gated. Native transfers keep local generated labels or
+the engine's inherited paired-call frame; they never enter the interpreter.
 """
 import argparse
 from pathlib import Path
@@ -24,15 +24,27 @@ def apply(text, required):
     text = re.sub(r'^.*?/\*SMW-NATIVE-COOP\*/[^\n]*\n', '', text, flags=re.M)
     found = set()
     out = []
-    for line in text.splitlines(keepends=True):
-        m = re.search(r'cpu_trace_block\(cpu, 0x([0-9A-Fa-f]+)\);', line)
-        if m and int(m[1], 16) in required:
-            pc = int(m[1], 16)
-            # This is after the label but before the block's first instruction.
-            # Existing renderer observers remain in the same generated block.
-            out.append(f'    {MARKER} {{ extern uint32_t SmwCoopGuestHook(CpuState *, uint32_t); uint32_t target = SmwCoopGuestHook(cpu, 0x{pc:06X}u); if (target) {{ RecompStackPop(); return interp_tier_dispatch_tail(cpu, target, 0x{pc:06X}u, _entry_s, _hrv); }} }}\n')
-            found.add(pc)
-        out.append(line)
+    simulation = '\n'.join((ROOT/'src/mods/coop'/name).read_text()
+                           for name in ('coop_simulation.c','coop_runtime.c'))
+    targets = {int(value, 16) for expression in re.findall(r'\breturn\s+([^;]+);', simulation)
+               for value in re.findall(r'0x[0-9a-fA-F]+', expression)}
+    functions = re.split(r'(?=^RecompReturn \w+\(CpuState \*cpu\) \{)', text, flags=re.M)
+    for function in functions:
+        labels = re.findall(r'^\s*(L_([0-9A-Fa-f]{4})_M([01])X([01])):', function, re.M)
+        for line in function.splitlines(keepends=True):
+            m = re.search(r'cpu_trace_block\(cpu, 0x([0-9A-Fa-f]+)\);', line)
+            if m and int(m[1], 16) in required:
+                pc = int(m[1], 16)
+                jumps = []
+                for label, address, mf, xf in labels:
+                    target = (pc & 0xff0000) | int(address, 16)
+                    if target in targets:
+                        jumps.append(f'if (target == 0x{target:06X}u && cpu->m_flag == {mf} && cpu->x_flag == {xf}) goto {label}; ')
+                # Keep the enclosing generated frame for an interior return.
+                # A cross-function transfer adopts that same frame explicitly.
+                out.append(f'    {MARKER} {{ extern uint32_t SmwCoopGuestHook(CpuState *, uint32_t); extern RecompReturn SmwCoopNativeTail(CpuState *, uint32_t, uint16_t, uint8_t); uint32_t target = SmwCoopGuestHook(cpu, 0x{pc:06X}u); if (target) {{ '+''.join(jumps)+'RecompStackPop(); return SmwCoopNativeTail(cpu, target, _entry_s, _hrv); } }\n')
+                found.add(pc)
+            out.append(line)
     return ''.join(out), found
 
 def interpreted_entries(dispatch):
@@ -62,14 +74,12 @@ def main():
         found.update(seen)
         if changed != text:
             updates.append((path, changed))
-    interpreted = interpreted_coverage((args.gen_dir / 'dispatch_v2.c').read_text(encoding='utf-8'),containing_entries())
-    missing = required - found - interpreted
+    missing = required - found
     if missing:
         raise SystemExit('Missing native co-op boundaries: ' + ', '.join(f'{pc:06X}' for pc in sorted(missing)))
     for path, text in updates:
         path.write_text(text, encoding='utf-8', newline='\n')
-    print(f'Native co-op hooks: {len(found)} compiled sites, '
-          f'{len((required-found)&interpreted)} interpreter sites, {len(updates)} banks updated')
+    print(f'Native co-op hooks: {len(found)} compiled sites, {len(updates)} banks updated')
 
 if __name__ == '__main__':
     main()

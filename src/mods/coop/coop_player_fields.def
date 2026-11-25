@@ -18,6 +18,9 @@ COOP_FIELD(spinjump_layer2,       0x140d, 2)
 COOP_FIELD(wings_graphics,        0x1410, 1)
 COOP_FIELD(yoshi_pipe_setting,    0x1419, 1)
 COOP_FIELD(wings_event,           0x141e, 1)
+/* Iggy/Larry alias these keyhole coordinates as the current rider's
+ * platform-local ground anchor. Bind them only on that original mode route. */
+COOP_FIELD(mode7_ground_anchor,   0x1436, 4)
 COOP_FIELD(carry_standing,        0x1470, 2)
 COOP_FIELD(carry_star,            0x148f, 2)
 COOP_FIELD(peace_pose,            0x1492, 1)

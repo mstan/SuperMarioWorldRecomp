@@ -27,7 +27,11 @@ void coop_guest_bind(const CoopGuestPlayer *in,uint8_t *ram) {
          * reads it, cloud coins increment it, and HurtMario resets it. Its
          * old serialized actor byte remains padding so existing snapshots
          * retain their exact layout/hash. The guest WRAM copy is authoritative. */
-        if(fields[i].address!=0x18e3)
+        bool mode7_anchor=fields[i].address==0x1436;
+        /* CODE_00CCE0 aliases these words only with N set and C/V clear in
+         * IRQNMICommand. Keyhole scenes still retain their shared animation. */
+        if(fields[i].address!=0x18e3 &&
+           (!mode7_anchor || (ram[0xd9b]&0xc1)==0x80))
             memcpy(ram+fields[i].address,in->bytes+at,fields[i].size);
         at+=fields[i].size;
     }
@@ -64,7 +68,9 @@ void coop_guest_read_player(CoopPlayer *p,const uint8_t *r) {
     p->half_width=6;
     p->height=clip_height[shape];
     p->x=(int32_t)read16(r,0x94)+8;
-    p->y=(int32_t)read16(r,0x96)+clip_y[shape]+p->height/2;
+    int32_t y=(int32_t)read16(r,0x96);
+    if((r[0xd9b]&0xc1)==0x80)y=(int16_t)y;
+    p->y=y+clip_y[shape]+p->height/2;
     p->grounded=(r[0x77]&4)!=0 || r[0x1471]!=0;
     p->swimming=r[0x75]!=0;
     p->supported_flight=r[0x1407]!=0 || r[0x1891]!=0;

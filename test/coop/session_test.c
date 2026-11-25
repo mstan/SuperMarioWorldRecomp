@@ -182,7 +182,7 @@ static void guest_ownership(void) {
     size_t n;const CoopGuestField *fields=coop_guest_fields(&n);
     for(size_t i=0;i<n;++i) for(unsigned j=0;j<fields[i].size;++j) {
         unsigned address=fields[i].address+j;assert(address<0x2000 && !owned[address]);
-        owned[address]=address!=0x18e3; /* legacy serialized shared-counter mirror */
+        owned[address]=address!=0x18e3 && (address<0x1436 || address>=0x143a);
     }
     coop_guest_capture(&image,a);coop_guest_bind(&image,b);
     for(size_t i=0;i<0x20000;++i) assert(b[i]==(owned[i]?0x53:0xa7));
@@ -197,6 +197,25 @@ static void guest_ownership(void) {
     b[0x19]=1;coop_guest_read_player(&p,b);assert(p.height==26 && p.y==393);
     b[0x187a]=1;coop_guest_read_player(&p,b);assert(p.height==32 && p.y==406);
     free(a);free(b);free(owned);
+}
+
+static void mode7_rider_anchors(void) {
+    uint8_t *ram=calloc(0x20000,1);assert(ram);
+    CoopGuestPlayer first,second;
+    ram[0xd9b]=0x80;ram[0x1436]=80;ram[0x1438]=48;
+    coop_guest_capture(&first,ram);
+    ram[0x1436]=144;ram[0x1438]=64;
+    coop_guest_capture(&second,ram);
+    coop_guest_bind(&first,ram);assert(ram[0x1436]==80 && ram[0x1438]==48);
+    coop_guest_bind(&second,ram);assert(ram[0x1436]==144 && ram[0x1438]==64);
+    for(unsigned mode=0;mode<256;++mode) {
+        if((mode&0xc1)==0x80)continue;
+        ram[0xd9b]=(uint8_t)mode;ram[0x1436]=7;ram[0x1438]=9;
+        coop_guest_bind(&first,ram);assert(ram[0x1436]==7 && ram[0x1438]==9);
+    }
+    memset(ram,0,0x20000);ram[0xd9b]=0x80;ram[0x96]=0xe2;ram[0x97]=0xff;
+    CoopPlayer actor={0};coop_guest_read_player(&actor,ram);assert(actor.y==-4);
+    free(ram);
 }
 
 static void repair_native_crc(uint8_t *p,size_t n) {
@@ -588,6 +607,7 @@ static void berry_reservations(size_t players) {
 int main(void) {
     roster(2);roster(3);roster(4);roster(17);
     arbitration();priorities();camera_and_recovery();checkpoint_disconnect_input();states();guest_ownership();
+    mode7_rider_anchors();
     native_states(2);native_states(3);native_states(4);native_states(17);
     placed_egg_states(2);placed_egg_states(3);placed_egg_states(4);placed_egg_states(17);
     berry_reservations(2);berry_reservations(3);berry_reservations(4);berry_reservations(17);

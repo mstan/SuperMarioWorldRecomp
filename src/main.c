@@ -25,6 +25,7 @@
 #include "types.h"
 #include "smw_rtl.h"
 #include "smw_replay.h"
+#include "execution_mode.h"
 #include "host_paths.h"
 #include "host_ui.h"
 #include "launcher_cache.h"
@@ -2076,6 +2077,8 @@ error_reading:;
     }
     host_report_breadcrumb("load state loaded: %s", args.load_state);
   }
+
+  snesrecomp_execution_register_optimization("SMW native frame driver");
 
   if (script_file)
     LoadScript(script_file);
