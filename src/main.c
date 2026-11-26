@@ -589,6 +589,8 @@ static void DrawPpuFrameWithPerf(void) {
   const uint32 dump_frame = snes_frame_counter ? snes_frame_counter - 1 : 0;
   FrameDump_Present(dump_frame, pixel_buffer, pitch, g_snes_width, g_snes_height);
   FrameDump_Ppu(dump_frame, g_ppu);
+  debug_server_note_composed_frame(pixel_buffer, (unsigned)pitch,
+                                  g_snes_width, g_snes_height);
   g_renderer_funcs.EndDraw();
   BenchmarkPhaseEnd(kSnesRecompBenchmarkPhase_HostPresent, host_phase);
 }
@@ -1246,6 +1248,14 @@ int main(int argc, char** argv) {
       snesrecomp_exe_dir_path("config.ini", config_exe_path, sizeof(config_exe_path)))
     config_file = config_exe_path;
   ParseConfigFile(config_file);
+  /* Output-only override for unattended native checks; keep audio synthesis
+   * and the real playback device active. Normal launches leave it unset. */
+  const char *output_volume = getenv("SNESRECOMP_OUTPUT_VOLUME");
+  if (output_volume && *output_volume) {
+    char *end = NULL; long volume = strtol(output_volume, &end, 10);
+    if (end && !*end && volume >= 0 && volume <= 100)
+      g_sdl_audio_mixer_volume = (int)(volume * SNESRECOMP_SDL_MIX_MAXVOLUME / 100);
+  }
   // Apply local overrides if present (gitignored). Lets a developer
   // mute audio etc. without touching the checked-in config.ini. Last
   // parser to set a key wins, so local overrides take precedence.
