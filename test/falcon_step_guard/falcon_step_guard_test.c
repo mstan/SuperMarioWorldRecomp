@@ -9,6 +9,7 @@
 #include "../../src/variables.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 uint8 g_ram[0x20000];
@@ -25,6 +26,11 @@ void SpawnSpinJumpStars(CpuState *cpu) { (void)cpu; }
 void CheckPlayerToNormalSpriteColl_01AB46(CpuState *cpu) { (void)cpu; }
 void SpawnBounceSprite(CpuState *cpu) { (void)cpu; }
 void KillNormalSprite_AcceptedConsequence(CpuState *cpu) { (void)cpu; }
+/* Block destruction is outside this collision observer fixture. Fail rather
+ * than silently accepting an unexpected call into native tile handling. */
+void GetPlayerLevelCollisionMap16ID_Entry2(CpuState *cpu) { (void)cpu; abort(); }
+void SpawnBrickPieces(CpuState *cpu) { (void)cpu; abort(); }
+void GenerateTile(CpuState *cpu) { (void)cpu; abort(); }
 void smw_falcon_audio_play_events(const ForeignAudioEvents *events)
 {
     (void)events;

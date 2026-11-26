@@ -45,16 +45,18 @@ BLOCK_PATCHES = [
             " SmwFalconOnPlayerBlockCode(cpu); }"
         ),
     },
-    # FALCON-STEP-CRUSH: the live $00:E92B collision routine contains the
-    # $00:E9FB block inline.  The separately emitted E9FB entry is only used
-    # by external dispatches, so an @hook on that symbol does not guard the
-    # normal player-physics path.  Patch the trace-labelled inlined block in
-    # its exact M1X1 enclosing function, immediately before it reads $77 and
-    # branches to $00:EA08 / DamagePlayer_KillAndDisableButtons.
+    # FALCON-STEP-CRUSH: native co-op boundaries split the $00:E92B body.
+    # Cover every emitted owner of $00:E9FB, including both E9C8 widths and
+    # the E9A1 continuation reached by ordinary player physics. Each owner
+    # observes the seam before reading $77 and branching to $00:EA08.
     {
         "marker": "/*FALCON-STEP-CRUSH*/",
         "check_exactly_once": True,
-        "func_match": "HandlePlayerLevelCollision_M1X1",
+        "func_match": ("CoopNative_00E9A1_M1X1",
+                       "HandlePlayerLevelColl_00E9C8_M1X1",
+                       "HandlePlayerLevelColl_00E9C8_M0X1",
+                       "HandlePlayerLevelColl_00E9FB_M1X1"),
+        "expected_matches": 4,
         "anchor": "cpu_trace_block(cpu, 0x00E9FB)",
         "snippet": (
             " /*FALCON-STEP-CRUSH*/ {"
@@ -143,6 +145,13 @@ def strip_injections(text):
 _FUNC_HDR = re.compile(r"^RecompReturn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*CpuState")
 
 
+def block_owner_matches(name, patch):
+    owners = patch["func_match"]
+    if isinstance(owners, tuple):
+        return name in owners
+    return owners in name
+
+
 def apply_block_patches(text):
     """Apply BLOCK_PATCHES to one file's text, function-scoped. Returns (text, n)."""
     n = 0
@@ -156,7 +165,7 @@ def apply_block_patches(text):
             if mh:
                 cur_func = mh.group(1)
             if (p["anchor"] in line and p["marker"] not in line
-                    and cur_func and p["func_match"] in cur_func):
+                    and cur_func and block_owner_matches(cur_func, p)):
                 line = line.rstrip("\n") + p["snippet"] + "\n"
                 n += 1
             out.append(line)
@@ -172,7 +181,7 @@ def count_block_marker_in_function(text, patch):
         mh = _FUNC_HDR.match(line)
         if mh:
             cur_func = mh.group(1)
-        if cur_func and patch["func_match"] in cur_func:
+        if cur_func and block_owner_matches(cur_func, patch):
             count += line.count(patch["marker"])
     return count
 
@@ -381,8 +390,11 @@ def main():
             for p in checked_patches:
                 scoped_marker_counts[p["marker"]] += \
                     count_block_marker_in_function(generated, p)
+        expected = {p["marker"]: p.get("expected_matches", 1)
+                    for p in checked_patches}
         bad_patches = [marker for marker, count in marker_counts.items()
-                       if count != 1 or scoped_marker_counts[marker] != 1]
+                       if count != expected[marker]
+                       or scoped_marker_counts[marker] != expected[marker]]
         if bad_patches:
             details = ", ".join(
                 f"{marker}={marker_counts[marker]}"
