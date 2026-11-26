@@ -151,10 +151,9 @@ Copy-Item -LiteralPath (Join-Path $mods 'preloaded') -Destination $stageMods -Re
 # Generate fresh bindings on first run. Do not ship a developer's device
 # assignments or overwrite an existing player's binding file during updates.
 
-# config.ini ships Widescreen = 0 regardless of the repo's working-tree value
-# (a dev may have flipped it locally while testing); the launcher toggles +
-# persists the player's choice at runtime.
-(Get-Content (Join-Path $root 'config.ini')) -replace '^Widescreen\s*=.*$', 'Widescreen = 0' |
+# Fresh profiles use adaptive widescreen. The mod catalog owns the aspect
+# choice and preserves an existing player's saved on/off selection.
+(Get-Content (Join-Path $root 'config.ini')) -replace '^Widescreen\s*=.*$', 'Widescreen = 1' |
   Out-File (Join-Path $stage 'config.ini') -Encoding ascii
 
 # Runtime DLLs are NOT enumerated by hand. A hardcoded list is a snapshot of
@@ -170,16 +169,8 @@ Copy-Item -LiteralPath (Join-Path $mods 'preloaded') -Destination $stageMods -Re
 # fails the release rather than shipping.
 . (Join-Path $FrameworkDir 'tools\release\RuntimeDllClosure.ps1')
 
-$sdlDll = "$SdlBackend.dll"
-$sdlSource = Join-Path $build $sdlDll
-if (-not (Test-Path -LiteralPath $sdlSource)) {
-  $sdlSource = Join-Path $RuntimeBinDir $sdlDll
-}
-if (-not (Test-Path -LiteralPath $sdlSource)) {
-  throw "Required $SdlBackend runtime DLL missing from build or runtime bin: $sdlDll"
-}
-Copy-Item -LiteralPath $sdlSource -Destination $stage
-
+# The import graph also supports a statically linked SDL build. Copying an
+# unconditional SDL DLL would add an unused dependency and its imports.
 $stagedDlls = Copy-RuntimeDllClosure -StageDir $stage -SearchDirs @($build, $RuntimeBinDir)
 if ($stagedDlls.Count -gt 0) {
   Write-Host "Staged runtime dependency closure: $($stagedDlls -join ', ')"

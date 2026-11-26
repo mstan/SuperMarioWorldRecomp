@@ -26,7 +26,7 @@ set_property(SOURCE src/smw_renderer.c APPEND PROPERTY COMPILE_DEFINITIONS
 # netplay game version. The MSVC .sln plumbs this through SnesRecompBuildVersion
 # (src/smw.vcxproj); the CMake path needs its own knob or a release build ships
 # stamped "dev" and user crash reports cannot be tied to an actual release.
-set(SNESRECOMP_BUILD_VERSION "dev" CACHE STRING
+set(SNESRECOMP_BUILD_VERSION "0.15.12" CACHE STRING
     "Version reported in crash diagnostics and network metadata")
 option(SNESRECOMP_ENABLE_BENCHMARK_PHASES
     "Enable coarse benchmark phase timings in finite benchmark mode" OFF)
