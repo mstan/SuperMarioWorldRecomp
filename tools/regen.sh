@@ -53,7 +53,7 @@ cd "$ROOT"
 
 SNESRECOMP_ROOT="${SNESRECOMP_ROOT:-snesrecomp}"
 TESTS="$SNESRECOMP_ROOT/tests/run_tests.py"
-ROM="smw.sfc"
+ROM="${SMW_ROM:-smw.sfc}"
 PYTHON="${PYTHON:-$(command -v python3 || command -v python || true)}"
 if [ -z "$PYTHON" ]; then
   echo "regen.sh: no python3/python interpreter found on PATH" >&2
@@ -75,7 +75,7 @@ fi
 
 GEN_ROM="$ROM"
 CFG_DIR="recomp"
-OUT_DIR="src/gen"
+OUT_DIR="${SMW_GEN_DIR:-src/gen}"
 FUNCS_HEADER="recomp/funcs.h"
 
 if [ "$VARIANT" = coop ]; then

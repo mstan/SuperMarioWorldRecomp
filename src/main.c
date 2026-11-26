@@ -537,7 +537,7 @@ void RtlDrawPpuFrame(uint8 *pixel_buffer, size_t pitch, uint32 render_flags) {
   PpuSetExtraSpace(g_ppu, 0);
   PpuBeginDrawing(g_ppu, g_my_pixels, 256 * 4, render_flags);
   smw_falcon_presentation_prepare_ppu(g_ppu);
-  if (!SmwCoopFrozen()) g_rtl_game_info->draw_ppu_frame();
+  if (!SmwCoopFrozen() && !g_paused) g_rtl_game_info->draw_ppu_frame();
   if (g_smw_video.enabled) {
     SmwRendererDraw(pixel_buffer, pitch, g_my_pixels);
   } else {
@@ -1690,15 +1690,21 @@ int main(int argc, char** argv) {
   // "success", which made a prod build announce a debug server it does not
   // have. Only report the port when the real server is compiled in.
   {
-    if (debug_server_init(4377) == 0) {
+    int debug_port = 4377;
+    const char *port_text = getenv("SNESRECOMP_DEBUG_PORT");
+    if (port_text && *port_text) {
+      char *end = NULL; long port = strtol(port_text, &end, 10);
+      if (end && !*end && port > 0 && port <= 65535) debug_port = (int)port;
+    }
+    if (debug_server_init(debug_port) == 0) {
 #if SNESRECOMP_TRACE
-      fprintf(stderr, "[main] Debug server ready on port 4377\n");
+      fprintf(stderr, "[main] Debug server ready on port %d\n", debug_port);
 #endif
     }
     if (start_paused) {
-      debug_server_start_paused();
+      debug_server_publish_runtime_paused(true);
 #if SNESRECOMP_TRACE
-      fprintf(stderr, "[main] Started paused â€” send 'step N' or 'continue' via TCP\n");
+      fprintf(stderr, "[main] Started paused; runtime_resume continues playback\n");
 #endif
     }
   }
@@ -1771,6 +1777,12 @@ int main(int argc, char** argv) {
     g_win_flags ^= SDL_WINDOW_FULLSCREEN;
   else if (g_config.fullscreen == 2)
     g_win_flags ^= SDL_WINDOW_FULLSCREEN;
+  const char *hidden_window = getenv("SNESRECOMP_WINDOW_HIDDEN");
+  if (hidden_window && atoi(hidden_window)) {
+    g_config.fullscreen = 0;
+    g_win_flags &= ~SDL_WINDOW_FULLSCREEN;
+    g_win_flags |= SDL_WINDOW_HIDDEN;
+  }
 
   // Window scale (1=100%, 2=200%, 3=300%, etc.)
   g_current_window_scale = (g_config.window_scale == 0) ? 2 : IntMin(g_config.window_scale, kMaxWindowScale);
@@ -1818,7 +1830,7 @@ session_reboot:
   g_gamepad[0].joystick_id = g_gamepad[1].joystick_id = -1;
   g_input_state = 0;
   g_pad_buttons = 0;
-  g_paused = 0;
+  g_paused = start_paused;
   g_turbo = 0;
   g_netplay_started = 0;
 #endif
@@ -2141,7 +2153,17 @@ error_reading:;
   host_report_breadcrumb("entering main loop");
   StallLogInit();
 
+  int review_refresh = 0;
+  g_paused = start_paused;
   while (running) {
+    int control = debug_server_consume_runtime_control();
+    if (control == 3) break;
+    if (control == 1 || control == 2) {
+      g_paused = control == 1;
+      review_refresh = 0;
+    }
+    if (control == 4) { g_paused = false; review_refresh = 1; }
+    debug_server_publish_runtime_paused(g_paused);
     Uint64 stall_t0 = SDL_GetPerformanceCounter();
     Uint64 stall_t_events = stall_t0;
     Uint64 stall_t_run = stall_t0;
@@ -2236,10 +2258,6 @@ error_reading:;
       continue;
     }
 #endif
-    if (g_paused) {
-      SDL_Delay(16);
-      continue;
-    }
 
     // Clear gamepad inputs when joypad directional inputs to avoid wonkiness
     if (g_input_state & 0xf0)
@@ -2268,6 +2286,11 @@ error_reading:;
       }
     }
     debug_server_wait_if_paused();
+    if (g_paused) {
+      DrawPpuFrameWithPerf();
+      SDL_Delay(16);
+      continue;
+    }
 
     /* Drive the SNES controller bits in g_input_state from keybinds.ini.
      * config.ini's [KeyMap] still owns system commands (state save/load,
@@ -2420,6 +2443,7 @@ error_reading:;
       BenchmarkPhaseEnd(kSnesRecompBenchmarkPhase_PpuDraw, ppu_phase);
     }
     SmwReplayRendered();
+    if (review_refresh) { review_refresh = 0; g_paused = true; }
     stall_t_draw = SDL_GetPerformanceCounter();
     if (HeadlessCapture_Failed() ||
         (HeadlessCapture_ExitFrame() && frameCtr >= HeadlessCapture_ExitFrame())) running = false;
