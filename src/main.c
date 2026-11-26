@@ -2275,7 +2275,7 @@ error_reading:;
     }
     {
       /* TCP `savestate N` is queued by the debug-server thread.  Consume it
-       * here, at the same unpaused main-thread boundary as loadstate: save
+       * here, at the same main-thread boundary as loadstate: save
        * serialization walks live CPU/PPU/APU state and is not thread-safe. */
       int ss = debug_server_consume_savestate();
       if (ss >= 0) {

@@ -320,6 +320,8 @@ set_property(SOURCE src/smw_replay.c APPEND PROPERTY COMPILE_DEFINITIONS
     SMW_REPLAY_REVISION="${SMW_REPLAY_REVISION}" SMW_REPLAY_ENGINE="${SMW_REPLAY_ENGINE}"
     SMW_REPLAY_TARGET="${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}-${CMAKE_C_COMPILER_ID}-${CMAKE_C_COMPILER_VERSION}-${CMAKE_BUILD_TYPE}")
 
+if(EXISTS "${RECOMP_UI_ROOT}/tools/input_report.c" AND
+   EXISTS "${RECOMP_UI_ROOT}/src/common/launcher_input_report.c")
 add_executable(smw-controller-report
     "${RECOMP_UI_ROOT}/tools/input_report.c"
     "${RECOMP_UI_ROOT}/src/common/launcher_input_report.c")
@@ -336,4 +338,7 @@ else()
 endif()
 if(MINGW)
     target_link_options(smw-controller-report PRIVATE -static)
+endif()
+else()
+    message(STATUS "Current recomp-ui does not provide the optional controller-report tool")
 endif()
