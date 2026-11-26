@@ -4,7 +4,7 @@
 #include "coop_terrain.h"
 #include "smw_renderer.h"
 #include "common_rtl.h"
-#include "snes/interp_bridge.h"
+#include "common_cpu_infra.h"
 #include "snes/snes.h"
 #include "snes_overlay_draw.h"
 #include <stdio.h>
@@ -219,10 +219,38 @@ static void retire_released_objects(CoopMachine *m) {
         ++i;
     }
 }
+extern void (*g_interp_bridge_pc_hook)(uint32_t pc,int m,int x);
+static void native_coverage_failure(const char *reason,uint32_t pc,int m,int x) {
+    char message[160];
+    snprintf(message,sizeof(message),"Native co-op %s at $%06X (M%dX%d)",reason,pc,m,x);
+    Die(message);
+}
+static void missing_native_body(uint32_t pc,int m,int x) {
+    native_coverage_failure("requires compiled coverage",pc,m,x);
+}
+static RecompReturn native_dispatch(CpuState *cpu,uint32_t entry,uint8_t frame_size) {
+    if(!cpu_dispatch_has_entry(cpu,entry))
+        native_coverage_failure("has no compiled entry",entry,cpu->m_flag,cpu->x_flag);
+    cpu->PB=(uint8_t)(entry>>16);
+    void (*observer)(uint32_t,int,int)=g_interp_bridge_pc_hook;
+    g_interp_bridge_pc_hook=missing_native_body;
+    RecompReturn result=cpu_dispatch_pc_paired(cpu,entry,frame_size);
+    g_interp_bridge_pc_hook=observer;
+    return result;
+}
+static bool native_guest_call(CpuState *cpu,uint32_t entry,uint8_t frame_size) {
+    if(native_dispatch(cpu,entry,frame_size)!=RECOMP_RETURN_NORMAL)
+        native_coverage_failure("escaped its paired caller",entry,cpu->m_flag,cpu->x_flag);
+    return true;
+}
+RecompReturn SmwCoopNativeTail(CpuState *cpu,uint32_t entry,uint16_t entry_s,uint8_t hrv) {
+    cpu_tailcall_inherit_return_context(entry_s,hrv);
+    return native_dispatch(cpu,entry,hrv);
+}
 static void guest_jsr(CpuState *cpu,uint32_t entry) {
     unsigned stack=cpu->S;
     cpu_push_jsr_return_frame(cpu);
-    if(!interp_bridge_run(cpu,entry) || cpu->S!=stack)
+    if(!native_guest_call(cpu,entry,2) || cpu->S!=stack)
         Die("Native co-op scoped guest routine failed its return contract");
 }
 static CoopPlacedEgg *placed_source_for(CoopMachine *m,CoopEntityId egg) {
@@ -260,7 +288,7 @@ static void replenish_placed_eggs(CpuState *cpu,CoopMachine *m) {
         g_ram[0xd8+slot]=(uint8_t)s->y;g_ram[0x14d4+slot]=(uint8_t)(s->y>>8);
         g_ram[0x161a+slot]=0xff; /* children never release the original load flag */
         cpu->X=(uint16_t)slot;cpu_push_jsl_return_frame(cpu);
-        if(!interp_bridge_run(cpu,0x07f722) || cpu->S!=caller.S)
+        if(!native_guest_call(cpu,0x07f722,3) || cpu->S!=caller.S)
             Die("Native co-op placed egg initialization failed its return contract");
         s->egg=normal_entity(m,(unsigned)slot,false)->id;
         restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
@@ -393,7 +421,7 @@ static void carry_through_room(CpuState *cpu,CoopMachine *m) {
         g_ram[0xd8+slot]=(uint8_t)t->y;g_ram[0x14d4+slot]=(uint8_t)(t->y>>8);
         restore_registers(cpu,&completed);cpu->X=(uint16_t)slot;
         unsigned stack=cpu->S;cpu_push_jsl_return_frame(cpu);
-        if(!interp_bridge_run(cpu,0x07f7d2) || cpu->S!=stack)
+        if(!native_guest_call(cpu,0x07f7d2,3) || cpu->S!=stack)
             Die("Native co-op carried entrance failed its return contract");
         g_ram[0x15f6+slot]=t->palette;
         t->entity.slot=slot;m->entities[m->entity_count++]=t->entity;
@@ -424,7 +452,7 @@ static void load_room_sprites(CpuState *cpu,CoopMachine *m) {
     }
     ++room_load_depth;
     unsigned stack=cpu->S;cpu_push_jsl_return_frame(cpu);
-    if(!interp_bridge_run(cpu,0x02a751) || cpu->S!=stack)
+    if(!native_guest_call(cpu,0x02a751,3) || cpu->S!=stack)
         Die("Native co-op room loader failed its return contract");
     CpuState completed=*cpu;uint8_t scratch[16];memcpy(scratch,g_ram,sizeof(scratch));
     CoopGuestPlayer entry;coop_guest_capture(&entry,g_ram);
@@ -441,7 +469,7 @@ static void load_room_sprites(CpuState *cpu,CoopMachine *m) {
             g_ram[0xdc1]=1;g_ram[0x13c7]=(uint8_t)a->stored_mount_color;
             restore_registers(cpu,&completed);memcpy(g_ram,scratch,sizeof(scratch));
             spawning_room_mount=true;cpu_push_jsl_return_frame(cpu);
-            if(!interp_bridge_run(cpu,0x00fc7a) || cpu->S!=stack)
+            if(!native_guest_call(cpu,0x00fc7a,3) || cpu->S!=stack)
                 Die("Native co-op mount entrance failed its return contract");
             spawning_room_mount=false;
             unsigned slot=g_ram[0x18e2]?g_ram[0x18e2]-1:12;
@@ -890,7 +918,7 @@ static void draw_mounts(CpuState *cpu,CoopMachine *m) {
         for(unsigned i=0;i<128;++i)g_ram[0x201+i*4]=0xf0;
         restore_registers(cpu,&caller);bound_actor=a;
         cpu_push_jsl_return_frame(cpu);
-        if(!interp_bridge_run(cpu,0x01ea70) || cpu->S!=caller.S)
+        if(!native_guest_call(cpu,0x01ea70,3) || cpu->S!=caller.S)
             Die("Native co-op mount graphics failed its return contract");
         /* The native draw prepares private dynamic head/body tiles. Capture
          * before another Yoshi chooses different tiles for those DMA slots. */
@@ -943,7 +971,10 @@ static void draw_secondary_players(CpuState *cpu,CoopMachine *m) {
             entry=star>0x1e?0x00e30c:0x00e308;
             cpu->A=(cpu->A&0xff00)|g_ram[0x13];
         }
-        if(!interp_bridge_run(cpu,entry) || cpu->S!=caller.S)
+        /* The body inherits PlayerDraw before its saved DB byte. This is
+         * the engine's native tail-call frame, not a four-byte return ABI. */
+        cpu_tailcall_inherit_return_context((uint16_t)(caller.S-3),3);
+        if(!native_guest_call(cpu,entry,3) || cpu->S!=caller.S)
             Die("Native co-op player draw failed its guest return contract");
         SmwCoopCaptureVisual(&a->pending);capture(m,a);
     }
@@ -962,7 +993,7 @@ static void redraw_secondary_actor(CpuState *cpu,CoopMachine *m) {
     for(unsigned slot=0;slot<128;++slot)g_ram[0x201+slot*4]=0xf0;
     g_ram[0xdb3]=(uint8_t)(coop_player(&m->session,a->player)->character==1);
     ++player_call_depth;cpu_push_jsl_return_frame(cpu);
-    if(!interp_bridge_run(cpu,0x00e2bd) || cpu->S!=caller.S)
+    if(!native_guest_call(cpu,0x00e2bd,3) || cpu->S!=caller.S)
         Die("Native co-op rider redraw failed its guest return contract");
     --player_call_depth;SmwCoopCaptureVisual(&a->pending);capture(m,a);
     restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
@@ -1010,7 +1041,7 @@ static void run_player_routines(CpuState *cpu,CoopMachine *m) {
         cpu_push_jsr_return_frame(cpu);
         bound_actor=a;
         uint8_t end_timer=g_ram[0x1493];
-        if(!interp_bridge_run(cpu,0x00c569))Die("Native co-op player routine failed to return");
+        if(!native_guest_call(cpu,0x00c569,2))Die("Native co-op player routine failed to return");
         if(!end_timer && g_ram[0x1493])scene_request=a->player;
         bound_actor=NULL;
         if(cpu->S!=caller.S)Die("Native co-op player routine unbalanced the guest stack");
@@ -1311,7 +1342,7 @@ static void run_cape_contacts(CpuState *cpu,CoopMachine *m) {
     bound_actor=saved_actor;
 }
 
-static bool run_platform_contacts(CpuState *cpu,CoopMachine *m) {
+static bool run_platform_contacts(CpuState *cpu,CoopMachine *m,uint32_t entry) {
     CoopActor *original=bound_actor;capture(m,original);
     CpuState caller=*cpu;uint8_t scratch[16];memcpy(scratch,g_ram,sizeof(scratch));
     bool occupied=false;++platform_contact_depth;
@@ -1320,7 +1351,7 @@ static bool run_platform_contacts(CpuState *cpu,CoopMachine *m) {
         if(coop_player_const(&m->session,a->player)->life!=COOP_PLAYING)continue;
         restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
         coop_guest_bind(&a->guest,g_ram);coop_mount_bind(actor_mount(m,a),g_ram);bound_actor=a;
-        guest_jsr(cpu,0x01b457); /* native placement and platform-motion delta */
+        guest_jsr(cpu,entry); /* native placement and platform-motion delta */
         occupied|=cpu->_flag_C!=0;capture(m,a);
         CoopEntity *mount=actor_mount(m,a);if(mount)coop_mount_capture(mount,g_ram);
     }
@@ -1502,7 +1533,7 @@ static bool run_normal_sprite(CpuState *cpu,CoopMachine *m) {
     bound_actor=a;
     trace_normal_contact(m,a,slot,0);
     ++sprite_call_depth;cpu_push_jsr_return_frame(cpu);
-    if(!interp_bridge_run(cpu,0x018127) || cpu->S!=caller.S)
+    if(!native_guest_call(cpu,0x018127,2) || cpu->S!=caller.S)
         Die("Native co-op sprite routine failed its guest return contract");
     --sprite_call_depth;bound_actor=NULL;
     trace_normal_contact(m,a,slot,1);
@@ -1618,7 +1649,7 @@ static void run_team_camera(CpuState *cpu,CoopMachine *m) {
     }
     CpuState caller=*cpu;uint8_t scratch[16];memcpy(scratch,g_ram,sizeof(scratch));
     ++camera_call_depth;cpu_push_jsl_return_frame(cpu);
-    if(!interp_bridge_run(cpu,0x00f6db) || cpu->S!=caller.S)
+    if(!native_guest_call(cpu,0x00f6db,3) || cpu->S!=caller.S)
         Die("Native co-op camera failed its guest return contract");
     --camera_call_depth;
     restore_registers(cpu,&caller);memcpy(g_ram,scratch,sizeof(scratch));
@@ -1662,10 +1693,25 @@ uint32_t SmwCoopSimulationHook(CpuState *cpu,uint32_t pc) {
     }
     if(pc==0x01b457 && !platform_contact_depth && bound_actor) {
         unsigned slot=cpu->X&255;
-        /* This ordinary moving-platform family shares one audited contact
-         * body. Do not imply qualification of chained/falling/special solids. */
-        if(slot<12 && g_ram[0x9e + slot]>=0x55 && g_ram[0x9e + slot]<=0x59) {
-            return run_platform_contacts(cpu,m)?0x01b4b0:0x01b4b2; /* native carry-return exits */
+        /* Every caller of the same solid-contact body needs every rider.
+         * Falling, floating and line-guided platforms still move once in
+         * their own sprite routine; only their contact is repeated. */
+        if(slot<12) {
+            return run_platform_contacts(cpu,m,pc)?0x01b4b0:0x01b4b2; /* native carry-return exits */
+        }
+    }
+    if(pc==0x01b852 && !platform_contact_depth && bound_actor) {
+        unsigned slot=cpu->X&255;
+        if(slot<12 && (g_ram[0x9e + slot]==0x59 || g_ram[0x9e + slot]==0x5a)) {
+            run_platform_contacts(cpu,m,pc);return 0x01b8b1; /* native RTS */
+        }
+    }
+    if(pc==0x02d49c && !platform_contact_depth && bound_actor) {
+        unsigned slot=cpu->X&255;
+        if(slot<12 && g_ram[0x9e + slot]==0x89) {
+            /* Repeat the actor-only collision tail. Crusher movement, phase
+             * changes, shaking and sound remain in its once-per-world body. */
+            run_platform_contacts(cpu,m,pc);return 0x02d4ef; /* native RTS */
         }
     }
     if(pc==0x02c79d && !chuck_contact_depth) {

@@ -12,6 +12,15 @@
 #include "snes/interp_bridge.h"   /* faithful LLE of the $806B main loop */
 #include "mods/falcon/smw_falcon_presentation_runtime.h"
 #include "mods/coop/coop_presentation.h"
+#include "util.h"
+
+/* The original $36 sprite slot targets DATA_01E41F, not a guest routine.
+ * Keep its table position and fail explicitly if selected; interpreting those
+ * bytes cannot supply a real native sprite handler. */
+void SmwRejectUnusedSprite36(CpuState *cpu) {
+  (void)cpu;
+  Die("SMW unused sprite $36 has no native handler");
+}
 
 static bool g_did_reset, g_first_frame_done;
 uint32_t SmwFrameDriverDiagnosticState(void) {
@@ -22,9 +31,10 @@ void SmwRestoreFrameDriverDiagnosticState(uint32_t state) {
 }
 
 static SnesrecompExecutionMode smw_execution_mode(void) {
-  /* LLE is the correctness floor. The hand-written frame driver remains an
-   * explicit optimization selected with SNESRECOMP_EXECUTION_MODE=hle. */
-  return snesrecomp_execution_mode(SNESRECOMP_EXECUTION_MODE_LLE);
+  /* Honor the configured native default rather than overriding it with a
+   * title-local interpreter default. Explicit reference builds still select
+   * their own policy through the shared interface. */
+  return snesrecomp_execution_policy();
 }
 
 void SmwDrawPpuFrame(void) {
@@ -165,9 +175,8 @@ void RunOneFrameOfGame(void) {
    * waiting_for_vblank = 0xFF. Task bodies bounce to compiled code via the
    * paired ABI (or interpret when SNESRECOMP_LLE_BOUNCE=0).
    *
-   * LLE is the default correctness path. The existing HLE frame driver stays
-   * available as a convenience override through the shared execution-mode
-   * option rather than an SMW-specific scheduler switch. */
+   * The native frame driver is the default. An explicitly selected reference
+   * mode retains the original scheduler through the shared policy. */
   {
     SmwCoopSimulationBegin();
     if (smw_execution_mode() == SNESRECOMP_EXECUTION_MODE_LLE) {
