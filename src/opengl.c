@@ -203,6 +203,11 @@ static void OpenGLRenderer_EndDraw(void) {
     GlslShader_Render(g_glsl_shader, &g_texture, viewport_x, viewport_y, viewport_width, viewport_height);
   }
 
+  {
+    extern int SmwPollDisplayVsync(SDL_Window *window);
+    int vsync = SmwPollDisplayVsync(g_window);
+    if (vsync >= 0) SDL_GL_SetSwapInterval(vsync);
+  }
   SDL_GL_SwapWindow(g_window);
 }
 

@@ -79,6 +79,11 @@ select your **Super Smash Bros. (USA) v1.0** ROM, and press Play. The included
 helper prepares Falcon's assets in your user cache on first use. No Python
 installation or environment setup is required.
 
+## macOS
+
+A native `.app` can be built from source on Apple Silicon or Intel Macs with
+one script: see [docs/macos.md](docs/macos.md).
+
 ## Send a reproducible bug report
 
 1. In the launcher's **Mods** page, check **SMW Playtest Diagnostics →

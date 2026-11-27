@@ -23,6 +23,10 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#include <limits.h>
+#endif
 #define SMW_GETPID getpid
 #endif
 
@@ -276,6 +280,17 @@ static int bundled_cache_helper(char *out, size_t size) {
         !WideCharToMultiByte(CP_UTF8, 0, executable, -1, out, (int)size,
                             NULL, NULL)) return 0;
     const char *leaf = "smw-falcon-cache.exe";
+#elif defined(__APPLE__)
+    /* macOS has no /proc: ask dyld, then resolve symlinks so the helper is
+     * found beside the real binary inside the .app bundle. */
+    char raw[1024];
+    uint32_t raw_size = (uint32_t)sizeof raw;
+    if (_NSGetExecutablePath(raw, &raw_size) != 0) return 0;
+    char resolved[PATH_MAX];
+    const char *exe = realpath(raw, resolved) ? resolved : raw;
+    if (strlen(exe) >= size) return 0;
+    strcpy(out, exe);
+    const char *leaf = "smw-falcon-cache";
 #else
     ssize_t n = readlink("/proc/self/exe", out, size - 1);
     if (n <= 0 || (size_t)n >= size - 1) return 0;

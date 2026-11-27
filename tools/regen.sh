@@ -107,7 +107,10 @@ if [ "$VARIANT" = coop ]; then
   # trampoline. Remove stock cross-bank aliases before the co-op overlay names
   # the same address; emitting two public aliases for one exact variant would
   # leave the non-canonical wrapper with no matching variant definition.
-  sed -i '/^name 0086df GameMode14_InLevel_0086DF$/d' "$CFG_ABS"/bank*.cfg
+  # Portable in-place edit (BSD sed on macOS needs a suffix argument).
+  for _cfg in "$CFG_ABS"/bank*.cfg; do
+    sed '/^name 0086df GameMode14_InLevel_0086DF$/d' "$_cfg" > "$_cfg.tmp" && mv "$_cfg.tmp" "$_cfg"
+  done
   for overlay in recomp/coop/bank*.cfg; do
     dest="$CFG_ABS/$(basename "$overlay")"
     if [ -f "$dest" ]; then

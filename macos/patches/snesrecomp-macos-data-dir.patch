@@ -1,0 +1,40 @@
+diff --git a/runner/src/host_paths.c b/runner/src/host_paths.c
+index 81a2eb99..d4456d05 100644
+--- a/runner/src/host_paths.c
++++ b/runner/src/host_paths.c
+@@ -61,9 +61,13 @@ static int get_exe_path(char *out, size_t max_len) {
+ /* Directory containing the executable, with trailing separator.
+  * Falls back to "./" when the executable path cannot be determined. */
+ static void get_exe_dir(char *out, size_t max_len) {
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(__APPLE__)
+     /* Android's executable is app_process, not the game library. The activity
+-     * supplies its private writable directory before entering SDL_main. */
++     * supplies its private writable directory before entering SDL_main.
++     * macOS: the .app bundle's launcher script points this at
++     * ~/Library/Application Support/<game> so config, saves and mods never
++     * land inside the (signed, possibly read-only) bundle. Only the state
++     * directory moves; snesrecomp_exe_path() still names the real binary. */
+     const char *storage = getenv("SNESRECOMP_DATA_DIR");
+     if (storage && storage[0] == '/') {
+         snprintf(out, max_len, "%s/", storage);
+diff --git a/runner/src/keybinds.c b/runner/src/keybinds.c
+index 01dcb2c9..062376c7 100644
+--- a/runner/src/keybinds.c
++++ b/runner/src/keybinds.c
+@@ -162,6 +162,15 @@ static void derive_ini_path(const char *exe_path) {
+      * while APPIMAGE names the file beside the launcher's writable settings. */
+     const char *appimage = getenv("APPIMAGE");
+     if (appimage && *appimage) exe_path = appimage;
++#elif defined(__APPLE__)
++    /* Match host_paths.c: a .app bundle is not a place for user state, so the
++     * bundle's launcher script names a writable data directory instead. */
++    const char *data_dir = getenv("SNESRECOMP_DATA_DIR");
++    if (data_dir && data_dir[0] == '/') {
++        if (snprintf(s_ini_path, sizeof(s_ini_path), "%s/keybinds.ini",
++                     data_dir) < (int)sizeof(s_ini_path))
++            return;
++    }
+ #endif
+     if (!exe_path || !*exe_path) {
+         strcpy(s_ini_path, "keybinds.ini");
