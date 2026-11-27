@@ -70,3 +70,7 @@ release/
 # from third_party/SMWDisX, and the asar built from third_party/asar.
 # Both are reproducible from the pins by tools/ingest_smwdisx.py.
 _smw_build/
+
+# macOS build outputs
+release-macos/
+macos/build.log

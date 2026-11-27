@@ -825,6 +825,43 @@ static void SetAudioPaused(bool paused) {
 }
 
 
+
+/* Display-rate-aware vsync. The game is paced to 60 Hz by the frame delay in
+ * the main loop; waiting on vsync as well only works when the panel refreshes
+ * at ~60 Hz. On a 75/100/144 Hz monitor the two clocks fight: macOS's Metal
+ * presenter then blocks ~2 refreshes per frame (20 ms on 100 Hz), dropping the
+ * game to 50 fps — slow motion plus audio underruns. So vsync is used only
+ * when the window's current display is ~60 Hz (or unknown), and re-checked
+ * periodically so dragging the window between displays follows along. */
+int SmwDisplayWantsVsync(SDL_Window *window) {
+  if (!window) return 1;
+  float hz = 0.0f;
+#if SNESRECOMP_SDL3
+  SDL_DisplayID id = SDL_GetDisplayForWindow(window);
+  const SDL_DisplayMode *mode = id ? SDL_GetCurrentDisplayMode(id) : NULL;
+  if (mode) hz = mode->refresh_rate;
+#else
+  SDL_DisplayMode mode;
+  int idx = SDL_GetWindowDisplayIndex(window);
+  if (idx >= 0 && SDL_GetCurrentDisplayMode(idx, &mode) == 0)
+    hz = (float)mode.refresh_rate;
+#endif
+  if (hz <= 0.0f) return 1;
+  return (hz > 58.5f && hz < 61.5f) ? 1 : 0;
+}
+
+/* Returns the new vsync value when it should change, -1 otherwise. */
+int SmwPollDisplayVsync(SDL_Window *window) {
+  static int counter, applied = -1;
+  if (counter++ % 30 != 0) return -1;
+  int want = SmwDisplayWantsVsync(window);
+  if (want == applied) return -1;
+  applied = want;
+  fprintf(stderr, "[video] display refresh %s 60 Hz -> vsync %s\n",
+          want ? "is" : "is not", want ? "on" : "off (timer pacing)");
+  return want;
+}
+
 // State for sdl renderer
 static SDL_Renderer *g_renderer;
 static SDL_Texture *g_texture;
@@ -941,10 +978,15 @@ static void SdlRenderer_EndDraw(void) {
   //  uint64 after = SDL_GetPerformanceCounter();
   //  float v = (double)(after - before) / SDL_GetPerformanceFrequency();
   //  printf("%f ms\n", v * 1000);
+  if (g_benchmark_frames == 0 &&
+      g_config.output_method != kOutputMethod_SDLSoftware) {
+    int vsync = SmwPollDisplayVsync(g_window);
+    if (vsync >= 0) snesrecomp_sdl_set_render_vsync(g_renderer, vsync);
+  }
   SDL_RenderClear(g_renderer);
   snesrecomp_sdl_render_texture(
       g_renderer, g_texture, &g_sdl_renderer_rect, &g_sdl_destination);
-  SDL_RenderPresent(g_renderer); // vsyncs to 60 FPS?
+  SDL_RenderPresent(g_renderer); // vsyncs only on ~60 Hz displays
 }
 
 static void UpdateWidescreen(void) {
