@@ -47,6 +47,7 @@
 #include "smw_spc_player.h"
 #if SNESRECOMP_ENABLE_MODS
 #include "mod_runtime.h"
+#include "smw_mod_catalog.h"
 #endif
 #include "mods/falcon/smw_falcon_presentation_runtime.h"
 #include "foreign_controller.h"
@@ -1354,12 +1355,15 @@ int main(int argc, char** argv) {
    * what shipped in v0.14.0. */
   int mods_ready = 0;
 #if SNESRECOMP_ENABLE_MODS
-  mods_ready = snes_mod_runtime_initialize_c(
-      SNES_MOD_CATALOG_ROOT, "super-mario-world-us",
-      "0838e531fe22c077528febe14cb3ff7c492f1f5fa8de354192bdff7137c27f5b");
-  if (!mods_ready)
-    fprintf(stderr, "SNES mods unavailable: %s\n",
+  const char *mod_error = SmwInitializeModCatalog(SNES_MOD_CATALOG_ROOT);
+  if (mod_error) {
+    fprintf(stderr, "%s\nSNES mods: %s\n", mod_error,
             snes_mod_runtime_last_error_c());
+    if (!g_no_interactive_dialogs && SmwUiDialogsAllowed())
+      SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, kWindowTitle, mod_error, NULL);
+    return 1;
+  }
+  mods_ready = 1;
 #endif
 
 #if defined(SNES_LAUNCHER) || defined(RECOMP_LAUNCHER)
