@@ -1,0 +1,2 @@
+rom_file = smw.sfc
+expected_sha256 = 0838e531fe22c077528febe14cb3ff7c492f1f5fa8de354192bdff7137c27f5b

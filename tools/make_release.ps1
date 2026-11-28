@@ -167,7 +167,7 @@ Copy-Item -LiteralPath (Join-Path $mods 'preloaded') -Destination $stageMods -Re
 # Instead: stage the SDL backend, then walk the actual PE import graph and pull
 # in the full transitive closure of non-OS dependencies. Anything unresolvable
 # fails the release rather than shipping.
-. (Join-Path $FrameworkDir 'tools\release\RuntimeDllClosure.ps1')
+. (Join-Path $FrameworkDir 'tools\release\RuntimeRelease.ps1')
 
 # The import graph also supports a statically linked SDL build. Copying an
 # unconditional SDL DLL would add an unused dependency and its imports.
@@ -179,60 +179,7 @@ if ($stagedDlls.Count -gt 0) {
 # must resolve inside the package, and every staged PE must be x64.
 Assert-RuntimeDllClosure -StageDir $stage | Out-Null
 
-Add-Type -AssemblyName System.IO.Compression
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-
-# ZIP entry names always use '/', regardless of the host OS. Compress-Archive
-# preserves Windows backslashes, which POSIX extractors may treat as literal
-# filename characters instead of directory separators. That is what stopped
-# Linux/Steam Deck extractors from creating the nested assets/ and
-# mods/packages/ hierarchies, so a Windows build running under Proton could not
-# discover its bundled launcher assets or mod catalog.
-$stagePrefix = $stageFull.TrimEnd('\') + '\'
-$files = @(Get-ChildItem -LiteralPath $stage -File -Recurse |
-  Sort-Object FullName)
-$archive = [IO.Compression.ZipFile]::Open(
-  $zipFull, [IO.Compression.ZipArchiveMode]::Create)
-try {
-  foreach ($file in $files) {
-    $fileFull = [IO.Path]::GetFullPath($file.FullName)
-    if (-not $fileFull.StartsWith(
-        $stagePrefix, [StringComparison]::OrdinalIgnoreCase)) {
-      throw "Refusing to archive a file outside the release stage: $fileFull"
-    }
-    $entryName = $fileFull.Substring($stagePrefix.Length).Replace('\', '/')
-    if ($entryName.StartsWith('/') -or
-        $entryName -match '(^|/)\.\.(/|$)') {
-      throw "Unsafe ZIP entry name: $entryName"
-    }
-    [IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
-      $archive, $fileFull, $entryName,
-      [IO.Compression.CompressionLevel]::Optimal) | Out-Null
-  }
-} finally {
-  $archive.Dispose()
-}
-
-# Read the archive back and reject non-portable entry names outright, so a
-# regression in the writer cannot ship a zip that only extracts on Windows.
-$archive = [IO.Compression.ZipFile]::OpenRead($zipFull)
-try {
-  $badEntries = @($archive.Entries | Where-Object {
-    $_.FullName.Contains('\') -or
-    $_.FullName.StartsWith('/') -or
-    $_.FullName -match '(^|/)\.\.(/|$)'
-  })
-  if ($badEntries.Count -ne 0) {
-    throw "ZIP contains non-portable entry names: $(
-      ($badEntries | ForEach-Object FullName) -join ', ')"
-  }
-  if ($archive.Entries.Count -ne $files.Count) {
-    throw "ZIP entry count mismatch: expected $($files.Count), got $(
-      $archive.Entries.Count)"
-  }
-} finally {
-  $archive.Dispose()
-}
+New-RuntimeReleaseArchive -StageDir $stage -ArchivePath $zip
 
 Write-Host "--- $stageName ---"
 Get-ChildItem -LiteralPath $stage | Select-Object Name, Length | Out-Host

@@ -1,0 +1,13 @@
+schema = 1
+project_root = "../.."
+out_dir = "src/gen-coop"
+generation_cfg_dir = ".build/recomp-coop"
+identity_file = "rom_identity.txt"
+cfg_roots = true
+source_roots = ["recomp/renderer_aot_roots.c", "src/config.c", "src/coop_patch.c", "src/foreign_controller.c", "src/gen_stubs.c", "src/lua_fire_stream.c", "src/main.c", "src/mod_audio.c", "src/mod_external_rom_compat.c", "src/mods/coop/coop_guest.c", "src/mods/coop/coop_machine.c", "src/mods/coop/coop_presentation.c", "src/mods/coop/coop_runtime.c", "src/mods/coop/coop_session.c", "src/mods/coop/coop_simulation.c", "src/mods/coop/coop_state.c", "src/mods/coop/coop_storage.c", "src/mods/coop/coop_terrain.c", "src/mods/falcon/captain_falcon_controller.c", "src/mods/falcon/captain_falcon_foreign.c", "src/mods/falcon/falcon_locomotion.c", "src/mods/falcon/falcon_presentation.c", "src/mods/falcon/smw_falcon_audio.c", "src/mods/falcon/smw_falcon_combat_apply.c", "src/mods/falcon/smw_falcon_combat_policy.c", "src/mods/falcon/smw_falcon_presentation_runtime.c", "src/mods/smw_coop_plugin.c", "src/mods/smw_diagnostics_plugin.c", "src/mods/smw_falcon_plugin.c", "src/mods/smw_msu1_plugin.c", "src/mods/smw_widescreen_plugin.c", "src/opengl.c", "src/platform/win32/volume_control.c", "src/smw_00.c", "src/smw_cpu_infra.c", "src/smw_netplay_lobby.c", "src/smw_renderer.c", "src/smw_renderer_hooks.c", "src/smw_replay.c", "src/smw_rtl.c", "src/smw_spc_player.c", "src/smw_video.c"]
+[[image_overlays]]
+file = "recomp/coop/smw_coop.ips"
+sha256 = "ea9e06b2237b6ffd3df2a908fe4f8432124c79853f89669b615535ccf898d49a"
+[[prepare]]
+script = "tools/prepare_coop_cfg.py"
+args = ["--cfg-dir", "{cfg_dir}"]
