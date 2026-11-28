@@ -2,6 +2,7 @@
 import argparse
 import os
 from pathlib import Path
+import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,6 +30,12 @@ try:
                              if not line.startswith(('bank ', 'bank=', 'includes ', 'comment ')))
             text = target.read_text(encoding='utf-8') + '\n' + text
         target.write_text(text + '\n', encoding='utf-8')
+    # The assembled CFG owns the aliases used by the emitter, including
+    # exported host callbacks whose guest body has no AOT variant. Keep the
+    # same synchronized header input as the original co-op generation route.
+    subprocess.run([sys.executable, str(ENGINE / 'tools/v2_sync_funcs_h.py'),
+                    '--cfg-dir', str(transaction.staging),
+                    '--out', str(transaction.staging / 'funcs.h')], check=True)
     transaction.publish()
 finally:
     transaction.cleanup()
