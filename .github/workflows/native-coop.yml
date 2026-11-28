@@ -17,7 +17,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Load framework headers
-        run: git submodule update --init snesrecomp
+        run: |
+          git submodule update --init snesrecomp recomp-ui
+          git -C snesrecomp submodule update --init external/shared-cores/recomp-mod-core
       - name: Install portable worker dependency
         run: |
           sudo apt-get update -qq
@@ -29,3 +31,5 @@ jobs:
           python tools/test_override_block_owners.py
           python tools/test_coop_storage.py
           python tools/test_coop_storage_queue.py --sdl 2
+      - name: Test incomplete installs and saved co-op selection
+        run: python tools/test_mod_catalog.py
